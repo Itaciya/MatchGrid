@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { API_BASE_URL } from './services/api'
 import './App.css'
 
 function App() {
@@ -49,9 +50,14 @@ function App() {
               Check Frontend
             </button>
 
-            {message && <p className="success-message">{message}</p>}
+            {message && (
+              <p className="success-message">
+                {message}
+              </p>
+            )}
           </div>
 
+          {/* Frontend Information */}
           <div className="info-card">
             <h3>Frontend Foundation</h3>
 
@@ -91,7 +97,7 @@ function App() {
           </div>
         </section>
 
-        {/* Tailwind Test Section */}
+        {/* SCRUM-13: Tailwind CSS Test */}
         <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -154,12 +160,46 @@ function App() {
           </button>
         </section>
 
+        {/* SCRUM-15: Frontend Environment */}
+        <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                SCRUM-15
+              </p>
+
+              <h2 className="mt-1 text-2xl font-bold text-slate-900">
+                Frontend Environment
+              </h2>
+
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                The backend API URL is loaded from the frontend environment
+                configuration instead of being hard-coded in the application.
+              </p>
+            </div>
+
+            <span className="inline-flex w-fit items-center rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+              ✓ Configured
+            </span>
+          </div>
+
+          <div className="mt-5 rounded-xl bg-slate-100 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              API Base URL
+            </p>
+
+            <code className="mt-2 block break-all text-sm font-semibold text-slate-800">
+              {API_BASE_URL}
+            </code>
+          </div>
+        </section>
+
         {/* Development Status */}
         <section className="section">
           <div className="section-header">
             <div>
               <h3>Development Status</h3>
-              <p>Initial frontend setup is complete.</p>
+              <p>Initial frontend configuration is complete.</p>
             </div>
 
             <span className="ready">Ready for development</span>
@@ -167,8 +207,8 @@ function App() {
 
           <p>
             MatchGrid frontend is successfully configured with React, Vite,
-            and Tailwind CSS. Feature-specific screens and components can now
-            be added.
+            Tailwind CSS, and frontend environment variables. Feature-specific
+            screens and components can now be added.
           </p>
         </section>
 
