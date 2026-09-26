@@ -3,9 +3,8 @@ import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-
-from app.data_access.database import get_db
 from app.data_access.redis_client import test_redis_connection
+from app.data_access.database import get_db
 
 
 router = APIRouter()
@@ -41,3 +40,4 @@ def redis_health():
     return {
         "redis": result
     }
+      
