@@ -13,6 +13,8 @@ from app.modules.player_team.models.player import Player
 from app.modules.player_team.models.team import Team
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.registration.models.registration import Registration
+from app.modules.match.models.match import Match
+from app.modules.score.models.score import Score
 
 
 # Load environment variables from .env
