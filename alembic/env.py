@@ -12,7 +12,6 @@ from app.modules.user.models import User
 from app.modules.player_team.models.player import Player
 from app.modules.player_team.models.team import Team
 from app.modules.tournament.models.tournament import Tournament
-from app.modules.registration.models.registration import Registration
 
 
 # Load environment variables from .env
