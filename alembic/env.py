@@ -17,6 +17,7 @@ from app.modules.match.models.match import Match
 from app.modules.score.models.score import Score
 from app.modules.notification.models.notification import Notification
 from app.modules.dispute.models.dispute import Dispute
+from app.modules.official_assignment.models.official_assignment import OfficialAssignment
 
 # Load environment variables from .env
 load_dotenv()
