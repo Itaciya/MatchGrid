@@ -15,7 +15,8 @@ from app.modules.tournament.models.tournament import Tournament
 from app.modules.registration.models.registration import Registration
 from app.modules.match.models.match import Match
 from app.modules.score.models.score import Score
-
+from app.modules.notification.models.notification import Notification
+from app.modules.dispute.models.dispute import Dispute
 
 # Load environment variables from .env
 load_dotenv()
