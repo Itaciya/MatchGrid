@@ -10,7 +10,7 @@ class UserRegister(BaseModel):
     """Schema for registering a new user."""
 
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=8, max_length=72)
     role: UserRole
 
 
