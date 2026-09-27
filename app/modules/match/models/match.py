@@ -72,3 +72,8 @@ class Match(Base):
         foreign_keys=[team_b_id],
         backref="away_matches"
     )
+    score = relationship(
+        "Score",
+        back_populates="match",
+        uselist=False
+    )

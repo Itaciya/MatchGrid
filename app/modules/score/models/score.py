@@ -54,5 +54,5 @@ class Score(Base):
 
     match = relationship(
         "Match",
-        backref="score"
+        back_populates="score"
     )
