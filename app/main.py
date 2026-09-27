@@ -22,6 +22,7 @@ from app.modules.organiser.routes import router as organiser_router
 from app.modules.player_team.routes import router as player_team_router
 from app.modules.spectator.routes import router as spectator_router
 from app.modules.scorer.routes import router as scorer_router
+from app.modules.user.routes import router as user_router
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
@@ -122,6 +123,7 @@ app.include_router(organiser_router)
 app.include_router(player_team_router)
 app.include_router(spectator_router)
 app.include_router(scorer_router)
+app.include_router(user_router)
 
 
 @app.get("/")
