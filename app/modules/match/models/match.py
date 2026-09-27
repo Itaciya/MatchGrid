@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.data_access.base import Base
@@ -56,6 +56,12 @@ class Match(Base):
         nullable=False
     )
 
+    __table_args__ = (
+        CheckConstraint(
+            "team_a_id != team_b_id",
+            name="ck_match_team_a_not_team_b",
+        ),
+    )
     tournament = relationship(
         "Tournament",
         backref="matches"
@@ -77,3 +83,4 @@ class Match(Base):
         back_populates="match",
         uselist=False
     )
+

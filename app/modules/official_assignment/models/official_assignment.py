@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.data_access.base import Base
@@ -50,6 +50,14 @@ class OfficialAssignment(Base):
         nullable=False
     )
 
+    __table_args__ = (
+        UniqueConstraint(
+            "match_id",
+            "official_id",
+            "assignment_type",
+            name="uq_official_assignment_match_official_type",
+        ),
+    )
     match = relationship(
         "Match",
         backref="official_assignments"
@@ -59,3 +67,4 @@ class OfficialAssignment(Base):
         "User",
         backref="official_assignments"
     )
+
