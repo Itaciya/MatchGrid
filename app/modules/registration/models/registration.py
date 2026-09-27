@@ -38,6 +38,7 @@ class Registration(Base):
         String(50),
         nullable=False,
         default="pending",
+        index=True,
     )
 
     registered_at: Mapped[datetime] = mapped_column(

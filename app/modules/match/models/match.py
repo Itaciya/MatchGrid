@@ -34,13 +34,15 @@ class Match(Base):
 
     scheduled_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=False
+        nullable=False,
+        index=True
     )
 
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        default="scheduled"
+        default="scheduled",
+        index=True
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -83,4 +85,5 @@ class Match(Base):
         back_populates="match",
         uselist=False
     )
+
 

@@ -45,6 +45,7 @@ class Tournament(Base):
         String(50),
         nullable=False,
         default="upcoming",
+        index=True,
     )
 
     organizer_id: Mapped[int] = mapped_column(
@@ -70,3 +71,4 @@ class Tournament(Base):
         "User",
         backref="tournaments",
     )
+
