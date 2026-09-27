@@ -86,3 +86,12 @@ def test_response_schema_serializes_from_orm_like_object():
     assert response.id == 1
     assert response.email == "player1@example.com"
     assert not hasattr(response, "password_hash")
+
+
+def test_registration_rejects_password_over_72_chars():
+    with pytest.raises(ValidationError):
+        UserRegister(
+            email="player1@example.com",
+            password="a" * 73,
+            role="player",
+        )
