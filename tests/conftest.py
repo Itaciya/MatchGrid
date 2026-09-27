@@ -14,6 +14,7 @@ from app.modules.player_team.models.team import Team
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.match.models.match import Match
 from app.modules.score.models.score import Score
+from app.modules.official_assignment.models.official_assignment import OfficialAssignment
 
 
 @pytest.fixture
@@ -24,3 +25,4 @@ def db():
         yield session
     finally:
         session.close()
+
