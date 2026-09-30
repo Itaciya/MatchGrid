@@ -29,6 +29,14 @@ class UnauthorizedException(AppException):
         )
 
 
+class ForbiddenException(AppException):
+    def __init__(self, detail: str = "You do not have permission to perform this action"):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+        )
+
+
 class NotFoundException(AppException):
     def __init__(self, detail: str = "Resource not found"):
         super().__init__(

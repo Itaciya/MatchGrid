@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
+from app.core.dependencies import get_current_user
 from app.data_access.database import get_db
+from app.modules.user.models import User
 from app.modules.user.schemas.user import TokenResponse, UserLogin, UserRegister, UserResponse
 from app.modules.user.services.auth_service import authenticate_user
 from app.modules.user.services.user_service import register_user
@@ -33,3 +35,14 @@ def login(
     db: Session = Depends(get_db),
 ):
     return authenticate_user(db, credentials)
+
+
+@router.get(
+    "/me",
+    response_model=UserResponse,
+)
+def read_current_user(
+    current_user: User = Depends(get_current_user),
+):
+    """Protected route: proves the authentication dependency works end-to-end."""
+    return current_user
