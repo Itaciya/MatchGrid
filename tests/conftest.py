@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+import fakeredis
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -26,3 +27,13 @@ def db():
     finally:
         session.close()
 
+
+@pytest.fixture
+def fake_redis(monkeypatch):
+    """In-memory Redis stand-in so tests don't need a live Redis server."""
+    fake = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(
+        "app.modules.user.services.auth_service.get_redis",
+        lambda: fake,
+    )
+    return fake

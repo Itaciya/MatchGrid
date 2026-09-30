@@ -32,3 +32,11 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class TokenResponse(BaseModel):
+    """Schema for returning authentication tokens after login."""
+
+    access_token: str
+    refresh_token: str
+    token_type: Literal["bearer"] = "bearer"

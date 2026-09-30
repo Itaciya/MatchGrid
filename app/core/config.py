@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     # Authentication
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Redis
     REDIS_URL: str
