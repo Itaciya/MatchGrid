@@ -28,12 +28,22 @@ def db():
         session.close()
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def fake_redis(monkeypatch):
-    """In-memory Redis stand-in so tests don't need a live Redis server."""
+    """In-memory Redis stand-in so tests don't need a live Redis server.
+
+    autouse=True because get_current_user (app/core/dependencies.py) now
+    also calls get_redis as of SCRUM-51, and it's exercised indirectly by
+    many existing protected-route tests that don't request this fixture
+    by name.
+    """
     fake = fakeredis.FakeRedis(decode_responses=True)
     monkeypatch.setattr(
         "app.modules.user.services.auth_service.get_redis",
+        lambda: fake,
+    )
+    monkeypatch.setattr(
+        "app.core.dependencies.get_redis",
         lambda: fake,
     )
     return fake
