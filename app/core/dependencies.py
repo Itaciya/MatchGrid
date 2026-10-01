@@ -6,10 +6,15 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import ForbiddenException, NotFoundException, UnauthorizedException
 from app.core.security import decode_token
 from app.data_access.database import get_db
+from app.data_access.redis_client import get_redis
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 
 bearer_scheme = HTTPBearer()
+
+
+def _invalidated_after_key(user_id: str) -> str:
+    return f"token_invalidated_after:{user_id}"
 
 
 def get_current_user(
@@ -20,6 +25,10 @@ def get_current_user(
 
     Covers SCRUM-315 (user status validation): an inactive account's
     token is rejected here, even if the token itself is still valid.
+
+    Covers SCRUM-51 (logout/token invalidation): a token issued before
+    the user's most recent logout is rejected here too, even if it
+    hasn't naturally expired yet.
     """
     try:
         payload = decode_token(credentials.credentials)
@@ -30,6 +39,13 @@ def get_current_user(
         raise UnauthorizedException(detail="Invalid or expired token")
 
     user_id = payload.get("sub")
+
+    redis_client = get_redis()
+    invalidated_after = redis_client.get(_invalidated_after_key(user_id))
+
+    if invalidated_after is not None and payload.get("iat", 0) <= int(invalidated_after):
+        raise UnauthorizedException(detail="Invalid or expired token")
+
     user = db.query(User).filter(User.id == int(user_id)).first()
 
     if user is None:

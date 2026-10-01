@@ -26,14 +26,19 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
 
 
 def create_access_token(user_id: int, role: str) -> str:
-    """Short-lived, stateless token used to authenticate requests."""
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
+    """Short-lived, stateless token used to authenticate requests.
+
+    Includes 'iat' so SCRUM-51's logout can invalidate any access token
+    issued before a user's most recent logout, even though JWTs are
+    otherwise stateless.
+    """
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": str(user_id),
         "role": role,
         "type": "access",
+        "iat": now,
         "exp": expire,
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)

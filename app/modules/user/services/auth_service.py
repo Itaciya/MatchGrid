@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,10 @@ from app.modules.user.schemas.user import TokenResponse, UserLogin
 
 def _refresh_token_key(user_id: int) -> str:
     return f"refresh_token:{user_id}"
+
+
+def _invalidated_after_key(user_id: int) -> str:
+    return f"token_invalidated_after:{user_id}"
 
 
 def authenticate_user(db: Session, credentials: UserLogin) -> TokenResponse:
@@ -41,3 +45,21 @@ def authenticate_user(db: Session, credentials: UserLogin) -> TokenResponse:
     )
 
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+def logout_user(user_id: int) -> None:
+    """Invalidate the user's current session.
+
+    Any access token issued before this moment will be rejected by
+    get_current_user (even if not yet naturally expired), and the
+    stored refresh token is revoked so it can't mint new access tokens.
+    """
+    redis_client = get_redis()
+    now = int(datetime.now(timezone.utc).timestamp())
+
+    redis_client.set(
+        _invalidated_after_key(user_id),
+        str(now),
+        ex=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+    )
+    redis_client.delete(_refresh_token_key(user_id))
