@@ -3,9 +3,10 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import ForbiddenException, UnauthorizedException
+from app.core.exceptions import ForbiddenException, NotFoundException, UnauthorizedException
 from app.core.security import decode_token
 from app.data_access.database import get_db
+from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 
 bearer_scheme = HTTPBearer()
@@ -51,3 +52,28 @@ def require_role(*allowed_roles: str):
         return current_user
 
     return _check_role
+
+
+def get_tournament_or_404(
+    tournament_id: int,
+    db: Session = Depends(get_db),
+) -> Tournament:
+    """Fetch a tournament by path param, or raise 404 if it doesn't exist."""
+    tournament = db.query(Tournament).filter(Tournament.id == tournament_id).first()
+
+    if tournament is None:
+        raise NotFoundException(detail="Tournament not found")
+
+    return tournament
+
+
+def verify_tournament_owner(
+    tournament: Tournament = Depends(get_tournament_or_404),
+    current_user: User = Depends(require_role("organiser")),
+) -> Tournament:
+    """Ownership check for SCRUM-54: the organiser must own this specific
+    tournament, not just hold the organiser role in general."""
+    if tournament.organizer_id != current_user.id:
+        raise ForbiddenException(detail="You do not own this tournament")
+
+    return tournament
