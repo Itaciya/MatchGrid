@@ -9,6 +9,7 @@ from app.core.exceptions import (
     ForbiddenException,
     NotFoundException,
 )
+from app.modules.player_team.models.player import Player
 from app.modules.player_team.models.team import Team, TeamStatus
 from app.modules.player_team.services.player_service import (
     validate_team_roster,
@@ -18,6 +19,9 @@ from app.modules.registration.schemas.registration import (
     RegistrationCreate,
     RegistrationStatus,
     RegistrationType,
+)
+from app.modules.registration.services.registration_validation import (
+    validate_player_registration,
 )
 from app.modules.tournament.models.tournament import Tournament
 
@@ -128,6 +132,74 @@ def create_team_registration(
         db.rollback()
         raise ConflictException(
             detail="Team is already registered for this tournament"
+        )
+
+    db.refresh(registration)
+
+    return registration
+
+
+def create_player_registration(
+    db: Session,
+    current_user_id: int,
+    data: RegistrationCreate,
+) -> Registration:
+    """Create a tournament registration for the authenticated player."""
+
+    # This function is only for individual player registration.
+    if data.registration_type != RegistrationType.PLAYER:
+        raise BadRequestException(
+            detail="Only player registration is allowed"
+        )
+
+    if data.player_id is None:
+        raise BadRequestException(
+            detail="player_id is required for player registration"
+        )
+
+    # Find the player profile belonging to the authenticated user.
+    player = (
+        db.query(Player)
+        .filter(Player.user_id == current_user_id)
+        .first()
+    )
+
+    if player is None:
+        raise NotFoundException(
+            detail="Player profile not found"
+        )
+
+    # A player can only register their own profile.
+    if data.player_id != player.id:
+        raise ForbiddenException(
+            detail="You can only register your own player profile"
+        )
+
+    # Validate tournament, player eligibility, and duplicate registration.
+    validate_player_registration(
+        db,
+        data.tournament_id,
+        player.id,
+    )
+
+    # Create the player registration with pending status.
+    registration = Registration(
+        tournament_id=data.tournament_id,
+        team_id=None,
+        player_id=player.id,
+        registration_type=RegistrationType.PLAYER.value,
+        status=RegistrationStatus.PENDING.value,
+        note=data.note,
+    )
+
+    db.add(registration)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ConflictException(
+            detail="Player is already registered for this tournament"
         )
 
     db.refresh(registration)
