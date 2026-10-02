@@ -19,6 +19,7 @@ from app.modules.registration.schemas.registration import (
     RegistrationCreate,
     RegistrationStatus,
     RegistrationType,
+    RegistrationUpdate,
 )
 from app.modules.registration.services.registration_validation import (
     validate_player_registration,
@@ -356,6 +357,86 @@ def approve_registration(
     db.refresh(registration)
 
     return registration
+
+
+def update_registration(
+    db: Session,
+    registration_id: int,
+    current_user_id: int,
+    data: RegistrationUpdate,
+) -> Registration:
+    """Update an editable registration by an authorized participant."""
+
+    registration = (
+        db.query(Registration)
+        .filter(Registration.id == registration_id)
+        .first()
+    )
+
+    if registration is None:
+        raise NotFoundException(detail="Registration not found")
+
+    # Only pending registrations can be edited.
+    if registration.status != RegistrationStatus.PENDING.value:
+        raise BadRequestException(
+            detail="Only pending registrations can be updated"
+        )
+
+    # Verify participant ownership.
+    if registration.registration_type == RegistrationType.PLAYER:
+        if registration.player_id is None:
+            raise BadRequestException(
+                detail="Invalid player registration"
+            )
+
+        player = (
+            db.query(Player)
+            .filter(Player.id == registration.player_id)
+            .first()
+        )
+
+        if player is None:
+            raise NotFoundException(detail="Player not found")
+
+        if player.user_id != current_user_id:
+            raise ForbiddenException(
+                detail="You can only update your own registration"
+            )
+
+    elif registration.registration_type == RegistrationType.TEAM:
+        if registration.team_id is None:
+            raise BadRequestException(
+                detail="Invalid team registration"
+            )
+
+        team = (
+            db.query(Team)
+            .filter(Team.id == registration.team_id)
+            .first()
+        )
+
+        if team is None:
+            raise NotFoundException(detail="Team not found")
+
+        if team.captain_id != current_user_id:
+            raise ForbiddenException(
+                detail="Only the team captain can update this registration"
+            )
+
+    else:
+        raise BadRequestException(
+            detail="Invalid registration type"
+        )
+
+    # Update only editable information.
+    if data.note is not None:
+        registration.note = data.note
+
+    db.commit()
+    db.refresh(registration)
+
+    return registration
+
 
 def reject_registration(
     db: Session,

@@ -29,6 +29,7 @@ class RegistrationCreate(BaseModel):
         if self.registration_type == RegistrationType.TEAM:
             if self.team_id is None:
                 raise ValueError("team_id is required for team registration")
+
             if self.player_id is not None:
                 raise ValueError(
                     "player_id must not be provided for team registration"
@@ -37,6 +38,7 @@ class RegistrationCreate(BaseModel):
         elif self.registration_type == RegistrationType.PLAYER:
             if self.player_id is None:
                 raise ValueError("player_id is required for player registration")
+
             if self.team_id is not None:
                 raise ValueError(
                     "team_id must not be provided for player registration"
@@ -46,9 +48,8 @@ class RegistrationCreate(BaseModel):
 
 
 class RegistrationUpdate(BaseModel):
-    """Schema for updating a registration."""
+    """Schema for updating editable registration information."""
 
-    status: RegistrationStatus | None = None
     note: str | None = None
 
 
