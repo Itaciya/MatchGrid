@@ -115,6 +115,22 @@ def update_player_status(
     return player
 
 
+def validate_player_for_roster(
+    player: Player,
+) -> None:
+    """Validate whether a player can be added to a team."""
+
+    if player.status != PlayerStatus.ACTIVE:
+        raise ConflictException(
+            detail="Only active players can be added to a team"
+        )
+
+    if player.team_id is not None:
+        raise ConflictException(
+            detail="Player already belongs to a team"
+        )
+
+
 def add_player_to_team(
     db: Session,
     team_id: int,
@@ -146,15 +162,7 @@ def add_player_to_team(
     if player is None:
         raise NotFoundException(detail="Player not found")
 
-    if player.status != PlayerStatus.ACTIVE:
-        raise ConflictException(
-            detail="Only active players can be added to a team"
-        )
-
-    if player.team_id is not None:
-        raise ConflictException(
-            detail="Player already belongs to a team"
-        )
+    validate_player_for_roster(player)
 
     player.team_id = team_id
 
@@ -162,6 +170,7 @@ def add_player_to_team(
     db.refresh(player)
 
     return player
+
 
 def remove_player_from_team(
     db: Session,
