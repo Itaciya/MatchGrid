@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -7,6 +7,7 @@ from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
+
 
 client = TestClient(app)
 
@@ -61,6 +62,7 @@ def _valid_payload():
 
 def test_organiser_can_create_tournament(db):
     organiser = _make_user(db, role="organiser")
+
     response = client.post(
         "/organiser/tournaments",
         json=_valid_payload(),
@@ -68,6 +70,7 @@ def test_organiser_can_create_tournament(db):
     )
 
     assert response.status_code == 201
+
     data = response.json()
 
     assert data["organizer_id"] == organiser.id
@@ -86,6 +89,7 @@ def test_organiser_can_create_tournament(db):
 
 def test_non_organiser_cannot_create_tournament(db):
     player = _make_user(db, role="player")
+
     response = client.post(
         "/organiser/tournaments",
         json=_valid_payload(),
@@ -96,12 +100,17 @@ def test_non_organiser_cannot_create_tournament(db):
 
 
 def test_create_tournament_without_token_is_rejected():
-    response = client.post("/organiser/tournaments", json=_valid_payload())
+    response = client.post(
+        "/organiser/tournaments",
+        json=_valid_payload(),
+    )
+
     assert response.status_code == 401
 
 
 def test_create_tournament_rejects_end_date_before_start_date(db):
     organiser = _make_user(db, role="organiser")
+
     payload = _valid_payload()
     payload["start_date"] = "2026-07-10T00:00:00Z"
     payload["end_date"] = "2026-07-01T00:00:00Z"
@@ -111,6 +120,7 @@ def test_create_tournament_rejects_end_date_before_start_date(db):
         json=payload,
         headers=_auth_header(organiser),
     )
+
     assert response.status_code == 422
 
 
@@ -168,3 +178,190 @@ def test_non_organiser_cannot_update_any_tournament(db):
     assert response.status_code == 403
 
 
+def test_organiser_update_rejects_invalid_dates(db):
+    organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(db, organiser.id)
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}",
+        json={
+            "start_date": "2026-07-10T00:00:00Z",
+            "end_date": "2026-07-01T00:00:00Z",
+        },
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 422
+
+
+def test_organiser_update_rejects_invalid_partial_date_update(db):
+    organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(db, organiser.id)
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}",
+        json={
+            "start_date": "2026-06-15T00:00:00Z",
+        },
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 400
+
+
+def test_organiser_can_archive_own_completed_tournament(db):
+    organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(
+        db,
+        organiser.id,
+        status="completed",
+    )
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}/archive",
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["id"] == tournament.id
+    assert data["status"] == "archived"
+
+    archived_tournament = (
+        db.query(Tournament)
+        .filter(Tournament.id == tournament.id)
+        .first()
+    )
+
+    assert archived_tournament is not None
+
+    db.refresh(archived_tournament)
+
+    assert archived_tournament.status == "archived"
+
+
+def test_organiser_cannot_archive_upcoming_tournament(db):
+    organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(
+        db,
+        organiser.id,
+        status="upcoming",
+    )
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}/archive",
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 400
+
+    data = response.json()
+
+    assert data["success"] is False
+    assert data["error"]["type"] == "application_error"
+    assert data["error"]["message"] == (
+        "Only completed tournaments can be archived"
+    )
+
+    db.refresh(tournament)
+
+    assert tournament.status == "upcoming"
+
+def test_organiser_cannot_archive_others_tournament(db):
+    owner = _make_user(db, role="organiser")
+    other_organiser = _make_user(db, role="organiser")
+
+    tournament = _make_tournament(
+        db,
+        owner.id,
+        status="completed",
+    )
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}/archive",
+        headers=_auth_header(other_organiser),
+    )
+
+    assert response.status_code == 403
+
+    db.refresh(tournament)
+
+    assert tournament.status == "completed"
+
+def test_non_organiser_cannot_archive_tournament(db):
+    owner = _make_user(db, role="organiser")
+    player = _make_user(db, role="player")
+
+    tournament = _make_tournament(
+        db,
+        owner.id,
+        status="completed",
+    )
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}/archive",
+        headers=_auth_header(player),
+    )
+
+    assert response.status_code == 403
+
+    db.refresh(tournament)
+
+    assert tournament.status == "completed"
+
+
+
+def test_archive_tournament_without_token_is_rejected(db):
+    organiser = _make_user(db, role="organiser")
+
+    tournament = _make_tournament(
+        db,
+        organiser.id,
+        status="completed",
+    )
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}/archive",
+    )
+
+    assert response.status_code == 401
+
+def test_archive_nonexistent_tournament_returns_404(db):
+    organiser = _make_user(db, role="organiser")
+
+    response = client.patch(
+        "/organiser/tournaments/999999",
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 404
+
+def test_archived_tournament_cannot_be_archived_again(db):
+    organiser = _make_user(db, role="organiser")
+
+    tournament = _make_tournament(
+        db,
+        organiser.id,
+        status="archived",
+    )
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}/archive",
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 400
+
+    data = response.json()
+
+    assert data["success"] is False
+    assert data["error"]["type"] == "application_error"
+    assert data["error"]["message"] == (
+        "Only completed tournaments can be archived"
+    )
+
+    db.refresh(tournament)
+
+    assert tournament.status == "archived"

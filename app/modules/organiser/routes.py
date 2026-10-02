@@ -10,6 +10,7 @@ from app.modules.tournament.schemas.tournament import (
     TournamentUpdate,
 )
 from app.modules.tournament.services.tournament_service import (
+    archive_tournament,
     create_tournament,
     update_tournament,
 )
@@ -51,3 +52,12 @@ def update_tournament_route(
     db: Session = Depends(get_db),
 ):
     return update_tournament(db, tournament, data)
+@router.patch(
+    "/tournaments/{tournament_id}/archive",
+    response_model=TournamentResponse,
+)
+def archive_tournament_route(
+    tournament: Tournament = Depends(verify_tournament_owner),
+    db: Session = Depends(get_db),
+):
+    return archive_tournament(db, tournament)
