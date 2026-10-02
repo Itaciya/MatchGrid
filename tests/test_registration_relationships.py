@@ -83,7 +83,7 @@ def test_registration_player_relationship():
             team_id=team.id,
             first_name="Registration",
             last_name="Player",
-            is_active=True,
+            status="active",
         )
         db.add(player)
         db.flush()

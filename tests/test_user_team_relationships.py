@@ -30,16 +30,20 @@ def test_user_team_player_relationships():
             team_id=team.id,
             first_name="Test",
             last_name="Player",
-            is_active=True,
+            status="active",
         )
         db.add(player)
         db.commit()
 
-        assert player.id is not None
-        assert player.user_id == user.id
-        assert player.team_id == team.id
+        db.refresh(user)
+        db.refresh(team)
+        db.refresh(player)
+
         assert player.user.id == user.id
+        assert player in user.player
         assert player.team.id == team.id
+        assert player in team.players
+        assert team.captain.id == user.id
 
     finally:
         db.rollback()

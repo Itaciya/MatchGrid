@@ -102,7 +102,7 @@ def update_player_status(
     if player is None:
         raise NotFoundException(detail="Player not found")
 
-    player.is_active = data.is_active
+    player.status = data.status
 
     db.commit()
     db.refresh(player)

@@ -12,6 +12,7 @@ from app.modules.player_team.schemas.player import (
     PlayerStatusUpdate,
     PlayerUpdate,
 )
+from app.modules.player_team.schemas.team import TeamResponse
 
 from app.modules.player_team.services.player_service import (
     create_player,
@@ -19,6 +20,7 @@ from app.modules.player_team.services.player_service import (
     update_player_profile,
     update_player_status,
 )
+from app.modules.player_team.services.team_service import get_team
 
 from app.modules.user.models import User
 
@@ -90,3 +92,15 @@ def update_player_profile_status(
     db: Session = Depends(get_db),
 ):
     return update_player_status(db, player_id, data)
+
+
+@router.get(
+    "/team/{team_id}",
+    response_model=TeamResponse,
+)
+def get_team_details(
+    team_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return get_team(db, team_id)

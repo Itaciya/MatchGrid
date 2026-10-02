@@ -1,9 +1,16 @@
 from datetime import datetime
+from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.data_access.base import Base
+
+
+class PlayerStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    SUSPENDED = "suspended"
 
 
 class Player(Base):
@@ -20,6 +27,7 @@ class Player(Base):
         unique=True,
         index=True,
     )
+
     team_id: Mapped[int] = mapped_column(
         ForeignKey("teams.id"),
         nullable=False,
@@ -36,10 +44,10 @@ class Player(Base):
         nullable=False,
     )
 
-    is_active: Mapped[bool] = mapped_column(
-        Boolean,
+    status: Mapped[PlayerStatus] = mapped_column(
+        String(50),
         nullable=False,
-        default=True,
+        default=PlayerStatus.ACTIVE,
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -59,7 +67,8 @@ class Player(Base):
         "User",
         backref="player",
     )
+
     team = relationship(
-       "Team",
+        "Team",
         backref="players",
     )
