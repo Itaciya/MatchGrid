@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import require_role
+from app.core.dependencies import get_current_user, require_role
 from app.data_access.database import get_db
 from app.modules.registration.schemas.registration import (
     RegistrationCreate,
     RegistrationResponse,
     RegistrationStatus,
+    RegistrationUpdate,
 )
 from app.modules.registration.services.registration_service import (
     approve_registration,
@@ -14,6 +15,7 @@ from app.modules.registration.services.registration_service import (
     create_team_registration,
     get_pending_registrations,
     reject_registration,
+    update_registration,
     update_registration_status,
 )
 from app.modules.user.models import User
@@ -75,6 +77,26 @@ def get_pending_registrations_endpoint(
     return get_pending_registrations(
         db,
         tournament_id,
+    )
+
+
+@router.patch(
+    "/{registration_id}",
+    response_model=RegistrationResponse,
+    status_code=status.HTTP_200_OK,
+)
+def update_registration_endpoint(
+    registration_id: int,
+    data: RegistrationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update an editable registration."""
+    return update_registration(
+        db,
+        registration_id,
+        current_user.id,
+        data,
     )
 
 
