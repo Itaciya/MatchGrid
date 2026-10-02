@@ -22,9 +22,11 @@ def create_tournament(
         end_date=data.end_date,
         organizer_id=organizer_id,
     )
+
     db.add(tournament)
     db.commit()
     db.refresh(tournament)
+
     return tournament
 
 
@@ -33,12 +35,26 @@ def update_tournament(
     tournament: Tournament,
     data: TournamentUpdate,
 ) -> Tournament:
-    """Apply a partial update. Caller (route) is responsible for having already
-    verified the requester owns this tournament."""
+    """Apply a partial update.
+
+    Caller (route) is responsible for having already
+    verified the requester owns this tournament.
+    """
     updates = data.model_dump(exclude_unset=True)
 
-    new_start_date = updates.get("start_date", tournament.start_date)
-    new_end_date = updates.get("end_date", tournament.end_date)
+    if "status" in updates:
+        raise BadRequestException(
+            detail="Tournament status cannot be changed through update"
+        )
+
+    new_start_date = updates.get(
+        "start_date",
+        tournament.start_date,
+    )
+    new_end_date = updates.get(
+        "end_date",
+        tournament.end_date,
+    )
 
     if new_end_date <= new_start_date:
         raise BadRequestException(
@@ -50,6 +66,7 @@ def update_tournament(
 
     db.commit()
     db.refresh(tournament)
+
     return tournament
 
 
@@ -76,6 +93,8 @@ def get_tournament_by_id(
         .filter(Tournament.id == tournament_id)
         .first()
     )
+
+
 def archive_tournament(
     db: Session,
     tournament: Tournament,

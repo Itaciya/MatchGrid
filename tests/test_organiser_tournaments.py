@@ -365,3 +365,23 @@ def test_archived_tournament_cannot_be_archived_again(db):
     db.refresh(tournament)
 
     assert tournament.status == "archived"
+
+def test_organiser_cannot_change_tournament_status_through_update(db):
+    organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(
+        db,
+        organiser.id,
+        status="upcoming",
+    )
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}",
+        json={"status": "completed"},
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 400
+
+    db.refresh(tournament)
+
+    assert tournament.status == "upcoming"
