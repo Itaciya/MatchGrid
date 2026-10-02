@@ -31,3 +31,14 @@ def update_tournament(db: Session, tournament: Tournament, data: TournamentUpdat
     db.commit()
     db.refresh(tournament)
     return tournament
+def list_tournaments(
+    db: Session,
+    status: str | None = None,
+) -> list[Tournament]:
+    """Return tournaments, optionally filtered by status."""
+    query = db.query(Tournament)
+
+    if status is not None:
+        query = query.filter(Tournament.status == status)
+
+    return query.order_by(Tournament.start_date.asc()).all()

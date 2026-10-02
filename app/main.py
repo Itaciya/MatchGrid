@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
+from app.modules.tournament.routes import router as tournament_router
 
 from app.core.config import settings
 from app.core.logging import configure_logging
@@ -126,6 +127,7 @@ app.include_router(spectator_router)
 app.include_router(scorer_router)
 app.include_router(user_router)
 app.include_router(registration_router)
+app.include_router(tournament_router)
 
 
 @app.get("/")
