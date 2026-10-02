@@ -25,6 +25,7 @@ from app.modules.player_team.services.player_service import (
     update_player_status,
 )
 from app.modules.player_team.services.team_service import (
+    authorize_team_captain,
     get_team,
     update_team_status,
 )
@@ -123,12 +124,12 @@ def update_team_status_endpoint(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    team = get_team(db, team_id)
-
-    if team.captain_id != current_user.id:
-        raise ForbiddenException(
-            detail="Only the team captain can update team status"
-        )
+    authorize_team_captain(
+    db,
+    team_id,
+    current_user.id,
+    detail="Only the team captain can update team status",
+    )
 
     return update_team_status(
         db,
@@ -154,6 +155,7 @@ def add_player_to_team_endpoint(
         player_id,
         current_user.id,
     )
+
 
 @router.delete(
     "/team/{team_id}/players/{player_id}",
