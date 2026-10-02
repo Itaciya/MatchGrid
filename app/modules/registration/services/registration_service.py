@@ -34,7 +34,6 @@ def create_team_registration(
 ) -> Registration:
     """Create a tournament registration for the authenticated team captain."""
 
-    # This endpoint is only for team registration.
     if data.registration_type != RegistrationType.TEAM:
         raise BadRequestException(
             detail="Only team registration is allowed"
@@ -45,7 +44,6 @@ def create_team_registration(
             detail="team_id is required for team registration"
         )
 
-    # Check that the team exists.
     team = (
         db.query(Team)
         .filter(Team.id == data.team_id)
@@ -55,19 +53,16 @@ def create_team_registration(
     if team is None:
         raise NotFoundException(detail="Team not found")
 
-    # Only the team captain can register the team.
     if team.captain_id != current_user_id:
         raise ForbiddenException(
             detail="Only the team captain can register the team"
         )
 
-    # Team must be active.
     if team.status != TeamStatus.ACTIVE:
         raise BadRequestException(
             detail="Only active teams can register"
         )
 
-    # Validate the team's complete roster before registration.
     player_ids = [player.id for player in team.players]
 
     validate_team_roster(
@@ -76,7 +71,6 @@ def create_team_registration(
         team_id=team.id,
     )
 
-    # Check that the tournament exists.
     tournament = (
         db.query(Tournament)
         .filter(Tournament.id == data.tournament_id)
@@ -86,7 +80,6 @@ def create_team_registration(
     if tournament is None:
         raise NotFoundException(detail="Tournament not found")
 
-    # Registration is allowed before the tournament starts.
     now = datetime.now(timezone.utc)
 
     if tournament.start_date <= now:
@@ -94,14 +87,11 @@ def create_team_registration(
             detail="Registration is not available for this tournament"
         )
 
-    # If the tournament has already been marked with a non-upcoming
-    # status, do not allow a new registration.
     if tournament.status != "upcoming":
         raise BadRequestException(
             detail="Registration is not available for this tournament"
         )
 
-    # Prevent duplicate registration.
     existing_registration = (
         db.query(Registration)
         .filter(
@@ -147,7 +137,6 @@ def create_player_registration(
 ) -> Registration:
     """Create a tournament registration for the authenticated player."""
 
-    # This function is only for individual player registration.
     if data.registration_type != RegistrationType.PLAYER:
         raise BadRequestException(
             detail="Only player registration is allowed"
@@ -158,7 +147,6 @@ def create_player_registration(
             detail="player_id is required for player registration"
         )
 
-    # Find the player profile belonging to the authenticated user.
     player = (
         db.query(Player)
         .filter(Player.user_id == current_user_id)
@@ -170,20 +158,17 @@ def create_player_registration(
             detail="Player profile not found"
         )
 
-    # A player can only register their own profile.
     if data.player_id != player.id:
         raise ForbiddenException(
             detail="You can only register your own player profile"
         )
 
-    # Validate tournament, player eligibility, and duplicate registration.
     validate_player_registration(
         db,
         data.tournament_id,
         player.id,
     )
 
-    # Create the player registration with pending status.
     registration = Registration(
         tournament_id=data.tournament_id,
         team_id=None,
@@ -230,9 +215,11 @@ def update_registration_status(
         RegistrationStatus.PENDING: {
             RegistrationStatus.APPROVED,
             RegistrationStatus.REJECTED,
+            RegistrationStatus.CANCELLED,
         },
         RegistrationStatus.APPROVED: set(),
         RegistrationStatus.REJECTED: set(),
+        RegistrationStatus.CANCELLED: set(),
     }
 
     if new_status not in valid_transitions[current_status]:
@@ -294,13 +281,11 @@ def approve_registration(
     if registration is None:
         raise NotFoundException(detail="Registration not found")
 
-    # Only pending registrations can be approved.
     if registration.status != RegistrationStatus.PENDING.value:
         raise BadRequestException(
             detail="Only pending registrations can be approved"
         )
 
-    # Validate player registration.
     if registration.registration_type == RegistrationType.PLAYER:
         if registration.player_id is None:
             raise BadRequestException(
@@ -321,7 +306,6 @@ def approve_registration(
                 detail="Only active players can be approved"
             )
 
-    # Validate team registration.
     elif registration.registration_type == RegistrationType.TEAM:
         if registration.team_id is None:
             raise BadRequestException(
@@ -376,13 +360,11 @@ def update_registration(
     if registration is None:
         raise NotFoundException(detail="Registration not found")
 
-    # Only pending registrations can be edited.
     if registration.status != RegistrationStatus.PENDING.value:
         raise BadRequestException(
             detail="Only pending registrations can be updated"
         )
 
-    # Verify participant ownership.
     if registration.registration_type == RegistrationType.PLAYER:
         if registration.player_id is None:
             raise BadRequestException(
@@ -428,7 +410,6 @@ def update_registration(
             detail="Invalid registration type"
         )
 
-    # Update only editable information.
     if data.note is not None:
         registration.note = data.note
 
@@ -453,7 +434,6 @@ def reject_registration(
     if registration is None:
         raise NotFoundException(detail="Registration not found")
 
-    # Only pending registrations can be rejected.
     if registration.status != RegistrationStatus.PENDING.value:
         raise BadRequestException(
             detail="Only pending registrations can be rejected"
