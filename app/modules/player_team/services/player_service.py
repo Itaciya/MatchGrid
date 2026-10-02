@@ -1,8 +1,12 @@
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import NotFoundException
+from app.core.exceptions import ConflictException, NotFoundException
 from app.modules.player_team.models.player import Player
-from app.modules.player_team.schemas.player import PlayerCreate
+from app.modules.player_team.schemas.player import (
+    PlayerCreate,
+    PlayerStatusUpdate,
+    PlayerUpdate,
+)
 
 
 def create_player(
@@ -11,6 +15,17 @@ def create_player(
     data: PlayerCreate,
 ) -> Player:
     """Create a player profile for the authenticated user."""
+
+    existing_player = (
+        db.query(Player)
+        .filter(Player.user_id == user_id)
+        .first()
+    )
+
+    if existing_player is not None:
+        raise ConflictException(
+            detail="Player profile already exists for this user"
+        )
 
     player = Player(
         user_id=user_id,
@@ -40,5 +55,56 @@ def get_player(
 
     if player is None:
         raise NotFoundException(detail="Player not found")
+
+    return player
+
+
+def update_player_profile(
+    db: Session,
+    player_id: int,
+    data: PlayerUpdate,
+) -> Player:
+    """Update a player's profile information."""
+
+    player = (
+        db.query(Player)
+        .filter(Player.id == player_id)
+        .first()
+    )
+
+    if player is None:
+        raise NotFoundException(detail="Player not found")
+
+    update_data = data.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(player, field, value)
+
+    db.commit()
+    db.refresh(player)
+
+    return player
+
+
+def update_player_status(
+    db: Session,
+    player_id: int,
+    data: PlayerStatusUpdate,
+) -> Player:
+    """Update a player's eligibility status."""
+
+    player = (
+        db.query(Player)
+        .filter(Player.id == player_id)
+        .first()
+    )
+
+    if player is None:
+        raise NotFoundException(detail="Player not found")
+
+    player.is_active = data.is_active
+
+    db.commit()
+    db.refresh(player)
 
     return player

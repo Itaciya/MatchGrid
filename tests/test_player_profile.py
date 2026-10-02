@@ -100,3 +100,184 @@ def test_get_player_profile_requires_authentication():
     response = client.get("/player-team/profile/1")
 
     assert response.status_code == 401
+
+def test_organiser_can_update_player_status(db):
+    player, player_user = _make_player(db)
+
+    organiser = _make_user(
+        db,
+        email=f"organiser_status_test_{uuid4()}@example.com",
+        role="organiser",
+    )
+
+    response = client.patch(
+        f"/player-team/profile/{player.id}/status",
+        json={"is_active": False},
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["id"] == player.id
+    assert data["is_active"] is False
+
+
+def test_organiser_can_reactivate_player(db):
+    player, player_user = _make_player(db)
+    player.is_active = False
+    db.commit()
+
+    organiser = _make_user(
+        db,
+        email=f"organiser_reactivate_test_{uuid4()}@example.com",
+        role="organiser",
+    )
+
+    response = client.patch(
+        f"/player-team/profile/{player.id}/status",
+        json={"is_active": True},
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["id"] == player.id
+    assert data["is_active"] is True
+
+
+def test_player_cannot_update_player_status(db):
+    player, player_user = _make_player(db)
+
+    response = client.patch(
+        f"/player-team/profile/{player.id}/status",
+        json={"is_active": False},
+        headers=_auth_header(player_user),
+    )
+
+    assert response.status_code == 403
+
+
+def test_update_player_status_returns_404_for_nonexistent_player(db):
+    organiser = _make_user(
+        db,
+        email=f"organiser_not_found_test_{uuid4()}@example.com",
+        role="organiser",
+    )
+
+    response = client.patch(
+        "/player-team/profile/999999/status",
+        json={"is_active": False},
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["message"] == "Player not found"
+
+def test_create_player_rejects_duplicate_profile(db):
+    user = _make_user(db)
+
+    team = _make_team(db, user.id)
+
+    player_data = {
+        "team_id": team.id,
+        "first_name": "John",
+        "last_name": "Doe",
+    }
+
+    headers = _auth_header(user)
+
+    response = client.post(
+        "/player-team/profile",
+        json=player_data,
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+
+    duplicate_response = client.post(
+        "/player-team/profile",
+        json=player_data,
+        headers=headers,
+    )
+
+    assert duplicate_response.status_code == 409
+    assert (
+        duplicate_response.json()["error"]["message"]
+        == "Player profile already exists for this user"
+    )
+
+def test_player_can_update_own_profile(db):
+    player, user = _make_player(db)
+
+    response = client.patch(
+        f"/player-team/profile/{player.id}",
+        json={
+            "first_name": "Updated",
+            "last_name": "Player",
+        },
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["id"] == player.id
+    assert data["first_name"] == "Updated"
+    assert data["last_name"] == "Player"
+
+
+def test_player_cannot_update_another_profile(db):
+    player, player_user = _make_player(db)
+    another_user = _make_user(
+        db,
+        email=f"another_player_{uuid4()}@example.com",
+        role="player",
+    )
+
+    response = client.patch(
+        f"/player-team/profile/{player.id}",
+        json={
+            "first_name": "Hacked",
+        },
+        headers=_auth_header(another_user),
+    )
+
+    assert response.status_code == 403
+    assert (
+        response.json()["error"]["message"]
+        == "You can only update your own profile"
+    )
+
+
+def test_player_update_rejects_invalid_information(db):
+    player, user = _make_player(db)
+
+    response = client.patch(
+        f"/player-team/profile/{player.id}",
+        json={
+            "first_name": "12345",
+        },
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 422
+
+
+def test_player_update_returns_404_for_nonexistent_player(db):
+    user = _make_user(db)
+
+    response = client.patch(
+        "/player-team/profile/999999",
+        json={
+            "first_name": "Updated",
+        },
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["message"] == "Player not found"
