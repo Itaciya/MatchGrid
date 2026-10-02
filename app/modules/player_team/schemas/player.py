@@ -27,7 +27,8 @@ def validate_player_name(value: str) -> str:
 class PlayerCreate(BaseModel):
     """Schema for creating a player profile."""
 
-    team_id: int = Field(gt=0)
+    team_id: int | None = Field(default=None, gt=0)
+
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
 
@@ -66,7 +67,7 @@ class PlayerUpdate(BaseModel):
 
 
 class PlayerStatusUpdate(BaseModel):
-    """Schema for updating player eligibility status."""
+    """Schema for updating a player's eligibility status."""
 
     status: PlayerStatus
 
@@ -78,7 +79,7 @@ class PlayerResponse(BaseModel):
 
     id: int
     user_id: int
-    team_id: int
+    team_id: int | None
     first_name: str
     last_name: str
     status: PlayerStatus

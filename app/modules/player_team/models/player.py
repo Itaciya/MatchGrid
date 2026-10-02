@@ -28,10 +28,10 @@ class Player(Base):
         index=True,
     )
 
-    team_id: Mapped[int] = mapped_column(
-        ForeignKey("teams.id"),
-        nullable=False,
-        index=True,
+    team_id: Mapped[int | None] = mapped_column(
+    ForeignKey("teams.id"),
+    nullable=True,
+    index=True,
     )
 
     first_name: Mapped[str] = mapped_column(

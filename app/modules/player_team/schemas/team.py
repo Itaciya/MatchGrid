@@ -24,6 +24,10 @@ class TeamUpdate(BaseModel):
     captain_id: int | None = Field(default=None, gt=0)
     status: TeamStatus | None = None
 
+class TeamStatusUpdate(BaseModel):
+    """Schema for updating team status."""
+
+    status: TeamStatus
 
 class TeamResponse(BaseModel):
     """Schema for returning team data."""
