@@ -2,11 +2,10 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import (
     ConflictException,
-    ForbiddenException,
     NotFoundException,
 )
 from app.modules.player_team.models.player import Player, PlayerStatus
-from app.modules.player_team.models.team import Team
+from app.modules.player_team.services.team_service import authorize_team_captain
 from app.modules.player_team.schemas.player import (
     PlayerCreate,
     PlayerStatusUpdate,
@@ -139,19 +138,12 @@ def add_player_to_team(
 ) -> Player:
     """Add an eligible player to a team."""
 
-    team = (
-        db.query(Team)
-        .filter(Team.id == team_id)
-        .first()
+    authorize_team_captain(
+        db,
+        team_id,
+        captain_id,
+        detail="Only the team captain can add players",
     )
-
-    if team is None:
-        raise NotFoundException(detail="Team not found")
-
-    if team.captain_id != captain_id:
-        raise ForbiddenException(
-            detail="Only the team captain can add players"
-        )
 
     player = (
         db.query(Player)
@@ -180,19 +172,12 @@ def remove_player_from_team(
 ) -> Player:
     """Remove a player from a team."""
 
-    team = (
-        db.query(Team)
-        .filter(Team.id == team_id)
-        .first()
+    authorize_team_captain(
+        db,
+        team_id,
+        captain_id,
+        detail="Only the team captain can remove players",
     )
-
-    if team is None:
-        raise NotFoundException(detail="Team not found")
-
-    if team.captain_id != captain_id:
-        raise ForbiddenException(
-            detail="Only the team captain can remove players"
-        )
 
     player = (
         db.query(Player)
