@@ -205,3 +205,183 @@ def create_player_registration(
     db.refresh(registration)
 
     return registration
+
+
+def update_registration_status(
+    db: Session,
+    registration_id: int,
+    new_status: RegistrationStatus,
+) -> Registration:
+    """Update registration status using valid status transitions."""
+
+    registration = (
+        db.query(Registration)
+        .filter(Registration.id == registration_id)
+        .first()
+    )
+
+    if registration is None:
+        raise NotFoundException(detail="Registration not found")
+
+    current_status = RegistrationStatus(registration.status)
+
+    valid_transitions = {
+        RegistrationStatus.PENDING: {
+            RegistrationStatus.APPROVED,
+            RegistrationStatus.REJECTED,
+        },
+        RegistrationStatus.APPROVED: set(),
+        RegistrationStatus.REJECTED: set(),
+    }
+
+    if new_status not in valid_transitions[current_status]:
+        raise BadRequestException(
+            detail=(
+                f"Invalid status transition: "
+                f"{current_status.value} to {new_status.value}"
+            )
+        )
+
+    registration.status = new_status.value
+    registration.reviewed_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(registration)
+
+    return registration
+
+
+def get_pending_registrations(
+    db: Session,
+    tournament_id: int,
+) -> list[Registration]:
+    """Retrieve all pending registrations for a tournament."""
+
+    tournament = (
+        db.query(Tournament)
+        .filter(Tournament.id == tournament_id)
+        .first()
+    )
+
+    if tournament is None:
+        raise NotFoundException(detail="Tournament not found")
+
+    registrations = (
+        db.query(Registration)
+        .filter(
+            Registration.tournament_id == tournament_id,
+            Registration.status == RegistrationStatus.PENDING.value,
+        )
+        .all()
+    )
+
+    return registrations
+
+
+def approve_registration(
+    db: Session,
+    registration_id: int,
+) -> Registration:
+    """Approve a valid pending registration."""
+
+    registration = (
+        db.query(Registration)
+        .filter(Registration.id == registration_id)
+        .first()
+    )
+
+    if registration is None:
+        raise NotFoundException(detail="Registration not found")
+
+    # Only pending registrations can be approved.
+    if registration.status != RegistrationStatus.PENDING.value:
+        raise BadRequestException(
+            detail="Only pending registrations can be approved"
+        )
+
+    # Validate player registration.
+    if registration.registration_type == RegistrationType.PLAYER:
+        if registration.player_id is None:
+            raise BadRequestException(
+                detail="Invalid player registration"
+            )
+
+        player = (
+            db.query(Player)
+            .filter(Player.id == registration.player_id)
+            .first()
+        )
+
+        if player is None:
+            raise NotFoundException(detail="Player not found")
+
+        if player.status != "active":
+            raise BadRequestException(
+                detail="Only active players can be approved"
+            )
+
+    # Validate team registration.
+    elif registration.registration_type == RegistrationType.TEAM:
+        if registration.team_id is None:
+            raise BadRequestException(
+                detail="Invalid team registration"
+            )
+
+        team = (
+            db.query(Team)
+            .filter(Team.id == registration.team_id)
+            .first()
+        )
+
+        if team is None:
+            raise NotFoundException(detail="Team not found")
+
+        if team.status != TeamStatus.ACTIVE:
+            raise BadRequestException(
+                detail="Only active teams can be approved"
+            )
+
+        player_ids = [player.id for player in team.players]
+
+        validate_team_roster(
+            db,
+            player_ids,
+            team_id=team.id,
+        )
+
+    registration.status = RegistrationStatus.APPROVED.value
+    registration.reviewed_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(registration)
+
+    return registration
+
+def reject_registration(
+    db: Session,
+    registration_id: int,
+) -> Registration:
+    """Reject a pending registration."""
+
+    registration = (
+        db.query(Registration)
+        .filter(Registration.id == registration_id)
+        .first()
+    )
+
+    if registration is None:
+        raise NotFoundException(detail="Registration not found")
+
+    # Only pending registrations can be rejected.
+    if registration.status != RegistrationStatus.PENDING.value:
+        raise BadRequestException(
+            detail="Only pending registrations can be rejected"
+        )
+
+    registration.status = RegistrationStatus.REJECTED.value
+    registration.reviewed_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(registration)
+
+    return registration
