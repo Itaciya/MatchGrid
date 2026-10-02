@@ -10,6 +10,9 @@ from app.core.exceptions import (
     NotFoundException,
 )
 from app.modules.player_team.models.team import Team, TeamStatus
+from app.modules.player_team.services.player_service import (
+    validate_team_roster,
+)
 from app.modules.registration.models.registration import Registration
 from app.modules.registration.schemas.registration import (
     RegistrationCreate,
@@ -58,6 +61,15 @@ def create_team_registration(
         raise BadRequestException(
             detail="Only active teams can register"
         )
+
+    # Validate the team's complete roster before registration.
+    player_ids = [player.id for player in team.players]
+
+    validate_team_roster(
+        db,
+        player_ids,
+        team_id=team.id,
+    )
 
     # Check that the tournament exists.
     tournament = (
