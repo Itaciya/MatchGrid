@@ -1,7 +1,12 @@
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import ConflictException, NotFoundException
-from app.modules.player_team.models.player import Player
+from app.core.exceptions import (
+    ConflictException,
+    ForbiddenException,
+    NotFoundException,
+)
+from app.modules.player_team.models.player import Player, PlayerStatus
+from app.modules.player_team.models.team import Team
 from app.modules.player_team.schemas.player import (
     PlayerCreate,
     PlayerStatusUpdate,
@@ -103,6 +108,98 @@ def update_player_status(
         raise NotFoundException(detail="Player not found")
 
     player.status = data.status
+
+    db.commit()
+    db.refresh(player)
+
+    return player
+
+
+def add_player_to_team(
+    db: Session,
+    team_id: int,
+    player_id: int,
+    captain_id: int,
+) -> Player:
+    """Add an eligible player to a team."""
+
+    team = (
+        db.query(Team)
+        .filter(Team.id == team_id)
+        .first()
+    )
+
+    if team is None:
+        raise NotFoundException(detail="Team not found")
+
+    if team.captain_id != captain_id:
+        raise ForbiddenException(
+            detail="Only the team captain can add players"
+        )
+
+    player = (
+        db.query(Player)
+        .filter(Player.id == player_id)
+        .first()
+    )
+
+    if player is None:
+        raise NotFoundException(detail="Player not found")
+
+    if player.status != PlayerStatus.ACTIVE:
+        raise ConflictException(
+            detail="Only active players can be added to a team"
+        )
+
+    if player.team_id is not None:
+        raise ConflictException(
+            detail="Player already belongs to a team"
+        )
+
+    player.team_id = team_id
+
+    db.commit()
+    db.refresh(player)
+
+    return player
+
+def remove_player_from_team(
+    db: Session,
+    team_id: int,
+    player_id: int,
+    captain_id: int,
+) -> Player:
+    """Remove a player from a team."""
+
+    team = (
+        db.query(Team)
+        .filter(Team.id == team_id)
+        .first()
+    )
+
+    if team is None:
+        raise NotFoundException(detail="Team not found")
+
+    if team.captain_id != captain_id:
+        raise ForbiddenException(
+            detail="Only the team captain can remove players"
+        )
+
+    player = (
+        db.query(Player)
+        .filter(Player.id == player_id)
+        .first()
+    )
+
+    if player is None:
+        raise NotFoundException(detail="Player not found")
+
+    if player.team_id != team_id:
+        raise ConflictException(
+            detail="Player does not belong to this team"
+        )
+
+    player.team_id = None
 
     db.commit()
     db.refresh(player)
