@@ -55,7 +55,7 @@ def _make_player(db):
         team_id=team.id,
         first_name="John",
         last_name="Doe",
-        is_active=True,
+        status="active",
     )
     db.add(player)
     db.commit()
@@ -81,7 +81,7 @@ def test_get_player_profile_returns_player(db):
     assert data["team_id"] == player.team_id
     assert data["first_name"] == "John"
     assert data["last_name"] == "Doe"
-    assert data["is_active"] is True
+    assert data["status"] == "active"
 
 
 def test_get_player_profile_returns_404_for_nonexistent_player(db):
@@ -101,6 +101,7 @@ def test_get_player_profile_requires_authentication():
 
     assert response.status_code == 401
 
+
 def test_organiser_can_update_player_status(db):
     player, player_user = _make_player(db)
 
@@ -112,7 +113,7 @@ def test_organiser_can_update_player_status(db):
 
     response = client.patch(
         f"/player-team/profile/{player.id}/status",
-        json={"is_active": False},
+        json={"status": "inactive"},
         headers=_auth_header(organiser),
     )
 
@@ -121,12 +122,12 @@ def test_organiser_can_update_player_status(db):
     data = response.json()
 
     assert data["id"] == player.id
-    assert data["is_active"] is False
+    assert data["status"] == "inactive"
 
 
 def test_organiser_can_reactivate_player(db):
     player, player_user = _make_player(db)
-    player.is_active = False
+    player.status = "inactive"
     db.commit()
 
     organiser = _make_user(
@@ -137,7 +138,7 @@ def test_organiser_can_reactivate_player(db):
 
     response = client.patch(
         f"/player-team/profile/{player.id}/status",
-        json={"is_active": True},
+        json={"status": "active"},
         headers=_auth_header(organiser),
     )
 
@@ -146,7 +147,7 @@ def test_organiser_can_reactivate_player(db):
     data = response.json()
 
     assert data["id"] == player.id
-    assert data["is_active"] is True
+    assert data["status"] == "active"
 
 
 def test_player_cannot_update_player_status(db):
@@ -154,7 +155,7 @@ def test_player_cannot_update_player_status(db):
 
     response = client.patch(
         f"/player-team/profile/{player.id}/status",
-        json={"is_active": False},
+        json={"status": "inactive"},
         headers=_auth_header(player_user),
     )
 
@@ -170,12 +171,13 @@ def test_update_player_status_returns_404_for_nonexistent_player(db):
 
     response = client.patch(
         "/player-team/profile/999999/status",
-        json={"is_active": False},
+        json={"status": "inactive"},
         headers=_auth_header(organiser),
     )
 
     assert response.status_code == 404
     assert response.json()["error"]["message"] == "Player not found"
+
 
 def test_create_player_rejects_duplicate_profile(db):
     user = _make_user(db)
@@ -209,6 +211,7 @@ def test_create_player_rejects_duplicate_profile(db):
         duplicate_response.json()["error"]["message"]
         == "Player profile already exists for this user"
     )
+
 
 def test_player_can_update_own_profile(db):
     player, user = _make_player(db)

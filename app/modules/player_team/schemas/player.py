@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.modules.player_team.models.player import PlayerStatus
+
 
 def validate_player_name(value: str) -> str:
     """Validate and normalize a player name."""
@@ -39,17 +41,20 @@ class PlayerUpdate(BaseModel):
     """Schema for updating a player profile. All fields are optional."""
 
     team_id: int | None = Field(default=None, gt=0)
+
     first_name: str | None = Field(
         default=None,
         min_length=1,
         max_length=100,
     )
+
     last_name: str | None = Field(
         default=None,
         min_length=1,
         max_length=100,
     )
-    is_active: bool | None = None
+
+    status: PlayerStatus | None = None
 
     @field_validator("first_name", "last_name")
     @classmethod
@@ -63,7 +68,7 @@ class PlayerUpdate(BaseModel):
 class PlayerStatusUpdate(BaseModel):
     """Schema for updating player eligibility status."""
 
-    is_active: bool
+    status: PlayerStatus
 
 
 class PlayerResponse(BaseModel):
@@ -76,6 +81,6 @@ class PlayerResponse(BaseModel):
     team_id: int
     first_name: str
     last_name: str
-    is_active: bool
+    status: PlayerStatus
     created_at: datetime
     updated_at: datetime
