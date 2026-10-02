@@ -69,7 +69,19 @@ def test_organiser_can_create_tournament(db):
 
     assert response.status_code == 201
     data = response.json()
+
     assert data["organizer_id"] == organiser.id
+    assert data["status"] == "upcoming"
+
+    tournament = (
+        db.query(Tournament)
+        .filter(Tournament.id == data["id"])
+        .first()
+    )
+
+    assert tournament is not None
+    assert tournament.organizer_id == organiser.id
+    assert tournament.status == "upcoming"
 
 
 def test_non_organiser_cannot_create_tournament(db):
@@ -154,4 +166,5 @@ def test_non_organiser_cannot_update_any_tournament(db):
     )
 
     assert response.status_code == 403
+
 
