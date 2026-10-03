@@ -9,6 +9,18 @@ class RoundRobinConfig(BaseModel):
     number_of_teams: int = Field(ge=2)
 
 
+class SingleEliminationConfig(BaseModel):
+    """Configuration required for single-elimination tournaments."""
+
+    number_of_teams: int = Field(ge=2)
+
+
+class DoubleEliminationConfig(BaseModel):
+    """Configuration required for double-elimination tournaments."""
+
+    number_of_teams: int = Field(ge=2)
+
+
 class TournamentCreate(BaseModel):
     """Schema for creating a tournament. organizer_id is never client-supplied --
     it comes from the authenticated user, to prevent spoofing ownership."""
@@ -16,7 +28,12 @@ class TournamentCreate(BaseModel):
     name: str = Field(min_length=3, max_length=150)
     description: str | None = None
     format: str = Field(min_length=1, max_length=50)
-    format_config: RoundRobinConfig | None = None
+    format_config: (
+        RoundRobinConfig
+        | SingleEliminationConfig
+        | DoubleEliminationConfig
+        | None
+    ) = None
     start_date: datetime
     end_date: datetime
 
@@ -33,14 +50,23 @@ class TournamentUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=3, max_length=150)
     description: str | None = None
     format: str | None = Field(default=None, min_length=1, max_length=50)
-    format_config: RoundRobinConfig | None = None
+    format_config: (
+        RoundRobinConfig
+        | SingleEliminationConfig
+        | DoubleEliminationConfig
+        | None
+    ) = None
     start_date: datetime | None = None
     end_date: datetime | None = None
     status: str | None = Field(default=None, min_length=1, max_length=50)
 
     @model_validator(mode="after")
     def check_dates(self):
-        if self.start_date and self.end_date and self.end_date <= self.start_date:
+        if (
+            self.start_date
+            and self.end_date
+            and self.end_date <= self.start_date
+        ):
             raise ValueError("end_date must be after start_date")
         return self
 
@@ -54,7 +80,12 @@ class TournamentResponse(BaseModel):
     name: str
     description: str | None
     format: str
-    format_config: RoundRobinConfig | None
+    format_config: (
+        RoundRobinConfig
+        | SingleEliminationConfig
+        | DoubleEliminationConfig
+        | None
+    )
     start_date: datetime
     end_date: datetime
     status: str

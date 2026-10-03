@@ -1,4 +1,3 @@
-
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -86,6 +85,8 @@ def test_organiser_can_create_tournament(db):
     assert tournament is not None
     assert tournament.organizer_id == organiser.id
     assert tournament.status == "upcoming"
+
+
 def test_create_tournament_rejects_unsupported_format(db):
     organiser = _make_user(db, role="organiser")
 
@@ -108,6 +109,7 @@ def test_create_tournament_rejects_unsupported_format(db):
         "Invalid tournament format: unsupported_format"
     )
 
+
 def test_create_tournament_accepts_supported_formats(db):
     organiser = _make_user(db, role="organiser")
 
@@ -116,11 +118,22 @@ def test_create_tournament_accepts_supported_formats(db):
         "round_robin",
         "league",
         "single_elimination",
+        "double_elimination",
     ):
         payload = _valid_payload()
         payload["format"] = tournament_format
 
         if tournament_format == "round_robin":
+            payload["format_config"] = {
+                "number_of_teams": 8,
+            }
+
+        if tournament_format == "single_elimination":
+            payload["format_config"] = {
+                "number_of_teams": 8,
+            }
+
+        if tournament_format == "double_elimination":
             payload["format_config"] = {
                 "number_of_teams": 8,
             }
@@ -133,6 +146,8 @@ def test_create_tournament_accepts_supported_formats(db):
 
         assert response.status_code == 201
         assert response.json()["format"] == tournament_format
+
+
 def test_non_organiser_cannot_create_tournament(db):
     player = _make_user(db, role="player")
 
@@ -182,6 +197,8 @@ def test_organiser_can_update_own_tournament(db):
 
     assert response.status_code == 200
     assert response.json()["name"].startswith("Updated Name")
+
+
 def test_organiser_can_update_tournament_format(db):
     organiser = _make_user(db, role="organiser")
     tournament = _make_tournament(db, organiser.id)
@@ -223,6 +240,7 @@ def test_organiser_update_rejects_unsupported_format(db):
     db.refresh(tournament)
 
     assert tournament.format == "knockout"
+
 
 def test_organiser_cannot_update_others_tournament(db):
     owner = _make_user(db, role="organiser")
@@ -492,6 +510,8 @@ def test_organiser_cannot_change_tournament_status_through_update(db):
     db.refresh(tournament)
 
     assert tournament.status == "upcoming"
+
+
 def test_organiser_can_create_round_robin_tournament_with_config(db):
     organiser = _make_user(db, role="organiser")
 
@@ -590,7 +610,9 @@ def test_non_round_robin_rejects_format_config(db):
 
     assert data["success"] is False
     assert data["error"]["message"] == (
-        "format_config is only supported for round_robin tournaments"
+        "format_config is only supported for "
+        "round_robin, single_elimination, and "
+        "double_elimination tournaments"
     )
 
 
@@ -621,6 +643,236 @@ def test_organiser_can_update_round_robin_format_config(db):
     data = response.json()
 
     assert data["format"] == "round_robin"
+    assert data["format_config"] == {
+        "number_of_teams": 8,
+    }
+
+    db.refresh(tournament)
+
+    assert tournament.format_config == {
+        "number_of_teams": 8,
+    }
+
+
+def test_organiser_can_create_single_elimination_tournament_with_config(db):
+    organiser = _make_user(db, role="organiser")
+
+    payload = _valid_payload()
+    payload["format"] = "single_elimination"
+    payload["format_config"] = {
+        "number_of_teams": 8,
+    }
+
+    response = client.post(
+        "/organiser/tournaments",
+        json=payload,
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 201
+
+    data = response.json()
+
+    assert data["format"] == "single_elimination"
+    assert data["format_config"] == {
+        "number_of_teams": 8,
+    }
+
+    tournament = (
+        db.query(Tournament)
+        .filter(Tournament.id == data["id"])
+        .first()
+    )
+
+    assert tournament is not None
+    assert tournament.format == "single_elimination"
+    assert tournament.format_config == {
+        "number_of_teams": 8,
+    }
+
+
+def test_single_elimination_tournament_requires_format_config(db):
+    organiser = _make_user(db, role="organiser")
+
+    payload = _valid_payload()
+    payload["format"] = "single_elimination"
+
+    response = client.post(
+        "/organiser/tournaments",
+        json=payload,
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 400
+
+    data = response.json()
+
+    assert data["success"] is False
+    assert data["error"]["message"] == (
+        "Single-elimination tournaments require format_config"
+    )
+
+
+def test_single_elimination_rejects_less_than_two_teams(db):
+    organiser = _make_user(db, role="organiser")
+
+    payload = _valid_payload()
+    payload["format"] = "single_elimination"
+    payload["format_config"] = {
+        "number_of_teams": 1,
+    }
+
+    response = client.post(
+        "/organiser/tournaments",
+        json=payload,
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 422
+
+
+def test_organiser_can_update_single_elimination_format_config(db):
+    organiser = _make_user(db, role="organiser")
+
+    tournament = _make_tournament(
+        db,
+        organiser.id,
+        format="single_elimination",
+        format_config={
+            "number_of_teams": 4,
+        },
+    )
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}",
+        json={
+            "format_config": {
+                "number_of_teams": 8,
+            },
+        },
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["format"] == "single_elimination"
+    assert data["format_config"] == {
+        "number_of_teams": 8,
+    }
+
+    db.refresh(tournament)
+
+    assert tournament.format_config == {
+        "number_of_teams": 8,
+    }
+
+
+def test_organiser_can_create_double_elimination_tournament_with_config(db):
+    organiser = _make_user(db, role="organiser")
+
+    payload = _valid_payload()
+    payload["format"] = "double_elimination"
+    payload["format_config"] = {
+        "number_of_teams": 8,
+    }
+
+    response = client.post(
+        "/organiser/tournaments",
+        json=payload,
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 201
+
+    data = response.json()
+
+    assert data["format"] == "double_elimination"
+    assert data["format_config"] == {
+        "number_of_teams": 8,
+    }
+
+    tournament = (
+        db.query(Tournament)
+        .filter(Tournament.id == data["id"])
+        .first()
+    )
+
+    assert tournament is not None
+    assert tournament.format == "double_elimination"
+    assert tournament.format_config == {
+        "number_of_teams": 8,
+    }
+
+
+def test_double_elimination_tournament_requires_format_config(db):
+    organiser = _make_user(db, role="organiser")
+
+    payload = _valid_payload()
+    payload["format"] = "double_elimination"
+
+    response = client.post(
+        "/organiser/tournaments",
+        json=payload,
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 400
+
+    data = response.json()
+
+    assert data["success"] is False
+    assert data["error"]["message"] == (
+        "Double-elimination tournaments require format_config"
+    )
+
+
+def test_double_elimination_rejects_less_than_two_teams(db):
+    organiser = _make_user(db, role="organiser")
+
+    payload = _valid_payload()
+    payload["format"] = "double_elimination"
+    payload["format_config"] = {
+        "number_of_teams": 1,
+    }
+
+    response = client.post(
+        "/organiser/tournaments",
+        json=payload,
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 422
+
+
+def test_organiser_can_update_double_elimination_format_config(db):
+    organiser = _make_user(db, role="organiser")
+
+    tournament = _make_tournament(
+        db,
+        organiser.id,
+        format="double_elimination",
+        format_config={
+            "number_of_teams": 4,
+        },
+    )
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}",
+        json={
+            "format_config": {
+                "number_of_teams": 8,
+            },
+        },
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["format"] == "double_elimination"
     assert data["format_config"] == {
         "number_of_teams": 8,
     }
