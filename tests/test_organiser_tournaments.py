@@ -489,3 +489,141 @@ def test_organiser_cannot_change_tournament_status_through_update(db):
     db.refresh(tournament)
 
     assert tournament.status == "upcoming"
+def test_organiser_can_create_round_robin_tournament_with_config(db):
+    organiser = _make_user(db, role="organiser")
+
+    payload = _valid_payload()
+    payload["format"] = "round_robin"
+    payload["format_config"] = {
+        "number_of_teams": 8,
+    }
+
+    response = client.post(
+        "/organiser/tournaments",
+        json=payload,
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 201
+
+    data = response.json()
+
+    assert data["format"] == "round_robin"
+    assert data["format_config"] == {
+        "number_of_teams": 8,
+    }
+
+    tournament = (
+        db.query(Tournament)
+        .filter(Tournament.id == data["id"])
+        .first()
+    )
+
+    assert tournament is not None
+    assert tournament.format == "round_robin"
+    assert tournament.format_config == {
+        "number_of_teams": 8,
+    }
+
+
+def test_round_robin_tournament_requires_format_config(db):
+    organiser = _make_user(db, role="organiser")
+
+    payload = _valid_payload()
+    payload["format"] = "round_robin"
+
+    response = client.post(
+        "/organiser/tournaments",
+        json=payload,
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 400
+
+    data = response.json()
+
+    assert data["success"] is False
+    assert data["error"]["message"] == (
+        "Round-robin tournaments require format_config"
+    )
+
+
+def test_round_robin_rejects_less_than_two_teams(db):
+    organiser = _make_user(db, role="organiser")
+
+    payload = _valid_payload()
+    payload["format"] = "round_robin"
+    payload["format_config"] = {
+        "number_of_teams": 1,
+    }
+
+    response = client.post(
+        "/organiser/tournaments",
+        json=payload,
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 422
+
+
+def test_non_round_robin_rejects_format_config(db):
+    organiser = _make_user(db, role="organiser")
+
+    payload = _valid_payload()
+    payload["format"] = "knockout"
+    payload["format_config"] = {
+        "number_of_teams": 8,
+    }
+
+    response = client.post(
+        "/organiser/tournaments",
+        json=payload,
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 400
+
+    data = response.json()
+
+    assert data["success"] is False
+    assert data["error"]["message"] == (
+        "format_config is only supported for round_robin tournaments"
+    )
+
+
+def test_organiser_can_update_round_robin_format_config(db):
+    organiser = _make_user(db, role="organiser")
+
+    tournament = _make_tournament(
+        db,
+        organiser.id,
+        format="round_robin",
+        format_config={
+            "number_of_teams": 4,
+        },
+    )
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}",
+        json={
+            "format_config": {
+                "number_of_teams": 8,
+            },
+        },
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["format"] == "round_robin"
+    assert data["format_config"] == {
+        "number_of_teams": 8,
+    }
+
+    db.refresh(tournament)
+
+    assert tournament.format_config == {
+        "number_of_teams": 8,
+    }
