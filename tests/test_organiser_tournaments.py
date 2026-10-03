@@ -86,7 +86,49 @@ def test_organiser_can_create_tournament(db):
     assert tournament is not None
     assert tournament.organizer_id == organiser.id
     assert tournament.status == "upcoming"
+def test_create_tournament_rejects_unsupported_format(db):
+    organiser = _make_user(db, role="organiser")
 
+    payload = _valid_payload()
+    payload["format"] = "unsupported_format"
+
+    response = client.post(
+        "/organiser/tournaments",
+        json=payload,
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 400
+
+    data = response.json()
+
+    assert data["success"] is False
+    assert data["error"]["type"] == "application_error"
+    assert data["error"]["message"] == (
+        "Invalid tournament format: unsupported_format"
+    )
+
+
+def test_create_tournament_accepts_supported_formats(db):
+    organiser = _make_user(db, role="organiser")
+
+    for tournament_format in (
+        "knockout",
+        "round_robin",
+        "league",
+        "single_elimination",
+    ):
+        payload = _valid_payload()
+        payload["format"] = tournament_format
+
+        response = client.post(
+            "/organiser/tournaments",
+            json=payload,
+            headers=_auth_header(organiser),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["format"] == tournament_format
 
 def test_non_organiser_cannot_create_tournament(db):
     player = _make_user(db, role="player")
@@ -137,7 +179,47 @@ def test_organiser_can_update_own_tournament(db):
 
     assert response.status_code == 200
     assert response.json()["name"].startswith("Updated Name")
+def test_organiser_can_update_tournament_format(db):
+    organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(db, organiser.id)
 
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}",
+        json={"format": "league"},
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["format"] == "league"
+
+    db.refresh(tournament)
+
+    assert tournament.format == "league"
+
+
+def test_organiser_update_rejects_unsupported_format(db):
+    organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(db, organiser.id)
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}",
+        json={"format": "unsupported_format"},
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 400
+
+    data = response.json()
+
+    assert data["success"] is False
+    assert data["error"]["type"] == "application_error"
+    assert data["error"]["message"] == (
+        "Invalid tournament format: unsupported_format"
+    )
+
+    db.refresh(tournament)
+
+    assert tournament.format == "knockout"
 
 def test_organiser_cannot_update_others_tournament(db):
     owner = _make_user(db, role="organiser")

@@ -7,11 +7,12 @@ from app.modules.tournament.schemas.tournament import (
     TournamentUpdate,
 )
 
-
-# -------------------------------------------------------------------
-# Tournament Status Configuration
-# -------------------------------------------------------------------
-
+TOURNAMENT_FORMATS = {
+    "knockout",
+    "round_robin",
+    "league",
+    "single_elimination",
+}
 TOURNAMENT_STATUSES = {
     "upcoming",
     "ongoing",
@@ -38,7 +39,7 @@ def create_tournament(
     data: TournamentCreate,
 ) -> Tournament:
     """Create a new tournament with upcoming status."""
-
+    validate_tournament_format(data.format)
     tournament = Tournament(
         name=data.name,
         description=data.description,
@@ -56,10 +57,6 @@ def create_tournament(
     return tournament
 
 
-# -------------------------------------------------------------------
-# Tournament Update
-# -------------------------------------------------------------------
-
 def update_tournament(
     db: Session,
     tournament: Tournament,
@@ -72,7 +69,8 @@ def update_tournament(
     """
 
     updates = data.model_dump(exclude_unset=True)
-
+    if "format" in updates:
+      validate_tournament_format(updates["format"])
     # Status cannot be changed through normal tournament update.
     if "status" in updates:
         raise BadRequestException(
@@ -102,11 +100,13 @@ def update_tournament(
 
     return tournament
 
+def validate_tournament_format(format: str) -> None:
+    """Validate that a tournament format is supported."""
 
-# -------------------------------------------------------------------
-# Tournament Status Validation
-# -------------------------------------------------------------------
-
+    if format not in TOURNAMENT_FORMATS:
+        raise BadRequestException(
+            detail=f"Invalid tournament format: {format}"
+        )
 def validate_tournament_status(status: str) -> None:
     """Validate that a tournament status is supported."""
 
