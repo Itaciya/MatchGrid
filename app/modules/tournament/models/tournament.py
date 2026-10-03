@@ -1,6 +1,8 @@
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.data_access.base import Base
@@ -9,10 +11,7 @@ from app.data_access.base import Base
 class Tournament(Base):
     __tablename__ = "tournaments"
 
-    id: Mapped[int] = mapped_column(
-        primary_key=True,
-        index=True,
-    )
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
 
     name: Mapped[str] = mapped_column(
         String(150),
@@ -29,6 +28,11 @@ class Tournament(Base):
     format: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
+    )
+
+    format_config: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB,
+        nullable=True,
     )
 
     start_date: Mapped[datetime] = mapped_column(
@@ -71,4 +75,3 @@ class Tournament(Base):
         "User",
         backref="tournaments",
     )
-

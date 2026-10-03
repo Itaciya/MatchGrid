@@ -9,6 +9,59 @@ from app.modules.tournament.schemas.tournament import (
 
 
 # -------------------------------------------------------------------
+# Tournament Format Configuration
+# -------------------------------------------------------------------
+
+TOURNAMENT_FORMATS = {
+    "knockout",
+    "round_robin",
+    "league",
+    "single_elimination",
+}
+
+
+def validate_tournament_format(format: str) -> None:
+    """Validate that a tournament format is supported."""
+
+    if format not in TOURNAMENT_FORMATS:
+        raise BadRequestException(
+            detail=f"Invalid tournament format: {format}"
+        )
+
+
+def validate_tournament_format_config(
+    format: str,
+    format_config: dict | None,
+) -> None:
+    """Validate format-specific tournament configuration."""
+
+    validate_tournament_format(format)
+
+    if format == "round_robin":
+        if format_config is None:
+            raise BadRequestException(
+                detail="Round-robin tournaments require format_config"
+            )
+
+        number_of_teams = format_config.get("number_of_teams")
+
+        if number_of_teams is None:
+            raise BadRequestException(
+                detail="Round-robin configuration requires number_of_teams"
+            )
+
+        if number_of_teams < 2:
+            raise BadRequestException(
+                detail="Round-robin tournaments require at least 2 teams"
+            )
+
+    elif format_config is not None:
+        raise BadRequestException(
+            detail=f"format_config is only supported for round_robin tournaments"
+        )
+
+
+# -------------------------------------------------------------------
 # Tournament Status Configuration
 # -------------------------------------------------------------------
 
@@ -39,10 +92,22 @@ def create_tournament(
 ) -> Tournament:
     """Create a new tournament with upcoming status."""
 
+    format_config = (
+        data.format_config.model_dump()
+        if data.format_config is not None
+        else None
+    )
+
+    validate_tournament_format_config(
+        data.format,
+        format_config,
+    )
+
     tournament = Tournament(
         name=data.name,
         description=data.description,
         format=data.format,
+        format_config=format_config,
         start_date=data.start_date,
         end_date=data.end_date,
         status="upcoming",
@@ -93,6 +158,21 @@ def update_tournament(
         raise BadRequestException(
             detail="end_date must be after start_date"
         )
+
+    new_format = updates.get(
+        "format",
+        tournament.format,
+    )
+
+    if "format_config" in updates:
+        new_format_config = updates["format_config"]
+    else:
+        new_format_config = tournament.format_config
+
+    validate_tournament_format_config(
+        new_format,
+        new_format_config,
+    )
 
     for field, value in updates.items():
         setattr(tournament, field, value)
@@ -171,8 +251,6 @@ def list_tournaments(
     status: str | None = None,
 ) -> list[Tournament]:
     """Return tournaments, optionally filtered by status."""
-
-
 
     query = db.query(Tournament)
 
