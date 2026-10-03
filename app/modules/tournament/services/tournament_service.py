@@ -8,9 +8,7 @@ from app.modules.tournament.schemas.tournament import (
 )
 
 
-# -------------------------------------------------------------------
-# Tournament Format Configuration
-# -------------------------------------------------------------------
+
 
 TOURNAMENT_FORMATS = {
     "knockout",
@@ -57,13 +55,11 @@ def validate_tournament_format_config(
 
     elif format_config is not None:
         raise BadRequestException(
-            detail=f"format_config is only supported for round_robin tournaments"
+            detail="format_config is only supported for round_robin tournaments"
         )
 
 
-# -------------------------------------------------------------------
-# Tournament Status Configuration
-# -------------------------------------------------------------------
+
 
 TOURNAMENT_STATUSES = {
     "upcoming",
@@ -81,9 +77,6 @@ VALID_STATUS_TRANSITIONS = {
 }
 
 
-# -------------------------------------------------------------------
-# Tournament Creation
-# -------------------------------------------------------------------
 
 def create_tournament(
     db: Session,
@@ -121,9 +114,7 @@ def create_tournament(
     return tournament
 
 
-# -------------------------------------------------------------------
-# Tournament Update
-# -------------------------------------------------------------------
+
 
 def update_tournament(
     db: Session,
@@ -138,7 +129,7 @@ def update_tournament(
 
     updates = data.model_dump(exclude_unset=True)
 
-    # Status cannot be changed through normal tournament update.
+   
     if "status" in updates:
         raise BadRequestException(
             detail="Tournament status cannot be changed through update"
@@ -183,9 +174,7 @@ def update_tournament(
     return tournament
 
 
-# -------------------------------------------------------------------
-# Tournament Status Validation
-# -------------------------------------------------------------------
+
 
 def validate_tournament_status(status: str) -> None:
     """Validate that a tournament status is supported."""
@@ -208,9 +197,6 @@ def can_transition_tournament_status(
     return new_status in VALID_STATUS_TRANSITIONS[current_status]
 
 
-# -------------------------------------------------------------------
-# Tournament Status Change
-# -------------------------------------------------------------------
 
 def change_tournament_status(
     db: Session,
@@ -242,9 +228,7 @@ def change_tournament_status(
     return tournament
 
 
-# -------------------------------------------------------------------
-# Tournament Listing
-# -------------------------------------------------------------------
+
 
 def list_tournaments(
     db: Session,
@@ -264,9 +248,6 @@ def list_tournaments(
     ).all()
 
 
-# -------------------------------------------------------------------
-# Get Tournament
-# -------------------------------------------------------------------
 
 def get_tournament_by_id(
     db: Session,
@@ -281,9 +262,6 @@ def get_tournament_by_id(
     )
 
 
-# -------------------------------------------------------------------
-# Archive Tournament
-# -------------------------------------------------------------------
 
 def archive_tournament(
     db: Session,
