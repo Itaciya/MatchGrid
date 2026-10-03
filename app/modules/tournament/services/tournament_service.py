@@ -8,8 +8,6 @@ from app.modules.tournament.schemas.tournament import (
 )
 
 
-
-
 TOURNAMENT_FORMATS = {
     "knockout",
     "round_robin",
@@ -53,12 +51,37 @@ def validate_tournament_format_config(
                 detail="Round-robin tournaments require at least 2 teams"
             )
 
+    elif format == "single_elimination":
+        if format_config is None:
+            raise BadRequestException(
+                detail="Single-elimination tournaments require format_config"
+            )
+
+        number_of_teams = format_config.get("number_of_teams")
+
+        if number_of_teams is None:
+            raise BadRequestException(
+                detail=(
+                    "Single-elimination configuration requires "
+                    "number_of_teams"
+                )
+            )
+
+        if number_of_teams < 2:
+            raise BadRequestException(
+                detail=(
+                    "Single-elimination tournaments require "
+                    "at least 2 teams"
+                )
+            )
+
     elif format_config is not None:
         raise BadRequestException(
-            detail="format_config is only supported for round_robin tournaments"
+            detail=(
+                "format_config is only supported for "
+                "round_robin and single_elimination tournaments"
+            )
         )
-
-
 
 
 TOURNAMENT_STATUSES = {
@@ -75,7 +98,6 @@ VALID_STATUS_TRANSITIONS = {
     "completed": {"archived"},
     "archived": set(),
 }
-
 
 
 def create_tournament(
@@ -114,8 +136,6 @@ def create_tournament(
     return tournament
 
 
-
-
 def update_tournament(
     db: Session,
     tournament: Tournament,
@@ -129,7 +149,6 @@ def update_tournament(
 
     updates = data.model_dump(exclude_unset=True)
 
-   
     if "status" in updates:
         raise BadRequestException(
             detail="Tournament status cannot be changed through update"
@@ -174,8 +193,6 @@ def update_tournament(
     return tournament
 
 
-
-
 def validate_tournament_status(status: str) -> None:
     """Validate that a tournament status is supported."""
 
@@ -195,7 +212,6 @@ def can_transition_tournament_status(
     validate_tournament_status(new_status)
 
     return new_status in VALID_STATUS_TRANSITIONS[current_status]
-
 
 
 def change_tournament_status(
@@ -228,8 +244,6 @@ def change_tournament_status(
     return tournament
 
 
-
-
 def list_tournaments(
     db: Session,
     status: str | None = None,
@@ -248,7 +262,6 @@ def list_tournaments(
     ).all()
 
 
-
 def get_tournament_by_id(
     db: Session,
     tournament_id: int,
@@ -260,7 +273,6 @@ def get_tournament_by_id(
         .filter(Tournament.id == tournament_id)
         .first()
     )
-
 
 
 def archive_tournament(
