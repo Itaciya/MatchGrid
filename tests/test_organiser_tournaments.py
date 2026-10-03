@@ -169,6 +169,39 @@ def test_create_tournament_without_token_is_rejected():
     assert response.status_code == 401
 
 
+def test_create_tournament_rejects_missing_required_fields(db):
+    organiser = _make_user(db, role="organiser")
+
+    payload = _valid_payload()
+    payload.pop("name")
+    payload.pop("format")
+    payload.pop("start_date")
+    payload.pop("end_date")
+
+    response = client.post(
+        "/organiser/tournaments",
+        json=payload,
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_tournament_rejects_invalid_field_lengths(db):
+    organiser = _make_user(db, role="organiser")
+
+    payload = _valid_payload()
+    payload["name"] = "AB"
+
+    response = client.post(
+        "/organiser/tournaments",
+        json=payload,
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 422
+
+
 def test_create_tournament_rejects_end_date_before_start_date(db):
     organiser = _make_user(db, role="organiser")
 
