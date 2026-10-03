@@ -108,7 +108,6 @@ def test_create_tournament_rejects_unsupported_format(db):
         "Invalid tournament format: unsupported_format"
     )
 
-
 def test_create_tournament_accepts_supported_formats(db):
     organiser = _make_user(db, role="organiser")
 
@@ -121,6 +120,11 @@ def test_create_tournament_accepts_supported_formats(db):
         payload = _valid_payload()
         payload["format"] = tournament_format
 
+        if tournament_format == "round_robin":
+            payload["format_config"] = {
+                "number_of_teams": 8,
+            }
+
         response = client.post(
             "/organiser/tournaments",
             json=payload,
@@ -129,7 +133,6 @@ def test_create_tournament_accepts_supported_formats(db):
 
         assert response.status_code == 201
         assert response.json()["format"] == tournament_format
-
 def test_non_organiser_cannot_create_tournament(db):
     player = _make_user(db, role="player")
 
