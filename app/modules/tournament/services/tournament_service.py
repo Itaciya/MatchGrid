@@ -13,6 +13,7 @@ TOURNAMENT_FORMATS = {
     "round_robin",
     "league",
     "single_elimination",
+    "double_elimination",
 }
 
 
@@ -75,11 +76,39 @@ def validate_tournament_format_config(
                 )
             )
 
+    elif format == "double_elimination":
+        if format_config is None:
+            raise BadRequestException(
+                detail=(
+                    "Double-elimination tournaments require "
+                    "format_config"
+                )
+            )
+
+        number_of_teams = format_config.get("number_of_teams")
+
+        if number_of_teams is None:
+            raise BadRequestException(
+                detail=(
+                    "Double-elimination configuration requires "
+                    "number_of_teams"
+                )
+            )
+
+        if number_of_teams < 2:
+            raise BadRequestException(
+                detail=(
+                    "Double-elimination tournaments require "
+                    "at least 2 teams"
+                )
+            )
+
     elif format_config is not None:
         raise BadRequestException(
             detail=(
                 "format_config is only supported for "
-                "round_robin and single_elimination tournaments"
+                "round_robin, single_elimination, and "
+                "double_elimination tournaments"
             )
         )
 
@@ -185,7 +214,13 @@ def update_tournament(
     )
 
     for field, value in updates.items():
+        if field == "format_config":
+            continue
+
         setattr(tournament, field, value)
+
+    tournament.format = new_format
+    tournament.format_config = new_format_config
 
     db.commit()
     db.refresh(tournament)
