@@ -20,15 +20,21 @@ class Match(Base):
         index=True
     )
 
-    team_a_id: Mapped[int] = mapped_column(
-        ForeignKey("teams.id"),
-        nullable=False,
+    round_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tournament_rounds.id"),
+        nullable=True,
         index=True
     )
 
-    team_b_id: Mapped[int] = mapped_column(
+    team_a_id: Mapped[int | None] = mapped_column(
         ForeignKey("teams.id"),
-        nullable=False,
+        nullable=True,
+        index=True
+    )
+
+    team_b_id: Mapped[int | None] = mapped_column(
+        ForeignKey("teams.id"),
+        nullable=True,
         index=True
     )
 
@@ -42,6 +48,18 @@ class Match(Base):
         String(50),
         nullable=False,
         default="scheduled",
+        index=True
+    )
+
+    winner_next_match_id: Mapped[int | None] = mapped_column(
+        ForeignKey("matches.id"),
+        nullable=True,
+        index=True
+    )
+
+    loser_next_match_id: Mapped[int | None] = mapped_column(
+        ForeignKey("matches.id"),
+        nullable=True,
         index=True
     )
 
@@ -64,9 +82,15 @@ class Match(Base):
             name="ck_match_team_a_not_team_b",
         ),
     )
+
     tournament = relationship(
         "Tournament",
         backref="matches"
+    )
+
+    round = relationship(
+        "TournamentRound",
+        back_populates="matches"
     )
 
     team_a = relationship(
@@ -80,10 +104,23 @@ class Match(Base):
         foreign_keys=[team_b_id],
         backref="away_matches"
     )
+
+    winner_next_match = relationship(
+        "Match",
+        foreign_keys=[winner_next_match_id],
+        remote_side=[id],
+        backref="winner_previous_matches"
+    )
+
+    loser_next_match = relationship(
+        "Match",
+        foreign_keys=[loser_next_match_id],
+        remote_side=[id],
+        backref="loser_previous_matches"
+    )
+
     score = relationship(
         "Score",
         back_populates="match",
         uselist=False
     )
-
-
