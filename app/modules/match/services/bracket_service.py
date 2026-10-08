@@ -5,6 +5,9 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import BadRequestException, NotFoundException
 from app.modules.match.models.match import Match
 from app.modules.match.models.tournament_round import TournamentRound
+from app.modules.match.services.match_number_service import (
+    get_next_match_number,
+)
 from app.modules.tournament.models.tournament import Tournament
 
 
@@ -190,12 +193,18 @@ def create_single_elimination_bracket(
 
     matches_by_round: list[list[Match]] = []
 
+    next_match_number = get_next_match_number(
+        db,
+        tournament_id,
+    )
+
     for round_index, pairings in enumerate(bracket):
         current_round_matches: list[Match] = []
 
         for team_a_id, team_b_id in pairings:
             match = Match(
                 tournament_id=tournament_id,
+                match_number=next_match_number,
                 round_id=rounds[round_index].id,
                 team_a_id=team_a_id,
                 team_b_id=team_b_id,
@@ -205,6 +214,8 @@ def create_single_elimination_bracket(
 
             db.add(match)
             current_round_matches.append(match)
+
+            next_match_number += 1
 
         matches_by_round.append(current_round_matches)
 
@@ -252,9 +263,6 @@ def generate_double_elimination_bracket(
 
     seeded_participants = participants + [None] * bye_count
 
-    # -------------------------
-    # Winners bracket
-    # -------------------------
     winners_rounds: list[
         list[tuple[int | None, int | None]]
     ] = []
@@ -277,38 +285,9 @@ def generate_double_elimination_bracket(
         )
         match_count //= 2
 
-    # -------------------------
-    # Losers bracket
-    # -------------------------
     losers_rounds: list[
         list[tuple[int | None, int | None]]
     ] = []
-
-    # Every non-final winners round creates
-    # two losers-bracket rounds.
-    #
-    # Example with 4 participants:
-    #
-    # Winners:
-    #   2 matches
-    #   1 match
-    #
-    # Losers:
-    #   1 match
-    #   1 match
-    #
-    # Example with 8 participants:
-    #
-    # Winners:
-    #   4 matches
-    #   2 matches
-    #   1 match
-    #
-    # Losers:
-    #   2 matches
-    #   2 matches
-    #   1 match
-    #   1 match
 
     for winners_round_index in range(
         len(winners_rounds) - 1
@@ -322,7 +301,6 @@ def generate_double_elimination_bracket(
             winners_matches // 2,
         )
 
-        # Losers bracket round 1
         losers_rounds.append(
             [
                 (None, None)
@@ -330,7 +308,6 @@ def generate_double_elimination_bracket(
             ]
         )
 
-        # Losers bracket round 2
         losers_rounds.append(
             [
                 (None, None)
@@ -338,9 +315,6 @@ def generate_double_elimination_bracket(
             ]
         )
 
-    # -------------------------
-    # Grand final
-    # -------------------------
     final_round = [
         [(None, None)]
     ]
@@ -350,6 +324,7 @@ def generate_double_elimination_bracket(
         "losers": losers_rounds,
         "final": final_round,
     }
+
 
 def create_double_elimination_bracket(
     db: Session,
@@ -411,6 +386,11 @@ def create_double_elimination_bracket(
         bracket_type="final",
     )
 
+    next_match_number = get_next_match_number(
+        db,
+        tournament_id,
+    )
+
     winners_matches: list[list[Match]] = []
 
     for round_index, pairings in enumerate(winners_bracket):
@@ -419,6 +399,7 @@ def create_double_elimination_bracket(
         for team_a_id, team_b_id in pairings:
             match = Match(
                 tournament_id=tournament_id,
+                match_number=next_match_number,
                 round_id=winners_rounds[round_index].id,
                 team_a_id=team_a_id,
                 team_b_id=team_b_id,
@@ -428,6 +409,8 @@ def create_double_elimination_bracket(
 
             db.add(match)
             current_matches.append(match)
+
+            next_match_number += 1
 
         winners_matches.append(current_matches)
 
@@ -439,6 +422,7 @@ def create_double_elimination_bracket(
         for team_a_id, team_b_id in pairings:
             match = Match(
                 tournament_id=tournament_id,
+                match_number=next_match_number,
                 round_id=losers_rounds[round_index].id,
                 team_a_id=team_a_id,
                 team_b_id=team_b_id,
@@ -449,6 +433,8 @@ def create_double_elimination_bracket(
             db.add(match)
             current_matches.append(match)
 
+            next_match_number += 1
+
         losers_matches.append(current_matches)
 
     final_matches: list[Match] = []
@@ -457,6 +443,7 @@ def create_double_elimination_bracket(
         for team_a_id, team_b_id in pairings:
             match = Match(
                 tournament_id=tournament_id,
+                match_number=next_match_number,
                 round_id=final_rounds[0].id,
                 team_a_id=team_a_id,
                 team_b_id=team_b_id,
@@ -466,6 +453,8 @@ def create_double_elimination_bracket(
 
             db.add(match)
             final_matches.append(match)
+
+            next_match_number += 1
 
     db.flush()
 

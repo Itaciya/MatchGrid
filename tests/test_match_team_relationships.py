@@ -55,6 +55,7 @@ def test_match_team_relationship(db):
 
     match = Match(
         tournament_id=tournament.id,
+        match_number=1,
         team_a_id=team_a.id,
         team_b_id=team_b.id,
         scheduled_at=datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc),
@@ -88,6 +89,7 @@ def test_match_with_invalid_team_reference_is_rejected(db):
 
     match = Match(
         tournament_id=tournament.id,
+        match_number=1,
         team_a_id=team.id,
         team_b_id=999999999,
         scheduled_at=datetime(2026, 9, 21, 12, 0, tzinfo=timezone.utc),
