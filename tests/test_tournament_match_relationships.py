@@ -58,6 +58,7 @@ def test_tournament_match_relationship(db):
 
     match = Match(
         tournament_id=tournament.id,
+        match_number=1,
         team_a_id=team_a.id,
         team_b_id=team_b.id,
         scheduled_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
@@ -82,13 +83,16 @@ def test_tournament_can_retrieve_its_matches(db):
 
     match_one = Match(
         tournament_id=tournament.id,
+        match_number=1,
         team_a_id=team_a.id,
         team_b_id=team_b.id,
         scheduled_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
         status="scheduled",
     )
+
     match_two = Match(
         tournament_id=tournament.id,
+        match_number=2,
         team_a_id=team_b.id,
         team_b_id=team_a.id,
         scheduled_at=datetime(2026, 1, 4, tzinfo=timezone.utc),
@@ -114,6 +118,7 @@ def test_invalid_tournament_reference_is_rejected(db):
 
     match = Match(
         tournament_id=nonexistent_tournament_id,
+        match_number=1,
         team_a_id=team_a.id,
         team_b_id=team_b.id,
         scheduled_at=datetime(2026, 1, 5, tzinfo=timezone.utc),

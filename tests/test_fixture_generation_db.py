@@ -199,3 +199,96 @@ def test_create_round_robin_fixtures_rejects_wrong_tournament_format(db):
             fixture_time=time(10, 0),
         )
 
+def test_create_round_robin_fixtures_prevents_team_schedule_overlap(db):
+    user = create_user(db)
+    tournament = create_tournament(db, user.id)
+
+    teams = [
+        create_team(db, user.id)
+        for _ in range(4)
+    ]
+
+    for team in teams:
+        approve_team_registration(
+            db,
+            tournament.id,
+            team.id,
+        )
+
+    matches = create_round_robin_fixtures(
+        db=db,
+        tournament_id=tournament.id,
+        team_ids=[team.id for team in teams],
+        fixture_date=date(2099, 1, 2),
+        fixture_time=time(10, 0),
+    )
+
+    teams_by_time = {}
+
+    for match in matches:
+        teams_by_time.setdefault(
+            match.scheduled_at,
+            set(),
+        )
+
+        assert match.team_a_id not in teams_by_time[match.scheduled_at]
+        assert match.team_b_id not in teams_by_time[match.scheduled_at]
+
+        teams_by_time[match.scheduled_at].add(match.team_a_id)
+        teams_by_time[match.scheduled_at].add(match.team_b_id)
+
+
+def test_create_round_robin_fixtures_rejects_schedule_before_tournament_start(
+    db,
+):
+    user = create_user(db)
+    tournament = create_tournament(db, user.id)
+
+    teams = [
+        create_team(db, user.id)
+        for _ in range(2)
+    ]
+
+    for team in teams:
+        approve_team_registration(
+            db,
+            tournament.id,
+            team.id,
+        )
+
+    with pytest.raises(BadRequestException, match="before the tournament"):
+        create_round_robin_fixtures(
+            db=db,
+            tournament_id=tournament.id,
+            team_ids=[team.id for team in teams],
+            fixture_date=date(2098, 12, 31),
+            fixture_time=time(10, 0),
+        )
+
+
+def test_create_round_robin_fixtures_rejects_schedule_after_tournament_end(
+    db,
+):
+    user = create_user(db)
+    tournament = create_tournament(db, user.id)
+
+    teams = [
+        create_team(db, user.id)
+        for _ in range(4)
+    ]
+
+    for team in teams:
+        approve_team_registration(
+            db,
+            tournament.id,
+            team.id,
+        )
+
+    with pytest.raises(BadRequestException, match="exceeds the tournament"):
+        create_round_robin_fixtures(
+            db=db,
+            tournament_id=tournament.id,
+            team_ids=[team.id for team in teams],
+            fixture_date=date(2099, 1, 10),
+            fixture_time=time(17, 0),
+        )

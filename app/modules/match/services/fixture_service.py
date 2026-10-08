@@ -1,11 +1,17 @@
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import BadRequestException, NotFoundException
 from app.modules.match.models.match import Match
+from app.modules.match.services.match_number_service import (
+    get_next_match_number,
+)
 from app.modules.match.services.match_validation import validate_teams_for_fixture
 from app.modules.tournament.models.tournament import Tournament
+
+
+MATCH_TIME_INTERVAL = timedelta(hours=1)
 
 
 def generate_round_robin_rounds(
@@ -69,24 +75,39 @@ def generate_round_robin_fixtures(
     fixture_date: date,
     fixture_time: time,
 ) -> list[dict]:
-    """Generate fixture records for all round-robin pairings."""
+    """Generate scheduled round-robin fixtures.
 
-    pairings = generate_round_robin_pairings(participant_ids)
+    Each round receives a separate one-hour time slot so that
+    a participant cannot be scheduled for overlapping matches.
+    """
 
-    scheduled_at = datetime.combine(
+    rounds = generate_round_robin_rounds(participant_ids)
+
+    first_scheduled_at = datetime.combine(
         fixture_date,
         fixture_time,
+        tzinfo=timezone.utc,
     )
 
-    return [
-        {
-            "team_a_id": team_a_id,
-            "team_b_id": team_b_id,
-            "scheduled_at": scheduled_at,
-            "status": "scheduled",
-        }
-        for team_a_id, team_b_id in pairings
-    ]
+    fixtures: list[dict] = []
+
+    for round_index, current_round in enumerate(rounds):
+        scheduled_at = (
+            first_scheduled_at
+            + round_index * MATCH_TIME_INTERVAL
+        )
+
+        for team_a_id, team_b_id in current_round:
+            fixtures.append(
+                {
+                    "team_a_id": team_a_id,
+                    "team_b_id": team_b_id,
+                    "scheduled_at": scheduled_at,
+                    "status": "scheduled",
+                }
+            )
+
+    return fixtures
 
 
 def create_round_robin_fixtures(
@@ -127,22 +148,47 @@ def create_round_robin_fixtures(
 
     participant_ids = [team.id for team in teams]
 
+    first_scheduled_at = datetime.combine(
+        fixture_date,
+        fixture_time,
+        tzinfo=timezone.utc,
+    )
+
+    if first_scheduled_at < tournament.start_date:
+        raise BadRequestException(
+            detail="Fixture schedule cannot start before the tournament start date"
+        )
+
     fixture_data = generate_round_robin_fixtures(
         participant_ids,
         fixture_date,
         fixture_time,
     )
 
-    matches = [
-        Match(
+    if fixture_data and fixture_data[-1]["scheduled_at"] > tournament.end_date:
+        raise BadRequestException(
+            detail="Fixture schedule exceeds the tournament end date"
+        )
+
+    next_match_number = get_next_match_number(
+        db,
+        tournament_id,
+    )
+
+    matches = []
+
+    for fixture in fixture_data:
+        match = Match(
             tournament_id=tournament_id,
+            match_number=next_match_number,
             team_a_id=fixture["team_a_id"],
             team_b_id=fixture["team_b_id"],
             scheduled_at=fixture["scheduled_at"],
             status=fixture["status"],
         )
-        for fixture in fixture_data
-    ]
+
+        matches.append(match)
+        next_match_number += 1
 
     db.add_all(matches)
     db.commit()

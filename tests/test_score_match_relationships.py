@@ -46,6 +46,7 @@ def create_score_match_data(db):
 
     match = Match(
         tournament_id=tournament.id,
+        match_number=1,
         team_a_id=team_a.id,
         team_b_id=team_b.id,
         scheduled_at=datetime.now(timezone.utc),

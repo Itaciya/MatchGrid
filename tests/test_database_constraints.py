@@ -51,9 +51,10 @@ def _make_team(db, captain_id, **overrides):
     return team
 
 
-def _make_match(db, tournament_id, team_a_id, team_b_id):
+def _make_match(db, tournament_id, team_a_id, team_b_id, match_number=1):
     match = Match(
         tournament_id=tournament_id,
+        match_number=match_number,
         team_a_id=team_a_id,
         team_b_id=team_b_id,
         scheduled_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
@@ -128,12 +129,44 @@ def test_match_team_a_cannot_equal_team_b(db):
 
     match = Match(
         tournament_id=tournament.id,
+        match_number=1,
         team_a_id=team.id,
         team_b_id=team.id,
         scheduled_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
         status="scheduled",
     )
     db.add(match)
+
+    with pytest.raises(IntegrityError):
+        db.commit()
+
+    db.rollback()
+
+
+def test_duplicate_match_number_is_rejected_within_tournament(db):
+    user = _make_user(db)
+    tournament = _make_tournament(db, organizer_id=user.id)
+
+    first_match = _make_match(
+        db,
+        tournament.id,
+        team_a_id=None,
+        team_b_id=None,
+        match_number=1,
+    )
+    db.commit()
+
+    assert first_match.id is not None
+
+    duplicate_match = Match(
+        tournament_id=tournament.id,
+        match_number=1,
+        team_a_id=None,
+        team_b_id=None,
+        scheduled_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
+        status="scheduled",
+    )
+    db.add(duplicate_match)
 
     with pytest.raises(IntegrityError):
         db.commit()

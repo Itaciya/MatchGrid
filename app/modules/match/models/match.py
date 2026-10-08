@@ -1,6 +1,14 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.data_access.base import Base
@@ -18,6 +26,11 @@ class Match(Base):
         ForeignKey("tournaments.id"),
         nullable=False,
         index=True
+    )
+
+    match_number: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
     )
 
     round_id: Mapped[int | None] = mapped_column(
@@ -77,6 +90,11 @@ class Match(Base):
     )
 
     __table_args__ = (
+        UniqueConstraint(
+            "tournament_id",
+            "match_number",
+            name="uq_match_tournament_match_number",
+        ),
         CheckConstraint(
             "team_a_id != team_b_id",
             name="ck_match_team_a_not_team_b",
