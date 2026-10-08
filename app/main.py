@@ -26,6 +26,8 @@ from app.modules.scorer.routes import router as scorer_router
 from app.modules.user.routes import router as user_router
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.modules.registration.routes import router as registration_router
+from app.modules.match.routes import router as match_router
+from app.modules.venue.routes import router as venue_router
 
 
 configure_logging()
@@ -127,6 +129,8 @@ app.include_router(spectator_router)
 app.include_router(scorer_router)
 app.include_router(user_router)
 app.include_router(registration_router)
+app.include_router(match_router)
+app.include_router(venue_router)
 app.include_router(tournament_router)
 
 

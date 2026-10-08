@@ -51,6 +51,12 @@ class Match(Base):
         index=True
     )
 
+    venue_id: Mapped[int | None] = mapped_column(
+        ForeignKey("venues.id"),
+        nullable=True,
+        index=True
+    )
+
     scheduled_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -121,6 +127,11 @@ class Match(Base):
         "Team",
         foreign_keys=[team_b_id],
         backref="away_matches"
+    )
+
+    venue = relationship(
+        "Venue",
+        back_populates="matches",
     )
 
     winner_next_match = relationship(

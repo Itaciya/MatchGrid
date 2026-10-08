@@ -2,13 +2,23 @@ from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import BadRequestException, NotFoundException
+from app.core.exceptions import (
+    BadRequestException,
+    ConflictException,
+    NotFoundException,
+)
 from app.modules.match.models.match import Match
 from app.modules.match.services.match_number_service import (
     get_next_match_number,
 )
-from app.modules.match.services.match_validation import validate_teams_for_fixture
+from app.modules.match.services.match_validation import (
+    validate_teams_for_fixture,
+)
 from app.modules.tournament.models.tournament import Tournament
+from app.modules.venue.models.venue import Venue
+from app.modules.venue.services.venue_service import (
+    check_venue_availability,
+)
 
 
 MATCH_TIME_INTERVAL = timedelta(hours=1)
@@ -77,8 +87,8 @@ def generate_round_robin_fixtures(
 ) -> list[dict]:
     """Generate scheduled round-robin fixtures.
 
-    Each round receives a separate one-hour time slot so that
-    a participant cannot be scheduled for overlapping matches.
+    Each match receives a separate one-hour time slot so that
+    participants and venues cannot be double-booked.
     """
 
     rounds = generate_round_robin_rounds(participant_ids)
@@ -91,13 +101,15 @@ def generate_round_robin_fixtures(
 
     fixtures: list[dict] = []
 
-    for round_index, current_round in enumerate(rounds):
-        scheduled_at = (
-            first_scheduled_at
-            + round_index * MATCH_TIME_INTERVAL
-        )
+    match_index = 0
 
+    for current_round in rounds:
         for team_a_id, team_b_id in current_round:
+            scheduled_at = (
+                first_scheduled_at
+                + match_index * MATCH_TIME_INTERVAL
+            )
+
             fixtures.append(
                 {
                     "team_a_id": team_a_id,
@@ -106,6 +118,8 @@ def generate_round_robin_fixtures(
                     "status": "scheduled",
                 }
             )
+
+            match_index += 1
 
     return fixtures
 
@@ -116,6 +130,8 @@ def create_round_robin_fixtures(
     team_ids: list[int],
     fixture_date: date,
     fixture_time: time,
+    venue_id: int | None = None,
+    commit: bool = True,
 ) -> list[Match]:
     """Validate a tournament and save generated fixtures to the database."""
 
@@ -132,8 +148,24 @@ def create_round_robin_fixtures(
 
     if tournament.format != "round_robin":
         raise BadRequestException(
-            detail="Round-robin fixtures require a round_robin tournament"
+            detail=(
+                "Round-robin fixtures require a "
+                "round_robin tournament"
+            )
         )
+
+    # Validate venue if one was provided.
+    if venue_id is not None:
+        venue = (
+            db.query(Venue)
+            .filter(Venue.id == venue_id)
+            .first()
+        )
+
+        if venue is None:
+            raise NotFoundException(
+                detail="Venue not found"
+            )
 
     try:
         teams = validate_teams_for_fixture(
@@ -156,7 +188,10 @@ def create_round_robin_fixtures(
 
     if first_scheduled_at < tournament.start_date:
         raise BadRequestException(
-            detail="Fixture schedule cannot start before the tournament start date"
+            detail=(
+                "Fixture schedule cannot start before "
+                "the tournament start date"
+            )
         )
 
     fixture_data = generate_round_robin_fixtures(
@@ -165,10 +200,29 @@ def create_round_robin_fixtures(
         fixture_time,
     )
 
-    if fixture_data and fixture_data[-1]["scheduled_at"] > tournament.end_date:
+    if (
+        fixture_data
+        and fixture_data[-1]["scheduled_at"]
+        > tournament.end_date
+    ):
         raise BadRequestException(
             detail="Fixture schedule exceeds the tournament end date"
         )
+
+    # Check venue availability before creating any matches.
+    if venue_id is not None:
+        for fixture in fixture_data:
+            if not check_venue_availability(
+                db=db,
+                venue_id=venue_id,
+                scheduled_at=fixture["scheduled_at"],
+            ):
+                raise ConflictException(
+                    detail=(
+                        "Venue is already booked at "
+                        f"{fixture['scheduled_at']}"
+                    )
+                )
 
     next_match_number = get_next_match_number(
         db,
@@ -183,6 +237,7 @@ def create_round_robin_fixtures(
             match_number=next_match_number,
             team_a_id=fixture["team_a_id"],
             team_b_id=fixture["team_b_id"],
+            venue_id=venue_id,
             scheduled_at=fixture["scheduled_at"],
             status=fixture["status"],
         )
@@ -191,7 +246,10 @@ def create_round_robin_fixtures(
         next_match_number += 1
 
     db.add_all(matches)
-    db.commit()
+    db.flush()
+
+    if commit:
+        db.commit()
 
     for match in matches:
         db.refresh(match)
