@@ -24,7 +24,7 @@ def test_generate_round_robin_fixtures_returns_expected_matches():
     assert len(pairings) == 6
 
 
-def test_generate_round_robin_fixtures_assigns_separate_round_times():
+def test_generate_round_robin_fixtures_assigns_separate_match_times():
     fixtures = generate_round_robin_fixtures(
         participant_ids=[1, 2, 3, 4],
         fixture_date=date(2026, 10, 10),
@@ -36,7 +36,7 @@ def test_generate_round_robin_fixtures_assigns_separate_round_times():
         for fixture in fixtures
     }
 
-    assert len(scheduled_times) == 3
+    assert len(scheduled_times) == 6
 
     assert all(
         fixture["scheduled_at"].date() == date(2026, 10, 10)
@@ -48,11 +48,11 @@ def test_generate_round_robin_fixtures_assigns_separate_round_times():
         for fixture in fixtures
     ) == [
         time(10, 0),
-        time(10, 0),
-        time(11, 0),
         time(11, 0),
         time(12, 0),
-        time(12, 0),
+        time(13, 0),
+        time(14, 0),
+        time(15, 0),
     ]
 
 
