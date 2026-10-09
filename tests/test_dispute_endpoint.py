@@ -1,22 +1,28 @@
-import pytest
-from sqlalchemy.orm import Session
-from app.data_access.database import engine, get_db
 from datetime import datetime, timezone
 from uuid import uuid4
-from app.modules.dispute.models.dispute_status_history import DisputeStatusHistory
+
+import pytest
 from fastapi.testclient import TestClient
-from app.modules.dispute.schemas.dispute import DisputeStatusUpdate
+from sqlalchemy.orm import Session
+
 from app.core.security import create_access_token, hash_password
+from app.data_access.database import engine, get_db
 from app.main import app
 from app.modules.dispute.models.dispute import Dispute
+from app.modules.dispute.models.dispute_status_history import (
+    DisputeStatusHistory,
+)
 from app.modules.match.models.match import Match
 from app.modules.player_team.models.player import Player, PlayerStatus
 from app.modules.player_team.models.team import Team
+from app.modules.score.models.score import Score
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
-from app.modules.score.models.score import Score
+
 
 client = TestClient(app)
+
+
 @pytest.fixture
 def db():
     """Use a rollbackable transaction for dispute endpoint tests."""
@@ -44,6 +50,7 @@ def db():
 
         connection.close()
 
+
 def create_user(db, role="player"):
     user = User(
         email=f"dispute_test_{uuid4()}@example.com",
@@ -66,7 +73,12 @@ def create_team(db, captain, prefix="Dispute Team"):
     return team
 
 
-def create_player(db, user, team, player_status=PlayerStatus.ACTIVE):
+def create_player(
+    db,
+    user,
+    team,
+    player_status=PlayerStatus.ACTIVE,
+):
     player = Player(
         user_id=user.id,
         team_id=team.id,
@@ -110,6 +122,11 @@ def auth_header(user):
     return {"Authorization": f"Bearer {token}"}
 
 
+# ============================================================
+# Dispute creation tests
+# ============================================================
+
+
 def test_active_participant_can_create_dispute(db):
     user = create_user(db)
     opponent = create_user(db)
@@ -117,8 +134,10 @@ def test_active_participant_can_create_dispute(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
+
     create_player(db, user, team_a)
     create_player(db, opponent, team_b)
+
     match = create_match(db, organizer, team_a, team_b)
     db.commit()
 
@@ -135,7 +154,10 @@ def test_active_participant_can_create_dispute(db):
     assert response.json()["match_id"] == match.id
     assert response.json()["user_id"] == user.id
     assert response.json()["status"] == "pending"
-    assert response.json()["reason"] == "The recorded match result is incorrect."
+    assert (
+        response.json()["reason"]
+        == "The recorded match result is incorrect."
+    )
 
 
 def test_non_participant_cannot_create_dispute(db):
@@ -157,7 +179,10 @@ def test_non_participant_cannot_create_dispute(db):
 
     response = client.post(
         "/disputes/",
-        json={"match_id": match.id, "reason": "I am not in this match."},
+        json={
+            "match_id": match.id,
+            "reason": "I am not in this match.",
+        },
         headers=auth_header(outsider),
     )
 
@@ -171,7 +196,13 @@ def test_inactive_player_cannot_create_dispute(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
-    create_player(db, user, team_a, PlayerStatus.INACTIVE)
+
+    create_player(
+        db,
+        user,
+        team_a,
+        PlayerStatus.INACTIVE,
+    )
     create_player(db, opponent, team_b)
 
     match = create_match(db, organizer, team_a, team_b)
@@ -179,7 +210,10 @@ def test_inactive_player_cannot_create_dispute(db):
 
     response = client.post(
         "/disputes/",
-        json={"match_id": match.id, "reason": "Please review this result."},
+        json={
+            "match_id": match.id,
+            "reason": "Please review this result.",
+        },
         headers=auth_header(user),
     )
 
@@ -192,7 +226,10 @@ def test_missing_match_is_rejected(db):
 
     response = client.post(
         "/disputes/",
-        json={"match_id": 999999999, "reason": "Please review this result."},
+        json={
+            "match_id": 999999999,
+            "reason": "Please review this result.",
+        },
         headers=auth_header(user),
     )
 
@@ -202,7 +239,10 @@ def test_missing_match_is_rejected(db):
 def test_dispute_without_authentication_is_rejected():
     response = client.post(
         "/disputes/",
-        json={"match_id": 1, "reason": "Please review this result."},
+        json={
+            "match_id": 1,
+            "reason": "Please review this result.",
+        },
     )
 
     assert response.status_code == 401
@@ -220,6 +260,12 @@ def test_dispute_with_missing_reason_is_rejected(db):
 
     assert response.status_code == 422
 
+
+# ============================================================
+# Dispute retrieval tests
+# ============================================================
+
+
 def test_dispute_owner_can_retrieve_dispute_by_id(db):
     user = create_user(db)
     opponent = create_user(db)
@@ -227,6 +273,7 @@ def test_dispute_owner_can_retrieve_dispute_by_id(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
+
     create_player(db, user, team_a)
     create_player(db, opponent, team_b)
 
@@ -307,6 +354,7 @@ def test_match_participant_can_retrieve_disputes_by_match(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
+
     create_player(db, user, team_a)
     create_player(db, opponent, team_b)
 
@@ -363,6 +411,12 @@ def test_retrieving_dispute_without_authentication_returns_401():
 
     assert response.status_code == 401
 
+
+# ============================================================
+# Dispute status transition tests
+# ============================================================
+
+
 def test_tournament_owner_can_move_dispute_to_under_review(db):
     user = create_user(db)
     opponent = create_user(db)
@@ -370,6 +424,7 @@ def test_tournament_owner_can_move_dispute_to_under_review(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
+
     create_player(db, user, team_a)
     create_player(db, opponent, team_b)
 
@@ -405,6 +460,7 @@ def test_tournament_owner_can_move_dispute_to_under_review(db):
     assert history[0].new_status == "under_review"
     assert history[0].changed_by == organiser.id
 
+
 def test_cannot_skip_dispute_review_stage(db):
     user = create_user(db)
     opponent = create_user(db)
@@ -412,6 +468,7 @@ def test_cannot_skip_dispute_review_stage(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
+
     create_player(db, user, team_a)
     create_player(db, opponent, team_b)
 
@@ -433,7 +490,9 @@ def test_cannot_skip_dispute_review_stage(db):
         headers=auth_header(organiser),
     )
 
-    assert response.status_code == 403    db.refresh(dispute)
+    assert response.status_code == 403
+
+    db.refresh(dispute)
     assert dispute.status == "pending"
 
     history = (
@@ -441,7 +500,14 @@ def test_cannot_skip_dispute_review_stage(db):
         .filter(DisputeStatusHistory.dispute_id == dispute.id)
         .all()
     )
+
     assert len(history) == 0
+
+
+# ============================================================
+# Organizer dispute review tests - Subtask 1
+# ============================================================
+
 
 def test_organiser_can_view_own_pending_disputes_with_match_info(db):
     user = create_user(db)
@@ -450,6 +516,7 @@ def test_organiser_can_view_own_pending_disputes_with_match_info(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
+
     create_player(db, user, team_a)
     create_player(db, opponent, team_b)
 
@@ -501,6 +568,7 @@ def test_organiser_cannot_see_another_organisers_pending_disputes(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
+
     create_player(db, user, team_a)
     create_player(db, opponent, team_b)
 
@@ -523,6 +591,7 @@ def test_organiser_cannot_see_another_organisers_pending_disputes(db):
     assert response.status_code == 200
     assert response.json() == []
 
+
 def test_organiser_can_view_pending_dispute_with_score(db):
     user = create_user(db)
     opponent = create_user(db)
@@ -530,6 +599,7 @@ def test_organiser_can_view_pending_dispute_with_score(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
+
     create_player(db, user, team_a)
     create_player(db, opponent, team_b)
 
@@ -569,6 +639,12 @@ def test_organiser_can_view_pending_dispute_with_score(db):
     assert body[0]["result"]["team_b_score"] == 1
     assert body[0]["result"]["verification_status"] == "pending"
 
+
+# ============================================================
+# Dispute resolution tests - Subtask 2
+# ============================================================
+
+
 def test_organiser_can_resolve_dispute_and_save_resolution(db):
     user = create_user(db)
     opponent = create_user(db)
@@ -576,6 +652,7 @@ def test_organiser_can_resolve_dispute_and_save_resolution(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
+
     create_player(db, user, team_a)
     create_player(db, opponent, team_b)
 
@@ -633,6 +710,7 @@ def test_organiser_can_reject_dispute_with_resolution(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
+
     create_player(db, user, team_a)
     create_player(db, opponent, team_b)
 
@@ -652,7 +730,9 @@ def test_organiser_can_reject_dispute_with_resolution(db):
         f"/disputes/{dispute.id}/resolve",
         json={
             "decision": "rejected",
-            "resolution": "The submitted evidence does not support the complaint.",
+            "resolution": (
+                "The submitted evidence does not support the complaint."
+            ),
         },
         headers=auth_header(organiser),
     )
@@ -673,6 +753,7 @@ def test_another_organiser_cannot_resolve_dispute(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
+
     create_player(db, user, team_a)
     create_player(db, opponent, team_b)
 
@@ -711,6 +792,7 @@ def test_pending_dispute_cannot_be_resolved_directly(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
+
     create_player(db, user, team_a)
     create_player(db, opponent, team_b)
 
@@ -749,6 +831,7 @@ def test_invalid_resolution_decision_is_rejected(db):
 
     team_a = create_team(db, user, "Team A")
     team_b = create_team(db, opponent, "Team B")
+
     create_player(db, user, team_a)
     create_player(db, opponent, team_b)
 
