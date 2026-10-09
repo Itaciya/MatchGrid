@@ -7,15 +7,28 @@ from app.core.exceptions import (
     ConflictException,
     NotFoundException,
 )
+
 from app.modules.match.models.match import Match
+
 from app.modules.match.services.match_number_service import (
     get_next_match_number,
 )
+
 from app.modules.match.services.match_validation import (
     validate_teams_for_fixture,
 )
+
+from app.modules.match.services.scheduling_conflict_service import (
+    check_team_conflicts,
+    check_player_conflicts,
+    check_venue_conflicts,
+    check_time_slot_conflicts,
+)
+
 from app.modules.tournament.models.tournament import Tournament
+
 from app.modules.venue.models.venue import Venue
+
 from app.modules.venue.services.venue_service import (
     check_venue_availability,
 )
@@ -199,6 +212,43 @@ def create_round_robin_fixtures(
         fixture_date,
         fixture_time,
     )
+        # Temporary match objects for conflict validation
+    temp_matches = []
+
+    for fixture in fixture_data:
+        temp_matches.append(
+            Match(
+                tournament_id=tournament_id,
+                team_a_id=fixture["team_a_id"],
+                team_b_id=fixture["team_b_id"],
+                venue_id=venue_id,
+                scheduled_at=fixture["scheduled_at"],
+                status=fixture["status"],
+            )
+        )
+
+    conflicts = []
+
+    conflicts.extend(
+        check_team_conflicts(temp_matches)
+    )
+
+    conflicts.extend(
+        check_player_conflicts(temp_matches)
+    )
+
+    conflicts.extend(
+        check_venue_conflicts(temp_matches)
+    )
+
+    conflicts.extend(
+        check_time_slot_conflicts(temp_matches)
+    )
+
+    if conflicts:
+        raise ConflictException(
+            detail=conflicts
+        )
 
     if (
         fixture_data
