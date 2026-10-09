@@ -233,3 +233,13 @@ def test_draw_finalization_has_no_winner_or_loser(db):
     assert data["outcome"] == "draw"
     assert data["winner_team_id"] is None
     assert data["loser_team_id"] is None
+
+
+def test_unauthenticated_user_cannot_finalize(db):
+    match, _ = _make_match(db)
+    _make_score(db, match)
+
+    response = client.post(f"/matches/{match.id}/result/finalize")
+
+    assert response.status_code in (401, 403)
+    assert db.query(MatchResult).filter_by(match_id=match.id).count() == 0
