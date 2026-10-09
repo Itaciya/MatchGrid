@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import verify_tournament_owner
+from app.core.dependencies import require_role, verify_tournament_owner
 from app.core.exceptions import BadRequestException
 from app.data_access.database import get_db
 
@@ -18,6 +18,8 @@ from app.modules.match.services.fixture_regeneration_service import (
     regenerate_round_robin_fixtures,
 )
 
+from app.modules.match.schemas.match import MatchStatusResponse
+from app.modules.match.services.match_start_service import start_match
 from app.modules.tournament.models.tournament import Tournament
 
 
@@ -81,3 +83,15 @@ def regenerate_fixtures_endpoint(
     fixture_time=data.fixture_time,
     venue_id=data.venue_id,
 )
+
+@router.post(
+    "/{match_id}/start",
+    response_model=MatchStatusResponse,
+    dependencies=[Depends(require_role("scorer", "official"))],
+)
+def start_match_endpoint(
+    match_id: int,
+    db: Session = Depends(get_db),
+):
+    """Start a scheduled match (scheduled -> live), recording server time."""
+    return start_match(db, match_id)
