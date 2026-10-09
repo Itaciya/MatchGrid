@@ -122,6 +122,17 @@ class DisputeResolutionRequest(BaseModel):
     decision: Literal["resolved", "rejected"]
     resolution: str = Field(min_length=1, max_length=5000)
 
+    corrected_team_a_score: int | None = Field(
+        default=None,
+        ge=0,
+        strict=True,
+    )
+    corrected_team_b_score: int | None = Field(
+        default=None,
+        ge=0,
+        strict=True,
+    )
+
     @field_validator("resolution")
     @classmethod
     def validate_resolution(cls, value: str) -> str:
@@ -131,3 +142,23 @@ class DisputeResolutionRequest(BaseModel):
             raise ValueError("Resolution details cannot be empty")
 
         return value
+
+    @model_validator(mode="after")
+    def validate_score_correction(self):
+        has_team_a_score = self.corrected_team_a_score is not None
+        has_team_b_score = self.corrected_team_b_score is not None
+
+        if has_team_a_score != has_team_b_score:
+            raise ValueError(
+                "Both corrected team scores must be provided together"
+            )
+
+        if (
+            self.decision == "rejected"
+            and (has_team_a_score or has_team_b_score)
+        ):
+            raise ValueError(
+                "Scores can only be corrected when a dispute is resolved"
+            )
+
+        return self
