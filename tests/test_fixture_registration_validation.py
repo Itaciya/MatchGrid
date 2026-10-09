@@ -233,3 +233,42 @@ def test_validate_teams_for_fixture_rejects_unapproved_team(db):
             tournament.id,
             [approved_team.id, pending_team.id],
         )
+
+
+def test_validate_teams_for_fixture_rejects_duplicate_team_ids(db):
+    user = create_user(db)
+    tournament = create_tournament(db, user.id)
+    team = create_team(db, user.id)
+
+    create_team_registration(
+        db,
+        tournament.id,
+        team.id,
+        RegistrationStatus.APPROVED,
+    )
+
+    with pytest.raises(
+        BadRequestException,
+        match="Duplicate team IDs",
+    ):
+        validate_teams_for_fixture(
+            db,
+            tournament.id,
+            [team.id, team.id],
+        )
+
+
+def test_validate_teams_for_fixture_requires_at_least_two_teams(db):
+    user = create_user(db)
+    tournament = create_tournament(db, user.id)
+    team = create_team(db, user.id)
+
+    with pytest.raises(
+        BadRequestException,
+        match="At least two teams",
+    ):
+        validate_teams_for_fixture(
+            db,
+            tournament.id,
+            [team.id],
+        )
