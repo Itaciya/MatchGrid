@@ -63,6 +63,11 @@ class Match(Base):
         index=True
     )
 
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
