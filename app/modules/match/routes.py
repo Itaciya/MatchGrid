@@ -1,11 +1,17 @@
-from fastapi import APIRouter, Depends, status
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import (
     verify_assigned_official,
     verify_tournament_owner,
 )
-from app.core.exceptions import BadRequestException, ConflictException
+from app.core.exceptions import (
+    BadRequestException,
+    ConflictException,
+    NotFoundException,
+)
 from app.data_access.database import get_db
 
 from app.modules.match.models.match import Match
@@ -38,6 +44,93 @@ router = APIRouter(
     prefix="/matches",
     tags=["Match"],
 )
+
+
+# SCRUM-123: List fixtures with optional filters
+@router.get(
+    "/tournaments/{tournament_id}/fixtures",
+    response_model=list[FixtureResponse],
+    status_code=status.HTTP_200_OK,
+)
+def list_fixtures_endpoint(
+    tournament_id: int,
+    fixture_status: str | None = Query(default=None, alias="status"),
+    team_id: int | None = Query(default=None, gt=0),
+    venue_id: int | None = Query(default=None, gt=0),
+    start_at: datetime | None = Query(default=None),
+    end_at: datetime | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """List tournament fixtures with optional filters."""
+
+    tournament = (
+        db.query(Tournament)
+        .filter(Tournament.id == tournament_id)
+        .first()
+    )
+
+    if tournament is None:
+        raise NotFoundException(detail="Tournament not found")
+
+    if start_at and end_at and start_at > end_at:
+        raise BadRequestException(
+            detail="start_at must be before or equal to end_at"
+        )
+
+    query = db.query(Match).filter(
+        Match.tournament_id == tournament_id
+    )
+
+    if fixture_status:
+        query = query.filter(Match.status == fixture_status)
+
+    if team_id is not None:
+        query = query.filter(
+            (Match.team_a_id == team_id)
+            | (Match.team_b_id == team_id)
+        )
+
+    if venue_id is not None:
+        query = query.filter(Match.venue_id == venue_id)
+
+    if start_at is not None:
+        query = query.filter(Match.scheduled_at >= start_at)
+
+    if end_at is not None:
+        query = query.filter(Match.scheduled_at <= end_at)
+
+    return query.order_by(
+        Match.scheduled_at,
+        Match.match_number,
+    ).all()
+
+
+# SCRUM-124: Get fixture details by ID
+@router.get(
+    "/tournaments/{tournament_id}/fixtures/{match_id}",
+    response_model=FixtureResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_fixture_details_endpoint(
+    tournament_id: int,
+    match_id: int,
+    db: Session = Depends(get_db),
+):
+    """Retrieve fixture details for a tournament."""
+
+    fixture = (
+        db.query(Match)
+        .filter(
+            Match.id == match_id,
+            Match.tournament_id == tournament_id,
+        )
+        .first()
+    )
+
+    if fixture is None:
+        raise NotFoundException(detail="Fixture not found")
+
+    return fixture
 
 
 @router.post(
@@ -176,6 +269,7 @@ def resolve_fixture_conflicts_endpoint(
     )
 
 
+# SCRUM-125: Update fixture schedule or venue
 @router.patch(
     "/tournaments/{tournament_id}/fixtures/{match_id}",
     response_model=FixtureResponse,
@@ -207,6 +301,6 @@ def start_match_endpoint(
     match_id: int,
     db: Session = Depends(get_db),
 ):
-    """Start a scheduled match (scheduled -> live), recording server time."""
+    """Start a scheduled match and record server time."""
 
     return start_match(db, match_id)

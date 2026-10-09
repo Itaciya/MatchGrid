@@ -42,13 +42,14 @@ class FixtureUpdate(BaseModel):
 
 
 class FixtureResponse(BaseModel):
-    """Schema for returning a generated match fixture."""
+    """Schema for returning a match fixture."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     tournament_id: int
     match_number: int
+    round_id: int | None = None
     team_a_id: int | None
     team_b_id: int | None
     venue_id: int | None
