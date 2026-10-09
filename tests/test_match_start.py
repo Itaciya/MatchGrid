@@ -240,3 +240,127 @@ def test_assignment_to_another_match_does_not_authorise_start(db):
     assert response.status_code == 403
     db.refresh(target_match)
     assert target_match.status == "scheduled"
+
+@pytest.mark.parametrize("role", ["scorer", "official"])
+def test_assigned_roles_can_complete_a_live_match(db, role):
+    user = _make_user(db, role)
+    match = _make_match(db, status="live")
+    _assign(db, match, user)
+
+    response = client.post(
+        f"/matches/{match.id}/complete",
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == match.id
+    assert data["status"] == "completed"
+
+
+def test_completed_status_is_persisted_to_database(db):
+    user = _make_user(db, "scorer")
+    match = _make_match(db, status="live")
+    _assign(db, match, user)
+
+    response = client.post(
+        f"/matches/{match.id}/complete",
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 200
+
+    db.refresh(match)
+    assert match.status == "completed"
+
+
+@pytest.mark.parametrize(
+    "initial_status",
+    ["scheduled", "completed", "cancelled"],
+)
+def test_invalid_completion_transition_is_rejected(db, initial_status):
+    user = _make_user(db, "scorer")
+    match = _make_match(db, status=initial_status)
+    _assign(db, match, user)
+
+    response = client.post(
+        f"/matches/{match.id}/complete",
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 409
+
+    db.refresh(match)
+    assert match.status == initial_status
+
+
+def test_completing_a_nonexistent_match_returns_404(db):
+    user = _make_user(db, "scorer")
+
+    response = client.post(
+        "/matches/999999/complete",
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "role",
+    ["player", "spectator", "organiser"],
+)
+def test_other_roles_cannot_complete_a_match(db, role):
+    user = _make_user(db, role)
+    match = _make_match(db, status="live")
+    _assign(db, match, user)
+
+    response = client.post(
+        f"/matches/{match.id}/complete",
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 403
+
+    db.refresh(match)
+    assert match.status == "live"
+
+
+def test_completing_without_a_token_is_rejected(db):
+    match = _make_match(db, status="live")
+
+    response = client.post(
+        f"/matches/{match.id}/complete",
+    )
+
+    assert response.status_code == 401
+
+
+def test_unassigned_official_cannot_complete_a_match(db):
+    user = _make_user(db, "scorer")
+    match = _make_match(db, status="live")
+
+    response = client.post(
+        f"/matches/{match.id}/complete",
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 403
+
+    db.refresh(match)
+    assert match.status == "live"
+
+
+def test_match_without_both_teams_cannot_be_completed(db):
+    user = _make_user(db, "scorer")
+    match = _make_match(db, status="live", with_teams=False)
+    _assign(db, match, user)
+
+    response = client.post(
+        f"/matches/{match.id}/complete",
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 400
+
+    db.refresh(match)
+    assert match.status == "live"
