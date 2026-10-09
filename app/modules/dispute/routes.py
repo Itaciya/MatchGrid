@@ -14,8 +14,17 @@ from app.modules.dispute.services.dispute_service import (
     get_disputes_by_match,
 )
 from app.modules.user.models import User
-
-
+from app.modules.dispute.schemas.dispute import (
+    DisputeCreate,
+    DisputeResponse,
+    DisputeStatusUpdate,
+)
+from app.modules.dispute.services.dispute_service import (
+    create_dispute,
+    get_dispute_by_id,
+    get_disputes_by_match,
+    update_dispute_status,
+)
 router = APIRouter(
     prefix="/disputes",
     tags=["Dispute"],
@@ -73,4 +82,23 @@ def get_dispute_by_id_endpoint(
         db=db,
         current_user_id=current_user.id,
         dispute_id=dispute_id,
+    )
+
+@router.patch(
+    "/{dispute_id}/status",
+    response_model=DisputeResponse,
+    status_code=status.HTTP_200_OK,
+)
+def update_dispute_status_endpoint(
+    dispute_id: int,
+    data: DisputeStatusUpdate,
+    current_user: User = Depends(require_role("organiser")),
+    db: Session = Depends(get_db),
+):
+    """Update dispute status for a tournament owned by the organiser."""
+    return update_dispute_status(
+        db=db,
+        current_user_id=current_user.id,
+        dispute_id=dispute_id,
+        data=data,
     )

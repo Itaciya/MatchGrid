@@ -1,4 +1,4 @@
-
+from typing import Annotated, Literal
 from datetime import datetime
 from typing import Annotated
 
@@ -54,6 +54,16 @@ class DisputeUpdate(BaseModel):
 
         return self
 
+
+class DisputeStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal[
+        "pending",
+        "under_review",
+        "resolved",
+        "rejected",
+    ]
 
 class DisputeResponse(BaseModel):
     """Schema for returning dispute data."""

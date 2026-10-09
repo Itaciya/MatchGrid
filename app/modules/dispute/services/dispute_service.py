@@ -1,13 +1,17 @@
 
 from sqlalchemy.orm import Session
-
+from app.modules.dispute.models.dispute_status_history import DisputeStatusHistory
+from app.modules.dispute.schemas.dispute import DisputeStatusUpdate
 from app.core.exceptions import ForbiddenException, NotFoundException
 from app.modules.dispute.models.dispute import Dispute
 from app.modules.dispute.schemas.dispute import DisputeCreate
 from app.modules.match.models.match import Match
 from app.modules.player_team.models.player import Player, PlayerStatus
 
-
+from app.modules.dispute.schemas.dispute import (
+    DisputeCreate,
+    DisputeStatusUpdate,
+)
 def create_dispute(
     db: Session,
     current_user_id: int,
@@ -143,3 +147,71 @@ def get_disputes_by_match(
         .order_by(Dispute.created_at.desc())
         .all()
     )
+
+def update_dispute_status(
+    db: Session,
+    current_user_id: int,
+    dispute_id: int,
+    data: DisputeStatusUpdate,
+) -> Dispute:
+    """Update a dispute status if the organiser owns its tournament."""
+
+    dispute = (
+        db.query(Dispute)
+        .filter(Dispute.id == dispute_id)
+        .first()
+    )
+
+    if dispute is None:
+        raise NotFoundException(detail="Dispute not found")
+
+    match = (
+        db.query(Match)
+        .filter(Match.id == dispute.match_id)
+        .first()
+    )
+
+    if match is None:
+        raise NotFoundException(detail="Match not found")
+
+    # Only the organiser who owns this tournament may update its disputes.
+    if match.tournament.organizer_id != current_user_id:
+        raise ForbiddenException(
+            detail="Only the tournament owner can update dispute status"
+        )
+
+    allowed_transitions = {
+        "pending": {"under_review"},
+        "under_review": {"resolved", "rejected"},
+        "resolved": set(),
+        "rejected": set(),
+    }
+
+    previous_status = dispute.status
+    new_status = data.status
+
+    if new_status not in allowed_transitions.get(previous_status, set()):
+        raise ForbiddenException(
+            detail=f"Invalid dispute status transition: "
+            f"{previous_status} -> {new_status}"
+        )
+
+    try:
+        dispute.status = new_status
+
+        history = DisputeStatusHistory(
+            dispute_id=dispute.id,
+            previous_status=previous_status,
+            new_status=new_status,
+            changed_by=current_user_id,
+        )
+        db.add(history)
+
+        db.commit()
+        db.refresh(dispute)
+
+    except Exception:
+        db.rollback()
+        raise
+
+    return dispute

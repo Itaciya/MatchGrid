@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from app.data_access.database import engine, get_db
 from datetime import datetime, timezone
 from uuid import uuid4
-
+from app.modules.dispute.models.dispute_status_history import DisputeStatusHistory
 from fastapi.testclient import TestClient
-
+from app.modules.dispute.schemas.dispute import DisputeStatusUpdate
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.modules.dispute.models.dispute import Dispute
@@ -362,3 +362,85 @@ def test_retrieving_dispute_without_authentication_returns_401():
     response = client.get("/disputes/999999999")
 
     assert response.status_code == 401
+
+def test_tournament_owner_can_move_dispute_to_under_review(db):
+    user = create_user(db)
+    opponent = create_user(db)
+    organiser = create_user(db, role="organiser")
+
+    team_a = create_team(db, user, "Team A")
+    team_b = create_team(db, opponent, "Team B")
+    create_player(db, user, team_a)
+    create_player(db, opponent, team_b)
+
+    match = create_match(db, organiser, team_a, team_b)
+
+    dispute = Dispute(
+        match_id=match.id,
+        user_id=user.id,
+        reason="The match result is incorrect.",
+        status="pending",
+    )
+    db.add(dispute)
+    db.commit()
+    db.refresh(dispute)
+
+    response = client.patch(
+        f"/disputes/{dispute.id}/status",
+        json={"status": "under_review"},
+        headers=auth_header(organiser),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "under_review"
+
+    history = (
+        db.query(DisputeStatusHistory)
+        .filter(DisputeStatusHistory.dispute_id == dispute.id)
+        .all()
+    )
+
+    assert len(history) == 1
+    assert history[0].previous_status == "pending"
+    assert history[0].new_status == "under_review"
+    assert history[0].changed_by == organiser.id
+
+def test_cannot_skip_dispute_review_stage(db):
+    user = create_user(db)
+    opponent = create_user(db)
+    organiser = create_user(db, role="organiser")
+
+    team_a = create_team(db, user, "Team A")
+    team_b = create_team(db, opponent, "Team B")
+    create_player(db, user, team_a)
+    create_player(db, opponent, team_b)
+
+    match = create_match(db, organiser, team_a, team_b)
+
+    dispute = Dispute(
+        match_id=match.id,
+        user_id=user.id,
+        reason="The match result is incorrect.",
+        status="pending",
+    )
+    db.add(dispute)
+    db.commit()
+    db.refresh(dispute)
+
+    response = client.patch(
+        f"/disputes/{dispute.id}/status",
+        json={"status": "resolved"},
+        headers=auth_header(organiser),
+    )
+
+    assert response.status_code == 403
+    print("ERROR RESPONSE:", response.json())
+    db.refresh(dispute)
+    assert dispute.status == "pending"
+
+    history = (
+        db.query(DisputeStatusHistory)
+        .filter(DisputeStatusHistory.dispute_id == dispute.id)
+        .all()
+    )
+    assert len(history) == 0
