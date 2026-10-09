@@ -9,7 +9,6 @@ from app.core.dependencies import (
 )
 from app.core.exceptions import (
     BadRequestException,
-    ConflictException,
     NotFoundException,
 )
 from app.data_access.database import get_db
@@ -27,18 +26,18 @@ from app.modules.match.services.fixture_service import (
 from app.modules.match.services.fixture_regeneration_service import (
     regenerate_round_robin_fixtures,
 )
-from app.modules.match.services.scheduling_conflict_service import (
-    validate_schedule_conflicts,
-)
 from app.modules.match.services.fixture_conflict_resolution_service import (
     resolve_fixture_conflicts,
 )
 from app.modules.match.services.fixture_update_service import (
     update_fixture_schedule,
 )
+from app.modules.match.services.fixture_publication_service import (
+    publish_fixtures,
+)
 from app.modules.match.services.match_start_service import start_match
 from app.modules.tournament.models.tournament import Tournament
-
+from app.modules.match.services.match_status_service import complete_match
 
 router = APIRouter(
     prefix="/matches",
@@ -133,6 +132,7 @@ def get_fixture_details_endpoint(
     return fixture
 
 
+# Generate fixtures
 @router.post(
     "/tournaments/{tournament_id}/fixtures/generate",
     response_model=list[FixtureResponse],
@@ -161,6 +161,7 @@ def generate_fixtures_endpoint(
     )
 
 
+# Regenerate fixtures
 @router.post(
     "/tournaments/{tournament_id}/fixtures/regenerate",
     response_model=list[FixtureResponse],
@@ -189,6 +190,7 @@ def regenerate_fixtures_endpoint(
     )
 
 
+# SCRUM-130: Publish fixtures after validation
 @router.post(
     "/tournaments/{tournament_id}/fixtures/publish",
     status_code=status.HTTP_200_OK,
@@ -200,58 +202,13 @@ def publish_fixtures_endpoint(
 ):
     """Validate and publish a tournament's fixtures."""
 
-    fixtures = (
-        db.query(Match)
-        .filter(Match.tournament_id == tournament.id)
-        .order_by(Match.scheduled_at, Match.match_number)
-        .all()
+    return publish_fixtures(
+        db=db,
+        tournament=tournament,
     )
 
-    if not fixtures:
-        raise BadRequestException(
-            detail="Cannot publish fixtures because none exist"
-        )
 
-    scheduled_fixtures = [
-        fixture
-        for fixture in fixtures
-        if fixture.status == "scheduled"
-    ]
-
-    if not scheduled_fixtures:
-        raise BadRequestException(
-            detail="Cannot publish because no scheduled fixtures exist"
-        )
-
-    conflicts = validate_schedule_conflicts(
-        candidate_matches=scheduled_fixtures,
-    )
-
-    if conflicts:
-        raise ConflictException(
-            detail={
-                "message": "Cannot publish fixtures because conflicts exist",
-                "conflicts": conflicts,
-            }
-        )
-
-    tournament.fixtures_published = True
-
-    try:
-        db.commit()
-        db.refresh(tournament)
-    except Exception:
-        db.rollback()
-        raise
-
-    return {
-        "message": "Fixtures published successfully",
-        "tournament_id": tournament.id,
-        "fixtures_published": tournament.fixtures_published,
-        "fixture_count": len(scheduled_fixtures),
-    }
-
-
+# Resolve fixture scheduling conflicts
 @router.post(
     "/tournaments/{tournament_id}/fixtures/resolve-conflicts",
     status_code=status.HTTP_200_OK,
@@ -270,6 +227,7 @@ def resolve_fixture_conflicts_endpoint(
 
 
 # SCRUM-125: Update fixture schedule or venue
+# SCRUM-131: Organizer authorization is enforced by the dependency.
 @router.patch(
     "/tournaments/{tournament_id}/fixtures/{match_id}",
     response_model=FixtureResponse,
@@ -292,6 +250,7 @@ def update_fixture_endpoint(
     )
 
 
+# Start a match
 @router.post(
     "/{match_id}/start",
     response_model=MatchStatusResponse,
@@ -304,3 +263,16 @@ def start_match_endpoint(
     """Start a scheduled match and record server time."""
 
     return start_match(db, match_id)
+
+@router.post(
+    "/{match_id}/complete",
+    response_model=MatchStatusResponse,
+    dependencies=[Depends(verify_assigned_official)],
+)
+def complete_match_endpoint(
+    match_id: int,
+    db: Session = Depends(get_db),
+):
+    """Complete a live match by an assigned official."""
+
+    return complete_match(db, match_id)
