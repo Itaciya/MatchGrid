@@ -1,3 +1,4 @@
+
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
@@ -11,51 +12,56 @@ class Dispute(Base):
 
     id: Mapped[int] = mapped_column(
         primary_key=True,
-        index=True
+        index=True,
     )
 
     match_id: Mapped[int] = mapped_column(
         ForeignKey("matches.id"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     reason: Mapped[str] = mapped_column(
         Text,
-        nullable=False
+        nullable=False,
     )
 
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        default="pending"
+        default="pending",
+    )
+
+    resolution: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        nullable=False
+        nullable=False,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
-        nullable=False
+        nullable=False,
     )
 
     match = relationship(
         "Match",
-        backref="disputes"
+        backref="disputes",
     )
 
     user = relationship(
         "User",
-        backref="disputes"
+        backref="disputes",
     )

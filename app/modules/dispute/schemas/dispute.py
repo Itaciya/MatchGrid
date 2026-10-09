@@ -1,3 +1,4 @@
+
 from datetime import datetime
 from typing import Annotated
 
@@ -22,13 +23,19 @@ class DisputeUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reason: str | None = Field(
-        default=None, min_length=1, max_length=5000
+        default=None,
+        min_length=1,
+        max_length=5000,
     )
     status: str | None = Field(
-        default=None, min_length=1, max_length=50
+        default=None,
+        min_length=1,
+        max_length=50,
     )
     resolution: str | None = Field(
-        default=None, min_length=1, max_length=5000
+        default=None,
+        min_length=1,
+        max_length=5000,
     )
 
     @model_validator(mode="after")
@@ -44,6 +51,7 @@ class DisputeUpdate(BaseModel):
             raise ValueError(
                 "At least one field must be provided for an update"
             )
+
         return self
 
 

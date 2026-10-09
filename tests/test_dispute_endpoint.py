@@ -219,3 +219,146 @@ def test_dispute_with_missing_reason_is_rejected(db):
     )
 
     assert response.status_code == 422
+
+def test_dispute_owner_can_retrieve_dispute_by_id(db):
+    user = create_user(db)
+    opponent = create_user(db)
+    organizer = create_user(db, role="organiser")
+
+    team_a = create_team(db, user, "Team A")
+    team_b = create_team(db, opponent, "Team B")
+    create_player(db, user, team_a)
+    create_player(db, opponent, team_b)
+
+    match = create_match(db, organizer, team_a, team_b)
+
+    dispute = Dispute(
+        match_id=match.id,
+        user_id=user.id,
+        reason="The match result is incorrect.",
+        status="pending",
+    )
+    db.add(dispute)
+    db.commit()
+    db.refresh(dispute)
+
+    response = client.get(
+        f"/disputes/{dispute.id}",
+        headers=auth_header(user),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == dispute.id
+    assert response.json()["match_id"] == match.id
+    assert response.json()["reason"] == "The match result is incorrect."
+    assert response.json()["status"] == "pending"
+
+
+def test_missing_dispute_returns_404(db):
+    user = create_user(db)
+    db.commit()
+
+    response = client.get(
+        "/disputes/999999999",
+        headers=auth_header(user),
+    )
+
+    assert response.status_code == 404
+
+
+def test_non_participant_cannot_retrieve_dispute(db):
+    owner = create_user(db)
+    opponent = create_user(db)
+    outsider = create_user(db)
+    organizer = create_user(db, role="organiser")
+
+    team_a = create_team(db, owner, "Team A")
+    team_b = create_team(db, opponent, "Team B")
+    outsider_team = create_team(db, outsider, "Outsider Team")
+
+    create_player(db, owner, team_a)
+    create_player(db, opponent, team_b)
+    create_player(db, outsider, outsider_team)
+
+    match = create_match(db, organizer, team_a, team_b)
+
+    dispute = Dispute(
+        match_id=match.id,
+        user_id=owner.id,
+        reason="Please review this result.",
+        status="pending",
+    )
+    db.add(dispute)
+    db.commit()
+    db.refresh(dispute)
+
+    response = client.get(
+        f"/disputes/{dispute.id}",
+        headers=auth_header(outsider),
+    )
+
+    assert response.status_code == 403
+
+
+def test_match_participant_can_retrieve_disputes_by_match(db):
+    user = create_user(db)
+    opponent = create_user(db)
+    organizer = create_user(db, role="organiser")
+
+    team_a = create_team(db, user, "Team A")
+    team_b = create_team(db, opponent, "Team B")
+    create_player(db, user, team_a)
+    create_player(db, opponent, team_b)
+
+    match = create_match(db, organizer, team_a, team_b)
+
+    dispute = Dispute(
+        match_id=match.id,
+        user_id=user.id,
+        reason="Please review this match.",
+        status="pending",
+    )
+    db.add(dispute)
+    db.commit()
+    db.refresh(dispute)
+
+    response = client.get(
+        f"/disputes/match/{match.id}",
+        headers=auth_header(user),
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["id"] == dispute.id
+    assert response.json()[0]["match_id"] == match.id
+
+
+def test_non_participant_cannot_retrieve_match_disputes(db):
+    owner = create_user(db)
+    opponent = create_user(db)
+    outsider = create_user(db)
+    organizer = create_user(db, role="organiser")
+
+    team_a = create_team(db, owner, "Team A")
+    team_b = create_team(db, opponent, "Team B")
+    outsider_team = create_team(db, outsider, "Outsider Team")
+
+    create_player(db, owner, team_a)
+    create_player(db, opponent, team_b)
+    create_player(db, outsider, outsider_team)
+
+    match = create_match(db, organizer, team_a, team_b)
+    db.commit()
+
+    response = client.get(
+        f"/disputes/match/{match.id}",
+        headers=auth_header(outsider),
+    )
+
+    assert response.status_code == 403
+
+
+def test_retrieving_dispute_without_authentication_returns_401():
+    response = client.get("/disputes/999999999")
+
+    assert response.status_code == 401
