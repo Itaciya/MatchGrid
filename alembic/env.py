@@ -20,6 +20,8 @@ from app.modules.notification.models.notification import Notification
 from app.modules.dispute.models.dispute import Dispute
 from app.modules.official_assignment.models.official_assignment import OfficialAssignment
 from app.modules.match.models.match_result import MatchResult
+from app.modules.match.models.match_result_correction import MatchResultCorrection
+from app.modules.match.models.match_result_correction import MatchResultCorrection
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.tournament_team.models.tournament_team import TournamentTeam
 from app.modules.venue.models.venue import Venue
