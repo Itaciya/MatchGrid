@@ -303,7 +303,10 @@ def test_staff_retrieval_excludes_inactive_assignments(db):
     assert response.json() == []
 
 
-@pytest.mark.parametrize("role", ["player", "organiser", "spectator"])
+@pytest.mark.parametrize(
+    "role",
+    ["player", "organiser", "spectator"],
+)
 def test_non_staff_cannot_retrieve_assigned_matches(db, role):
     user = create_user(db, role)
 
@@ -317,5 +320,16 @@ def test_non_staff_cannot_retrieve_assigned_matches(db, role):
 
 def test_assigned_match_retrieval_requires_authentication():
     response = client.get("/official-assignments/my-matches")
+
+    assert response.status_code == 401
+
+
+def test_inactive_official_cannot_retrieve_assigned_matches(db):
+    referee = create_user(db, "official", is_active=False)
+
+    response = client.get(
+        "/official-assignments/my-matches",
+        headers=auth_header(referee),
+    )
 
     assert response.status_code == 401
