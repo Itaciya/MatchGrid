@@ -7,6 +7,8 @@ from app.core.exceptions import ForbiddenException, NotFoundException, Unauthori
 from app.core.security import decode_token
 from app.data_access.database import get_db
 from app.data_access.redis_client import get_redis
+from app.modules.match.models.match import Match
+from app.modules.official_assignment.models.official_assignment import OfficialAssignment
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 
@@ -93,3 +95,52 @@ def verify_tournament_owner(
         raise ForbiddenException(detail="You do not own this tournament")
 
     return tournament
+
+
+ASSIGNMENT_STATUS_ACTIVE = "active"
+
+
+def verify_assigned_official(
+    match_id: int,
+    current_user: User = Depends(require_role("scorer", "official")),
+    db: Session = Depends(get_db),
+) -> Match:
+    """SCRUM-144: the user must hold an official role AND have an active
+    assignment to this specific match. Holding the role alone is not enough."""
+    match = db.query(Match).filter(Match.id == match_id).first()
+
+    if match is None:
+        raise NotFoundException(detail="Match not found")
+
+    assignment = (
+        db.query(OfficialAssignment)
+        .filter(
+            OfficialAssignment.match_id == match_id,
+            OfficialAssignment.official_id == current_user.id,
+            OfficialAssignment.status == ASSIGNMENT_STATUS_ACTIVE,
+        )
+        .first()
+    )
+
+    if assignment is None:
+        raise ForbiddenException(detail="You are not assigned to this match")
+
+    return match
+
+
+def verify_match_organiser(
+    match_id: int,
+    current_user: User = Depends(require_role("organiser")),
+    db: Session = Depends(get_db),
+) -> User:
+    """SCRUM-146/152: the organiser must own the tournament this match
+    belongs to. Returns the organiser so the route can record who reviewed."""
+    match = db.query(Match).filter(Match.id == match_id).first()
+
+    if match is None:
+        raise NotFoundException(detail="Match not found")
+
+    if match.tournament.organizer_id != current_user.id:
+        raise ForbiddenException(detail="You do not own this tournament")
+
+    return current_user

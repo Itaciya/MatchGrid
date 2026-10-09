@@ -104,6 +104,9 @@ def test_response_serializes_from_orm_like_object():
         team_a_score = 3
         team_b_score = 1
         is_verified = False
+        verification_status = "pending"
+        reviewed_by_id = None
+        reviewed_at = None
         created_at = now
         updated_at = now
 
