@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import require_role, verify_tournament_owner
+from app.core.dependencies import verify_assigned_official, verify_tournament_owner
 from app.core.exceptions import BadRequestException
 from app.data_access.database import get_db
 
@@ -87,7 +87,7 @@ def regenerate_fixtures_endpoint(
 @router.post(
     "/{match_id}/start",
     response_model=MatchStatusResponse,
-    dependencies=[Depends(require_role("scorer", "official"))],
+    dependencies=[Depends(verify_assigned_official)],
 )
 def start_match_endpoint(
     match_id: int,

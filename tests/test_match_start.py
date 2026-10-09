@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.modules.match.models.match import Match
+from app.modules.official_assignment.models.official_assignment import OfficialAssignment
 from app.modules.player_team.models.team import Team, TeamStatus
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
@@ -79,10 +80,23 @@ def _make_match(db, status="scheduled", with_teams=True, started_at=None):
     return match
 
 
+def _assign(db, match, user, assignment_type="referee", status="active"):
+    assignment = OfficialAssignment(
+        match_id=match.id,
+        official_id=user.id,
+        assignment_type=assignment_type,
+        status=status,
+    )
+    db.add(assignment)
+    db.commit()
+    return assignment
+
+
 @pytest.mark.parametrize("role", ["scorer", "official"])
-def test_authorised_roles_can_start_a_scheduled_match(db, role):
+def test_assigned_roles_can_start_a_scheduled_match(db, role):
     user = _make_user(db, role)
     match = _make_match(db)
+    _assign(db, match, user)
 
     response = client.post(
         f"/matches/{match.id}/start", headers=_auth_header(user)
@@ -98,6 +112,7 @@ def test_authorised_roles_can_start_a_scheduled_match(db, role):
 def test_start_is_persisted_to_the_database(db):
     user = _make_user(db, "scorer")
     match = _make_match(db)
+    _assign(db, match, user)
 
     client.post(f"/matches/{match.id}/start", headers=_auth_header(user))
 
@@ -109,6 +124,7 @@ def test_start_is_persisted_to_the_database(db):
 def test_start_time_comes_from_the_server_not_the_client(db):
     user = _make_user(db, "scorer")
     match = _make_match(db)
+    _assign(db, match, user)
 
     before = datetime.now(timezone.utc)
     response = client.post(
@@ -127,6 +143,7 @@ def test_start_time_comes_from_the_server_not_the_client(db):
 def test_invalid_status_transition_is_rejected(db, status):
     user = _make_user(db, "scorer")
     match = _make_match(db, status=status)
+    _assign(db, match, user)
 
     response = client.post(
         f"/matches/{match.id}/start", headers=_auth_header(user)
@@ -140,6 +157,7 @@ def test_rejected_start_does_not_modify_the_match(db):
     user = _make_user(db, "scorer")
     original_start = datetime(2099, 1, 2, 10, 5, tzinfo=timezone.utc)
     match = _make_match(db, status="live", started_at=original_start)
+    _assign(db, match, user)
 
     client.post(f"/matches/{match.id}/start", headers=_auth_header(user))
 
@@ -151,6 +169,7 @@ def test_rejected_start_does_not_modify_the_match(db):
 def test_match_without_both_teams_cannot_start(db):
     user = _make_user(db, "scorer")
     match = _make_match(db, with_teams=False)
+    _assign(db, match, user)
 
     response = client.post(
         f"/matches/{match.id}/start", headers=_auth_header(user)
@@ -171,9 +190,10 @@ def test_starting_a_nonexistent_match_returns_404(db):
 
 
 @pytest.mark.parametrize("role", ["player", "spectator", "organiser"])
-def test_other_roles_cannot_start_a_match(db, role):
+def test_other_roles_cannot_start_a_match_even_if_assigned(db, role):
     user = _make_user(db, role)
     match = _make_match(db)
+    _assign(db, match, user)
 
     response = client.post(
         f"/matches/{match.id}/start", headers=_auth_header(user)
@@ -190,3 +210,33 @@ def test_start_without_a_token_is_rejected(db):
     response = client.post(f"/matches/{match.id}/start")
 
     assert response.status_code == 401
+
+
+def test_unassigned_official_cannot_start_a_match(db):
+    user = _make_user(db, "scorer")
+    match = _make_match(db)
+
+    response = client.post(
+        f"/matches/{match.id}/start", headers=_auth_header(user)
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["message"] == "You are not assigned to this match"
+    db.refresh(match)
+    assert match.status == "scheduled"
+    assert match.started_at is None
+
+
+def test_assignment_to_another_match_does_not_authorise_start(db):
+    user = _make_user(db, "scorer")
+    other_match = _make_match(db)
+    target_match = _make_match(db)
+    _assign(db, other_match, user)
+
+    response = client.post(
+        f"/matches/{target_match.id}/start", headers=_auth_header(user)
+    )
+
+    assert response.status_code == 403
+    db.refresh(target_match)
+    assert target_match.status == "scheduled"
