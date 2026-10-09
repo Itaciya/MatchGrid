@@ -24,19 +24,23 @@ class FixtureCreate(BaseModel):
 
 
 class FixtureUpdate(BaseModel):
-    """Schema for updating a fixture's schedule or venue."""
+    """Schema for updating fixture schedule, venue, or participants."""
 
     scheduled_at: datetime | None = None
     venue_id: int | None = Field(default=None, gt=0)
+    team_a_id: int | None = Field(default=None, gt=0)
+    team_b_id: int | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
     def validate_update_fields(self):
         if not self.model_fields_set:
             raise ValueError("At least one field must be provided")
 
-        if "scheduled_at" in self.model_fields_set:
-            if self.scheduled_at is None:
-                raise ValueError("scheduled_at cannot be null")
+        if (
+            "scheduled_at" in self.model_fields_set
+            and self.scheduled_at is None
+        ):
+            raise ValueError("scheduled_at cannot be null")
 
         return self
 

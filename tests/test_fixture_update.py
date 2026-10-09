@@ -10,6 +10,7 @@ from app.modules.player_team.models.team import Team, TeamStatus
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 from app.modules.venue.models.venue import Venue
+from app.modules.registration.models.registration import Registration
 
 
 client = TestClient(app)
@@ -337,3 +338,154 @@ def test_update_fixture_accepts_valid_venue(db):
 
     db.refresh(match)
     assert match.venue_id == venue.id
+
+
+def approve_team_registration(db, tournament_id, team_id):
+    registration = Registration(
+        tournament_id=tournament_id,
+        team_id=team_id,
+        player_id=None,
+        registration_type="team",
+        status="approved",
+    )
+    db.add(registration)
+    db.commit()
+    db.refresh(registration)
+    return registration
+
+
+def test_update_fixture_team_successfully(db):
+    organizer = create_user(db)
+    tournament = create_tournament(db, organizer.id)
+
+    team_a = create_team(db, organizer.id)
+    team_b = create_team(db, organizer.id)
+    replacement_team = create_team(db, organizer.id)
+
+    approve_team_registration(
+        db,
+        tournament.id,
+        replacement_team.id,
+    )
+
+    match = create_match(
+        db,
+        tournament.id,
+        1,
+        team_a.id,
+        team_b.id,
+        datetime(2099, 1, 2, 10, 0, tzinfo=timezone.utc),
+    )
+
+    response = client.patch(
+        update_url(tournament.id, match.id),
+        headers=auth_header(organizer),
+        json={"team_a_id": replacement_team.id},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["team_a_id"] == replacement_team.id
+    assert response.json()["team_b_id"] == team_b.id
+
+    db.refresh(match)
+    assert match.team_a_id == replacement_team.id
+    assert match.team_b_id == team_b.id
+
+
+def test_update_fixture_rejects_unapproved_team(db):
+    organizer = create_user(db)
+    tournament = create_tournament(db, organizer.id)
+
+    team_a = create_team(db, organizer.id)
+    team_b = create_team(db, organizer.id)
+    unapproved_team = create_team(db, organizer.id)
+
+    match = create_match(
+        db,
+        tournament.id,
+        1,
+        team_a.id,
+        team_b.id,
+        datetime(2099, 1, 2, 10, 0, tzinfo=timezone.utc),
+    )
+
+    response = client.patch(
+        update_url(tournament.id, match.id),
+        headers=auth_header(organizer),
+        json={"team_a_id": unapproved_team.id},
+    )
+
+    assert response.status_code == 400
+
+    db.refresh(match)
+    assert match.team_a_id == team_a.id
+    assert match.team_b_id == team_b.id
+
+
+def test_update_fixture_rejects_same_team_in_both_positions(db):
+    organizer = create_user(db)
+    tournament = create_tournament(db, organizer.id)
+
+    team_a = create_team(db, organizer.id)
+    team_b = create_team(db, organizer.id)
+
+    approve_team_registration(db, tournament.id, team_a.id)
+
+    match = create_match(
+        db,
+        tournament.id,
+        1,
+        team_a.id,
+        team_b.id,
+        datetime(2099, 1, 2, 10, 0, tzinfo=timezone.utc),
+    )
+
+    response = client.patch(
+        update_url(tournament.id, match.id),
+        headers=auth_header(organizer),
+        json={"team_b_id": team_a.id},
+    )
+
+    assert response.status_code == 400
+
+    db.refresh(match)
+    assert match.team_a_id == team_a.id
+    assert match.team_b_id == team_b.id
+
+
+def test_update_fixture_rejects_inactive_team(db):
+    organizer = create_user(db)
+    tournament = create_tournament(db, organizer.id)
+
+    team_a = create_team(db, organizer.id)
+    team_b = create_team(db, organizer.id)
+    inactive_team = create_team(db, organizer.id)
+
+    inactive_team.status = TeamStatus.INACTIVE
+    db.commit()
+
+    approve_team_registration(
+        db,
+        tournament.id,
+        inactive_team.id,
+    )
+
+    match = create_match(
+        db,
+        tournament.id,
+        1,
+        team_a.id,
+        team_b.id,
+        datetime(2099, 1, 2, 10, 0, tzinfo=timezone.utc),
+    )
+
+    response = client.patch(
+        update_url(tournament.id, match.id),
+        headers=auth_header(organizer),
+        json={"team_a_id": inactive_team.id},
+    )
+
+    assert response.status_code == 400
+
+    db.refresh(match)
+    assert match.team_a_id == team_a.id
