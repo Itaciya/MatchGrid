@@ -29,7 +29,9 @@ from app.modules.spectator.routes import router as spectator_router
 from app.modules.tournament.routes import router as tournament_router
 from app.modules.user.routes import router as user_router
 from app.modules.venue.routes import router as venue_router
-
+from app.modules.official_assignment.routes import (
+    router as official_assignment_router,
+)
 
 configure_logging()
 
@@ -117,7 +119,7 @@ app.include_router(score_router)
 app.include_router(venue_router)
 app.include_router(tournament_router)
 app.include_router(dispute_router)
-
+app.include_router(official_assignment_router)
 
 # Root endpoint
 @app.get("/")
