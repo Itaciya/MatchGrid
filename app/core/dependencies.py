@@ -126,3 +126,21 @@ def verify_assigned_official(
         raise ForbiddenException(detail="You are not assigned to this match")
 
     return match
+
+
+def verify_match_organiser(
+    match_id: int,
+    current_user: User = Depends(require_role("organiser")),
+    db: Session = Depends(get_db),
+) -> User:
+    """SCRUM-146/152: the organiser must own the tournament this match
+    belongs to. Returns the organiser so the route can record who reviewed."""
+    match = db.query(Match).filter(Match.id == match_id).first()
+
+    if match is None:
+        raise NotFoundException(detail="Match not found")
+
+    if match.tournament.organizer_id != current_user.id:
+        raise ForbiddenException(detail="You do not own this tournament")
+
+    return current_user
