@@ -2,31 +2,32 @@ import logging
 import time
 
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import SQLAlchemyError
-from app.modules.tournament.routes import router as tournament_router
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.routes.health import router as health_router
 from app.core.config import settings
-from app.core.logging import configure_logging
-from app.core.exceptions import AppException
 from app.core.exception_handlers import (
     app_exception_handler,
-    validation_exception_handler,
     database_exception_handler,
-    http_exception_handler,
     general_exception_handler,
+    http_exception_handler,
+    validation_exception_handler,
 )
+from app.core.exceptions import AppException
+from app.core.logging import configure_logging
 from app.data_access.database import test_database_connection
-from app.api.routes.health import router as health_router
+from app.modules.dispute.routes import router as dispute_router
+from app.modules.match.routes import router as match_router
 from app.modules.organiser.routes import router as organiser_router
 from app.modules.player_team.routes import router as player_team_router
-from app.modules.spectator.routes import router as spectator_router
-from app.modules.scorer.routes import router as scorer_router
-from app.modules.user.routes import router as user_router
-from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.modules.registration.routes import router as registration_router
-from app.modules.match.routes import router as match_router
+from app.modules.scorer.routes import router as scorer_router
+from app.modules.spectator.routes import router as spectator_router
+from app.modules.tournament.routes import router as tournament_router
+from app.modules.user.routes import router as user_router
 from app.modules.venue.routes import router as venue_router
 
 
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 logger.info("MatchGrid API application initialized")
 
 
+# Exception handlers
 app.add_exception_handler(
     AppException,
     app_exception_handler,
@@ -65,6 +67,7 @@ app.add_exception_handler(
 )
 
 
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -74,6 +77,7 @@ app.add_middleware(
 )
 
 
+# HTTP request logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.perf_counter()
@@ -122,6 +126,7 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+# Register API routers
 app.include_router(health_router)
 app.include_router(organiser_router)
 app.include_router(player_team_router)
@@ -132,8 +137,10 @@ app.include_router(registration_router)
 app.include_router(match_router)
 app.include_router(venue_router)
 app.include_router(tournament_router)
+app.include_router(dispute_router)
 
 
+# Root endpoint
 @app.get("/")
 def root():
     return {
@@ -142,6 +149,7 @@ def root():
     }
 
 
+# Database health endpoint
 @app.get("/health/database")
 def database_health():
     result = test_database_connection()
@@ -152,5 +160,5 @@ def database_health():
         logger.error("Database health check failed")
 
     return {
-        "database": result
+        "database": result,
     }
