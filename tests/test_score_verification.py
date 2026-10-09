@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-
+from app.modules.dispute.models.dispute import Dispute
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
@@ -438,3 +438,75 @@ def test_database_rejects_an_unknown_verification_status(db):
         db.commit()
 
     db.rollback()
+
+# --- Prevent disputed result finalization (SCRUM-159) ---
+
+@pytest.mark.parametrize(
+    "dispute_status",
+    ["pending", "under_review"],
+)
+def test_unresolved_dispute_blocks_score_verification(
+    db,
+    dispute_status,
+):
+    match, organiser = _make_match(db)
+    score = _make_score(db, match)
+    complainant = _make_user(db, "player")
+
+    dispute = Dispute(
+        match_id=match.id,
+        user_id=complainant.id,
+        reason="The reported match score is incorrect.",
+        status=dispute_status,
+    )
+    db.add(dispute)
+    db.commit()
+    db.refresh(dispute)
+
+    response = _review(match, organiser, "verified")
+
+    assert response.status_code == 409
+
+    message = response.json()["error"]["message"]
+    assert f"ID={dispute.id}" in message
+    assert f"status={dispute_status}" in message
+    assert "The reported match score is incorrect." in message
+
+    db.refresh(score)
+    assert score.verification_status == "pending"
+    assert score.is_verified is False
+    assert score.reviewed_by_id is None
+    assert score.reviewed_at is None
+
+
+@pytest.mark.parametrize(
+    "dispute_status",
+    ["resolved", "rejected"],
+)
+def test_closed_dispute_does_not_block_score_verification(
+    db,
+    dispute_status,
+):
+    match, organiser = _make_match(db)
+    score = _make_score(db, match)
+    complainant = _make_user(db, "player")
+
+    dispute = Dispute(
+        match_id=match.id,
+        user_id=complainant.id,
+        reason="The result was disputed and reviewed.",
+        status=dispute_status,
+        resolution="The complaint has received a final decision.",
+    )
+    db.add(dispute)
+    db.commit()
+
+    response = _review(match, organiser, "verified")
+
+    assert response.status_code == 200
+    assert response.json()["verification_status"] == "verified"
+    assert response.json()["is_verified"] is True
+
+    db.refresh(score)
+    assert score.verification_status == "verified"
+    assert score.is_verified is True

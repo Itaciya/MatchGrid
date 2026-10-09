@@ -1,7 +1,9 @@
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query,status
 from sqlalchemy.orm import Session
-
+from app.modules.tournament.services.standings_service import (
+    calculate_tournament_standings,
+)
 from app.data_access.database import get_db
 from app.modules.tournament.schemas.tournament import TournamentResponse
 from app.modules.tournament.services.tournament_service import (
@@ -50,3 +52,17 @@ def get_tournament_details(
         )
 
     return tournament
+@router.get(
+    "/{tournament_id}/standings",
+    status_code=status.HTTP_200_OK,
+)
+def get_tournament_standings_endpoint(
+    tournament_id: int,
+    db: Session = Depends(get_db),
+):
+    """Return standings calculated from official match results."""
+
+    return calculate_tournament_standings(
+        db=db,
+        tournament_id=tournament_id,
+    )

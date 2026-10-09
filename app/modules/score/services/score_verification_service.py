@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-
+from app.modules.dispute.models.dispute import Dispute
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import (
@@ -67,6 +67,34 @@ def review_score(
         )
 
     ensure_transition_allowed(score.verification_status, decision)
+    if decision == VERIFIED:
+        active_disputes = (
+            db.query(Dispute)
+            .filter(
+                Dispute.match_id == match_id,
+                Dispute.status.in_(("pending", "under_review")),
+            )
+            .order_by(Dispute.created_at.asc())
+            .all()
+        )
+
+        if active_disputes:
+            dispute_details = "; ".join(
+                (
+                    f"ID={dispute.id}, "
+                    f"status={dispute.status}, "
+                    f"reason={dispute.reason}"
+                )
+                for dispute in active_disputes
+            )
+
+            raise ConflictException(
+                detail=(
+                    "Score cannot be verified while unresolved disputes "
+                    "exist. Resolve or reject these disputes first. "
+                    f"Active disputes: {dispute_details}"
+                )
+            )
 
     if match.status != MATCH_STATUS_LIVE:
         raise ConflictException(
