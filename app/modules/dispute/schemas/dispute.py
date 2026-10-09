@@ -2,8 +2,13 @@ from typing import Annotated, Literal
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 MatchId = Annotated[int, Field(ge=1, strict=True)]
 
@@ -78,3 +83,51 @@ class DisputeResponse(BaseModel):
     resolution: str | None = None
     created_at: datetime
     updated_at: datetime
+
+class DisputeMatchInfo(BaseModel):
+    """Match information included in an organizer's dispute review."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    match_number: int
+    scheduled_at: datetime
+    status: str
+    team_a_id: int
+    team_b_id: int
+    team_a_name: str
+    team_b_name: str
+
+class DisputeResultInfo(BaseModel):
+    """Score information associated with a disputed match."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    team_a_score: int
+    team_b_score: int
+    verification_status: str
+
+
+class OrganizerDisputeReviewResponse(DisputeResponse):
+    """Dispute details with the related match and optional result."""
+
+    match: DisputeMatchInfo
+    result: DisputeResultInfo | None = None
+
+class DisputeResolutionRequest(BaseModel):
+    """Request body for an organizer's dispute resolution decision."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision: Literal["resolved", "rejected"]
+    resolution: str = Field(min_length=1, max_length=5000)
+
+    @field_validator("resolution")
+    @classmethod
+    def validate_resolution(cls, value: str) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError("Resolution details cannot be empty")
+
+        return value
