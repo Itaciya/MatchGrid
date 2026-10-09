@@ -410,7 +410,8 @@ def test_empty_update_is_rejected(db):
 def test_verified_score_cannot_be_modified(db):
     match = _make_match(db)
     user = _assigned_official(db, match)
-    score = _make_score(db, match, team_a_score=1, team_b_score=0, is_verified=True)
+    score = _make_score(db, match, team_a_score=1, team_b_score=0, is_verified=True,
+        verification_status="verified")
 
     response = client.patch(
         f"/matches/{match.id}/score",

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -51,5 +51,20 @@ class ScoreResponse(BaseModel):
     team_a_score: int
     team_b_score: int
     is_verified: bool
+    verification_status: str
+    reviewed_by_id: int | None
+    reviewed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class ScoreVerificationDecision(BaseModel):
+    """Organiser's decision on a submitted score.
+
+    'pending' is deliberately not accepted: a score only returns to
+    pending when its official corrects it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["verified", "rejected"]

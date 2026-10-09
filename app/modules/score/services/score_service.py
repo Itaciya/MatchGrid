@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictException, NotFoundException
 from app.modules.match.models.match import Match
-from app.modules.score.models.score import Score
+from app.modules.score.models.score import Score, ScoreVerificationStatus
 from app.modules.score.schemas.score import ScoreCreate, ScoreUpdate
 
 MATCH_STATUS_LIVE = "live"
@@ -90,6 +90,12 @@ def update_score(db: Session, match_id: int, data: ScoreUpdate) -> Score:
 
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(score, field, value)
+
+    # A rejected score that has been corrected must be reviewed again.
+    if score.verification_status == ScoreVerificationStatus.REJECTED.value:
+        score.verification_status = ScoreVerificationStatus.PENDING.value
+        score.reviewed_by_id = None
+        score.reviewed_at = None
 
     db.commit()
     db.refresh(score)

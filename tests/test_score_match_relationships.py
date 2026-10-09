@@ -85,6 +85,7 @@ def test_match_retrieves_its_score(db):
         team_a_score=3,
         team_b_score=2,
         is_verified=True,
+        verification_status="verified",
     )
     db.add(score)
     db.commit()

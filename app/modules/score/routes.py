@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import verify_assigned_official
+from app.core.dependencies import verify_assigned_official, verify_match_organiser
 from app.core.exceptions import BadRequestException
 from app.data_access.database import get_db
+from app.modules.score.schemas.score import ScoreVerificationDecision
+from app.modules.score.services.score_verification_service import review_score
+from app.modules.user.models import User
 from app.modules.score.schemas.score import (
     ScoreCreate,
     ScoreResponse,
@@ -49,3 +52,17 @@ def update_score_endpoint(
 ):
     """Update a live score. Assigned officials only; finalized scores are locked."""
     return update_score(db, match_id, data)
+
+
+@router.patch(
+    "/{match_id}/score/verification",
+    response_model=ScoreResponse,
+)
+def review_score_endpoint(
+    match_id: int,
+    data: ScoreVerificationDecision,
+    organiser: User = Depends(verify_match_organiser),
+    db: Session = Depends(get_db),
+):
+    """Verify or reject a submitted score. Organiser of the match's tournament only."""
+    return review_score(db, match_id, organiser.id, data.status)
