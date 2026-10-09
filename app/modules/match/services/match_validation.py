@@ -22,7 +22,7 @@ def validate_team_for_fixture(
 
     if team is None:
         raise NotFoundException(
-            detail="Team not found"
+            detail=f"Team with ID {team_id} was not found"
         )
 
     registration = (
@@ -36,12 +36,18 @@ def validate_team_for_fixture(
 
     if registration is None:
         raise BadRequestException(
-            detail="Team is not registered for this tournament"
+            detail=(
+                f"Team with ID {team_id} is not registered "
+                f"for tournament {tournament_id}"
+            )
         )
 
     if registration.status != RegistrationStatus.APPROVED.value:
         raise BadRequestException(
-            detail="Only approved participants can be included in fixtures"
+            detail=(
+                f"Team with ID {team_id} is not approved "
+                "for fixture generation"
+            )
         )
 
     return team
@@ -52,9 +58,14 @@ def validate_teams_for_fixture(
     tournament_id: int,
     team_ids: list[int],
 ) -> list[Team]:
-    if not team_ids:
+    if not team_ids or len(team_ids) < 2:
         raise BadRequestException(
-            detail="At least one team is required for fixture generation"
+            detail="At least two teams are required for fixture generation"
+        )
+
+    if len(team_ids) != len(set(team_ids)):
+        raise BadRequestException(
+            detail="Duplicate team IDs are not allowed in fixture generation"
         )
 
     validated_teams = []
