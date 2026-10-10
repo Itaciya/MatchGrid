@@ -14,6 +14,30 @@ WIN_POINTS = 3
 DRAW_POINTS = 1
 LOSS_POINTS = 0
 
+DEFAULT_TIE_BREAK_RULES = [
+    "score_difference",
+    "score_for",
+    "team_name",
+]
+
+ALLOWED_TIE_BREAK_RULES = {
+    "points",
+    "score_difference",
+    "score_for",
+    "score_against",
+    "wins",
+    "draws",
+    "losses",
+    "team_name",
+}
+
+# These criteria are better when their values are lower.
+ASCENDING_TIE_BREAK_RULES = {
+    "score_against",
+    "losses",
+    "team_name",
+}
+
 
 def calculate_tournament_standings(
     db: Session,
@@ -23,25 +47,21 @@ def calculate_tournament_standings(
     Calculate tournament standings from official match results.
 
     Only completed matches with verified scores are counted.
-    Unverified, incomplete, missing, or invalid results are ignored.
 
-    Scoring rules are read from tournament.format_config:
-        points_per_win  (default: 3)
-        points_per_draw (default: 1)
-        points_per_loss (default: 0)
+    Default scoring:
+        Win = 3 points
+        Draw = 1 point
+        Loss = 0 points
 
-    Ranking order:
-        1. Points, descending
-        2. Score difference, descending
-        3. Total score for, descending
-        4. Team name, alphabetical
-        5. Team ID, ascending
+    Points are always the primary ranking criterion.
+    Additional tie-break criteria can be configured through
+    tournament.format_config["tie_break_rules"].
 
-    Standings are calculated on demand. Approved score corrections
-    are reflected in the next calculation.
+    Rankings are calculated on demand, so updated official results
+    are reflected in subsequent standings calculations.
     """
 
-    # Find tournament.
+    # Find the tournament.
     tournament = (
         db.query(Tournament)
         .filter(Tournament.id == tournament_id)
@@ -51,7 +71,7 @@ def calculate_tournament_standings(
     if tournament is None:
         raise NotFoundException(detail="Tournament not found")
 
-    # Read configurable scoring rules, using defaults when unspecified.
+    # Read tournament-specific configuration.
     scoring_config = tournament.format_config or {}
 
     if not isinstance(scoring_config, dict):
@@ -59,6 +79,7 @@ def calculate_tournament_standings(
             detail="Invalid tournament scoring configuration"
         )
 
+    # Load configurable scoring rules with default values.
     points_per_win = scoring_config.get(
         "points_per_win", WIN_POINTS
     )
@@ -88,7 +109,32 @@ def calculate_tournament_standings(
                 )
             )
 
-    # Load registered teams and their team data efficiently.
+    # Read and validate configurable tie-break rules.
+    tie_break_rules = scoring_config.get(
+        "tie_break_rules",
+        DEFAULT_TIE_BREAK_RULES,
+    )
+
+    if not isinstance(tie_break_rules, list):
+        raise BadRequestException(
+            detail="tie_break_rules must be a list"
+        )
+
+    if any(
+        not isinstance(rule, str)
+        or rule not in ALLOWED_TIE_BREAK_RULES
+        for rule in tie_break_rules
+    ):
+        raise BadRequestException(
+            detail="Invalid tournament tie-break rule"
+        )
+
+    if len(tie_break_rules) != len(set(tie_break_rules)):
+        raise BadRequestException(
+            detail="tie_break_rules cannot contain duplicates"
+        )
+
+    # Load all registered teams efficiently.
     memberships = (
         db.query(TournamentTeam)
         .options(selectinload(TournamentTeam.team))
@@ -131,7 +177,7 @@ def calculate_tournament_standings(
         .all()
     )
 
-    # Process each eligible match.
+    # Calculate statistics from each eligible match.
     for match, score in official_matches:
         team_a_id = match.team_a_id
         team_b_id = match.team_b_id
@@ -175,7 +221,7 @@ def calculate_tournament_standings(
         team_b["score_for"] += team_b_score
         team_b["score_against"] += team_a_score
 
-        # Apply the tournament's configured scoring rules.
+        # Apply configured scoring rules.
         if team_a_score > team_b_score:
             team_a["wins"] += 1
             team_b["losses"] += 1
@@ -197,7 +243,7 @@ def calculate_tournament_standings(
             team_a["points"] += points_per_draw
             team_b["points"] += points_per_draw
 
-    # Calculate score difference for every registered team.
+    # Calculate score difference.
     result = list(standings.values())
 
     for row in result:
@@ -205,18 +251,42 @@ def calculate_tournament_standings(
             row["score_for"] - row["score_against"]
         )
 
-    # Sort using the ranking and tie-break rules.
-    result.sort(
-        key=lambda row: (
-            -row["points"],
-            -row["score_difference"],
-            -row["score_for"],
-            row["team_name"].casefold(),
-            row["team_id"],
-        )
-    )
+    # Sort deterministically using the configured ranking rules.
+    # Points are always the primary criterion.
+    def ranking_sort_key(row: dict) -> tuple:
+        key = [-row["points"]]
 
-    # Assign a unique rank to each team.
+        for rule in tie_break_rules:
+            # Points are already compared first.
+            if rule == "points":
+                continue
+
+            value = row[rule]
+
+            if rule in ASCENDING_TIE_BREAK_RULES:
+                # Lower score against/losses and alphabetical team name
+                # take precedence for these criteria.
+                if rule == "team_name":
+                    key.append(value.casefold())
+                else:
+                    key.append(value)
+            else:
+                # Higher values take precedence for other numeric criteria.
+                key.append(-value)
+
+        # Stable fallback when all configured criteria are tied.
+        key.extend(
+            [
+                row["team_name"].casefold(),
+                row["team_id"],
+            ]
+        )
+
+        return tuple(key)
+
+    result.sort(key=ranking_sort_key)
+
+    # Assign unique ranking positions.
     for rank, row in enumerate(result, start=1):
         row["rank"] = rank
 
