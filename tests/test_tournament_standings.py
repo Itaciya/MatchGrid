@@ -1,7 +1,7 @@
+import pytest
 import uuid
 from datetime import datetime, timezone
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.core.exceptions import NotFoundException
@@ -11,9 +11,13 @@ from app.modules.dispute.models.dispute import Dispute
 from app.modules.dispute.schemas.dispute import DisputeResolutionRequest
 from app.modules.dispute.services.dispute_service import resolve_dispute
 from app.modules.match.models.match import Match
+from app.modules.match.services.match_status_service import complete_match
 from app.modules.player_team.models.team import Team, TeamStatus
 from app.modules.score.models.score import Score
-from app.modules.score.services.score_verification_service import VERIFIED
+from app.modules.score.services.score_verification_service import (
+    VERIFIED,
+    review_score,
+)
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.tournament.services.standings_service import (
     calculate_tournament_standings,
@@ -127,12 +131,18 @@ def _make_match_with_score(
 
 
 def _standings_by_team(db, tournament_id):
+    """Return standings indexed by team ID."""
+
     standings = calculate_tournament_standings(
         db=db,
         tournament_id=tournament_id,
     )
     return {row["team_id"]: row for row in standings}
 
+
+# ---------------------------------------------------------
+# Finalized and verified results
+# ---------------------------------------------------------
 
 def test_standings_include_only_completed_verified_scores(db):
     tournament, _, team_a, team_b = _make_tournament_with_teams(db)
@@ -149,7 +159,7 @@ def test_standings_include_only_completed_verified_scores(db):
         team_b_score=0,
     )
 
-    # This score is not verified and must not affect standings.
+    # Unverified scores must not affect standings.
     _make_match_with_score(
         db,
         tournament,
@@ -162,7 +172,7 @@ def test_standings_include_only_completed_verified_scores(db):
         team_b_score=5,
     )
 
-    # This match is not complete and must not affect standings.
+    # A live match must not affect finalized standings.
     _make_match_with_score(
         db,
         tournament,
@@ -201,6 +211,10 @@ def test_standings_include_registered_teams_without_matches(db):
         assert standings[team_id]["losses"] == 0
         assert standings[team_id]["points"] == 0
 
+
+# ---------------------------------------------------------
+# Recalculate standings after a corrected result
+# ---------------------------------------------------------
 
 def test_standings_reflect_score_changes_after_dispute_resolution(db):
     tournament, organiser, team_a, team_b = (
@@ -267,7 +281,11 @@ def test_standings_reflect_score_changes_after_dispute_resolution(db):
     assert after[team_b.id]["wins"] == 1
 
 
-def test_standings_endpoint_returns_200(db):
+# ---------------------------------------------------------
+# Standings endpoint
+# ---------------------------------------------------------
+
+def test_standings_endpoint_returns_200_with_consistent_response(db):
     tournament, _, team_a, team_b = _make_tournament_with_teams(db)
 
     _make_match_with_score(
@@ -280,6 +298,8 @@ def test_standings_endpoint_returns_200(db):
         team_a_score=1,
         team_b_score=0,
     )
+    tournament.fixtures_published = True
+    db.commit()
 
     response = client.get(
         f"/tournaments/{tournament.id}/standings"
@@ -288,9 +308,40 @@ def test_standings_endpoint_returns_200(db):
     assert response.status_code == 200
 
     data = response.json()
+
     assert len(data) == 2
-    assert all("points" in row for row in data)
-    assert all("rank" in row for row in data)
+
+    required_fields = {
+        "rank",
+        "team_id",
+        "team_name",
+        "played",
+        "wins",
+        "draws",
+        "losses",
+        "score_for",
+        "score_against",
+        "score_difference",
+        "points",
+    }
+
+    for row in data:
+        assert required_fields.issubset(row.keys())
+        assert isinstance(row["rank"], int)
+        assert isinstance(row["points"], int)
+        assert isinstance(row["wins"], int)
+        assert isinstance(row["draws"], int)
+        assert isinstance(row["losses"], int)
+
+    by_id = {row["team_id"]: row for row in data}
+
+    assert by_id[team_a.id]["rank"] == 1
+    assert by_id[team_a.id]["wins"] == 1
+    assert by_id[team_a.id]["points"] == 3
+
+    assert by_id[team_b.id]["rank"] == 2
+    assert by_id[team_b.id]["losses"] == 1
+    assert by_id[team_b.id]["points"] == 0
 
 
 def test_standings_for_unknown_tournament_raise_not_found(db):
@@ -299,6 +350,19 @@ def test_standings_for_unknown_tournament_raise_not_found(db):
             db=db,
             tournament_id=999999999,
         )
+
+
+def test_standings_endpoint_returns_404_for_unknown_tournament():
+    response = client.get(
+        "/tournaments/999999999/standings"
+    )
+
+    assert response.status_code == 404
+
+
+# ---------------------------------------------------------
+# Ranking and tie-break rules
+# ---------------------------------------------------------
 
 def test_standings_apply_ranking_tie_breakers(db):
     tournament, organiser, team_a, team_b = (
@@ -332,25 +396,37 @@ def test_standings_apply_ranking_tie_breakers(db):
     team_e = extra_teams["E"]
     team_f = extra_teams["F"]
 
-    # Team A beats B: difference +2, score for 2.
+    # Team A beats B: score difference +2.
     _make_match_with_score(
-        db, tournament, team_a, team_b,
+        db,
+        tournament,
+        team_a,
+        team_b,
         match_number=1,
-        team_a_score=2, team_b_score=0,
+        team_a_score=2,
+        team_b_score=0,
     )
 
-    # Team C beats D: difference +2, score for 5.
+    # Team C beats D: score difference +2, higher score for.
     _make_match_with_score(
-        db, tournament, team_c, team_d,
+        db,
+        tournament,
+        team_c,
+        team_d,
         match_number=2,
-        team_a_score=5, team_b_score=3,
+        team_a_score=5,
+        team_b_score=3,
     )
 
     # Team E has a larger score difference than C.
     _make_match_with_score(
-        db, tournament, team_e, team_f,
+        db,
+        tournament,
+        team_e,
+        team_f,
         match_number=3,
-        team_a_score=4, team_b_score=0,
+        team_a_score=4,
+        team_b_score=0,
     )
 
     result = calculate_tournament_standings(
@@ -360,7 +436,6 @@ def test_standings_apply_ranking_tie_breakers(db):
 
     ranked_team_ids = [row["team_id"] for row in result]
 
-    # Points first, then score difference, then score for.
     assert ranked_team_ids == [
         team_e.id,
         team_c.id,
@@ -373,6 +448,7 @@ def test_standings_apply_ranking_tie_breakers(db):
     assert [row["rank"] for row in result] == [
         1, 2, 3, 4, 5, 6
     ]
+
 
 def test_standings_ignore_negative_scores(db):
     tournament, _, team_a, team_b = (
@@ -398,6 +474,7 @@ def test_standings_ignore_negative_scores(db):
     assert standings[team_b.id]["played"] == 0
     assert standings[team_b.id]["points"] == 0
 
+
 def test_standings_break_complete_ties_by_team_name(db):
     tournament, _, team_a, team_b = (
         _make_tournament_with_teams(db)
@@ -415,6 +492,91 @@ def test_standings_break_complete_ties_by_team_name(db):
     assert result[0]["rank"] == 1
     assert result[1]["rank"] == 2
 
+
+def test_standings_follow_configured_tie_break_order(db):
+    tournament, organiser, team_a, team_b = (
+        _make_tournament_with_teams(db)
+    )
+
+    unique = uuid.uuid4().hex
+
+    team_c = Team(
+        name=f"Standings Team C {unique}",
+        captain_id=organiser.id,
+        status=TeamStatus.ACTIVE,
+    )
+    team_d = Team(
+        name=f"Standings Team D {unique}",
+        captain_id=organiser.id,
+        status=TeamStatus.ACTIVE,
+    )
+
+    db.add_all([team_c, team_d])
+    db.commit()
+    db.refresh(team_c)
+    db.refresh(team_d)
+
+    db.add_all(
+        [
+            TournamentTeam(
+                tournament_id=tournament.id,
+                team_id=team_c.id,
+            ),
+            TournamentTeam(
+                tournament_id=tournament.id,
+                team_id=team_d.id,
+            ),
+        ]
+    )
+
+    tournament.format_config = {
+        "number_of_teams": 4,
+        "tie_break_rules": [
+            "score_for",
+            "score_difference",
+            "team_name",
+        ],
+    }
+    db.commit()
+
+    # Team A wins 5-4: 3 points, score for 5.
+    _make_match_with_score(
+        db,
+        tournament,
+        team_a,
+        team_b,
+        match_number=1,
+        team_a_score=5,
+        team_b_score=4,
+    )
+
+    # Team C wins 2-0: 3 points, score for 2.
+    _make_match_with_score(
+        db,
+        tournament,
+        team_c,
+        team_d,
+        match_number=2,
+        team_a_score=2,
+        team_b_score=0,
+    )
+
+    standings = calculate_tournament_standings(
+        db=db,
+        tournament_id=tournament.id,
+    )
+
+    # Points tie, so configured score_for takes priority.
+    assert standings[0]["team_id"] == team_a.id
+    assert standings[0]["rank"] == 1
+
+    assert standings[1]["team_id"] == team_c.id
+    assert standings[1]["rank"] == 2
+
+
+# ---------------------------------------------------------
+# Cancelled and invalid matches
+# ---------------------------------------------------------
 
 def test_standings_ignore_cancelled_matches(db):
     tournament, _, team_a, team_b = (
@@ -435,17 +597,55 @@ def test_standings_ignore_cancelled_matches(db):
 
     standings = _standings_by_team(db, tournament.id)
 
-    # A cancelled match must not affect either team's statistics.
-    assert standings[team_a.id]["played"] == 0
-    assert standings[team_a.id]["wins"] == 0
-    assert standings[team_a.id]["losses"] == 0
-    assert standings[team_a.id]["points"] == 0
+    for team_id in (team_a.id, team_b.id):
+        assert standings[team_id]["played"] == 0
+        assert standings[team_id]["wins"] == 0
+        assert standings[team_id]["losses"] == 0
+        assert standings[team_id]["points"] == 0
 
-    assert standings[team_b.id]["played"] == 0
-    assert standings[team_b.id]["wins"] == 0
-    assert standings[team_b.id]["losses"] == 0
-    assert standings[team_b.id]["points"] == 0
 
+def test_invalid_draw_results_do_not_update_draw_counts(db):
+    tournament, _, team_a, team_b = (
+        _make_tournament_with_teams(db)
+    )
+
+    # An unverified draw must be ignored.
+    _make_match_with_score(
+        db,
+        tournament,
+        team_a,
+        team_b,
+        match_number=1,
+        match_status="completed",
+        score_status="pending",
+        team_a_score=1,
+        team_b_score=1,
+    )
+
+    # A cancelled draw must also be ignored.
+    _make_match_with_score(
+        db,
+        tournament,
+        team_a,
+        team_b,
+        match_number=2,
+        match_status="cancelled",
+        score_status="verified",
+        team_a_score=3,
+        team_b_score=3,
+    )
+
+    standings = _standings_by_team(db, tournament.id)
+
+    for team_id in (team_a.id, team_b.id):
+        assert standings[team_id]["played"] == 0
+        assert standings[team_id]["draws"] == 0
+        assert standings[team_id]["points"] == 0
+
+
+# ---------------------------------------------------------
+# Win/loss calculation and recalculation
+# ---------------------------------------------------------
 
 def test_win_loss_statistics_update_after_new_verified_result(db):
     tournament, _, team_a, team_b = (
@@ -472,7 +672,7 @@ def test_win_loss_statistics_update_after_new_verified_result(db):
     assert first_standings[team_b.id]["wins"] == 0
     assert first_standings[team_b.id]["losses"] == 1
 
-    # A second finalized result: Team B wins.
+    # Second finalized result: Team B wins.
     _make_match_with_score(
         db,
         tournament,
@@ -487,7 +687,6 @@ def test_win_loss_statistics_update_after_new_verified_result(db):
 
     updated_standings = _standings_by_team(db, tournament.id)
 
-    # The recalculated totals must include both finalized matches.
     assert updated_standings[team_a.id]["played"] == 2
     assert updated_standings[team_a.id]["wins"] == 1
     assert updated_standings[team_a.id]["losses"] == 1
@@ -516,14 +715,12 @@ def test_valid_finalized_draw_updates_both_teams(db):
 
     standings = _standings_by_team(db, tournament.id)
 
-    # Both teams played one valid drawn match.
     assert standings[team_a.id]["played"] == 1
     assert standings[team_b.id]["played"] == 1
 
     assert standings[team_a.id]["draws"] == 1
     assert standings[team_b.id]["draws"] == 1
 
-    # Default draw points are 1 for each team.
     assert standings[team_a.id]["points"] == 1
     assert standings[team_b.id]["points"] == 1
 
@@ -533,40 +730,153 @@ def test_valid_finalized_draw_updates_both_teams(db):
     assert standings[team_b.id]["losses"] == 0
 
 
-def test_invalid_draw_results_do_not_update_draw_counts(db):
+def test_standings_update_after_score_verification_and_completion(db):
+    tournament, organiser, team_a, team_b = (
+        _make_tournament_with_teams(db)
+    )
+
+    match, score = _make_match_with_score(
+        db,
+        tournament,
+        team_a,
+        team_b,
+        match_number=1,
+        match_status="live",
+        score_status="pending",
+        team_a_score=3,
+        team_b_score=1,
+    )
+
+    # Pending results must not count.
+    before = _standings_by_team(db, tournament.id)
+
+    assert before[team_a.id]["played"] == 0
+    assert before[team_b.id]["played"] == 0
+
+    review_score(
+        db=db,
+        match_id=match.id,
+        reviewer_id=organiser.id,
+        decision="verified",
+    )
+
+    db.refresh(score)
+
+    assert score.verification_status == "verified"
+    assert score.is_verified is True
+
+    # A verified score on a live match is not finalized yet.
+    while_live = _standings_by_team(db, tournament.id)
+
+    assert while_live[team_a.id]["played"] == 0
+    assert while_live[team_b.id]["played"] == 0
+
+    complete_match(db, match.id)
+
+    db.refresh(match)
+    assert match.status == "completed"
+
+    updated = _standings_by_team(db, tournament.id)
+
+    assert updated[team_a.id]["played"] == 1
+    assert updated[team_a.id]["wins"] == 1
+    assert updated[team_a.id]["points"] == 3
+
+    assert updated[team_b.id]["played"] == 1
+    assert updated[team_b.id]["losses"] == 1
+    assert updated[team_b.id]["points"] == 0
+
+
+# ---------------------------------------------------------
+# Configurable scoring rules
+# ---------------------------------------------------------
+
+def test_standings_use_custom_scoring_rules_and_cumulative_points(db):
     tournament, _, team_a, team_b = (
         _make_tournament_with_teams(db)
     )
 
-    # A completed draw with an unverified score must be ignored.
+    tournament.format_config = {
+        "number_of_teams": 2,
+        "points_per_win": 5,
+        "points_per_draw": 2,
+        "points_per_loss": 1,
+    }
+    db.commit()
+
+    # Team A wins: 5 points for A, 1 for B.
     _make_match_with_score(
         db,
         tournament,
         team_a,
         team_b,
         match_number=1,
-        match_status="completed",
-        score_status="pending",
-        team_a_score=1,
+        team_a_score=2,
         team_b_score=1,
     )
 
-    # A verified-looking score for a cancelled draw must also be ignored.
+    # Draw: both receive 2 additional points.
     _make_match_with_score(
         db,
         tournament,
         team_a,
         team_b,
         match_number=2,
-        match_status="cancelled",
-        score_status="verified",
-        team_a_score=3,
-        team_b_score=3,
+        team_a_score=1,
+        team_b_score=1,
     )
 
     standings = _standings_by_team(db, tournament.id)
 
-    for team_id in (team_a.id, team_b.id):
-        assert standings[team_id]["played"] == 0
-        assert standings[team_id]["draws"] == 0
-        assert standings[team_id]["points"] == 0
+    assert standings[team_a.id]["played"] == 2
+    assert standings[team_a.id]["wins"] == 1
+    assert standings[team_a.id]["draws"] == 1
+    assert standings[team_a.id]["points"] == 7
+
+    assert standings[team_b.id]["played"] == 2
+    assert standings[team_b.id]["losses"] == 1
+    assert standings[team_b.id]["draws"] == 1
+    assert standings[team_b.id]["points"] == 3
+
+def test_public_leaderboard_returns_published_standings_without_login(db):
+    tournament, _, team_a, team_b = _make_tournament_with_teams(db)
+
+    tournament.fixtures_published = True
+    db.commit()
+
+    _make_match_with_score(
+        db,
+        tournament,
+        team_a,
+        team_b,
+        match_status="completed",
+        score_status="verified",
+        team_a_score=2,
+        team_b_score=0,
+    )
+
+    # No authentication header: the endpoint is public.
+    response = client.get(
+        f"/tournaments/{tournament.id}/leaderboard"
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+    assert len(data) == 2
+    assert data[0]["team_id"] == team_a.id
+    assert data[0]["rank"] == 1
+    assert data[0]["wins"] == 1
+    assert data[0]["points"] == 3
+
+
+def test_public_leaderboard_hides_unpublished_tournament(db):
+    tournament, _, _, _ = _make_tournament_with_teams(db)
+
+    assert tournament.fixtures_published is False
+
+    response = client.get(
+        f"/tournaments/{tournament.id}/leaderboard"
+    )
+
+    assert response.status_code == 404
