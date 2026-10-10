@@ -14,6 +14,15 @@ from test_match_result_finalization import (
 )
 
 
+def _corrections_for(db, match):
+    """Audit rows for this match only (the test database is shared and never cleaned)."""
+    return (
+        db.query(MatchResultCorrection)
+        .join(MatchResult, MatchResult.id == MatchResultCorrection.match_result_id)
+        .filter(MatchResult.match_id == match.id)
+    )
+
+
 def _finalized(db, a=2, b=1):
     match, organiser = _make_match(db)
     _make_score(db, match, team_a_score=a, team_b_score=b)
@@ -46,7 +55,7 @@ def test_correction_writes_an_audit_row(db):
 
     _correct(match, organiser, 1, 1)
 
-    row = db.query(MatchResultCorrection).one()
+    row = _corrections_for(db, match).one()
     assert (row.old_team_a_score, row.new_team_a_score) == (2, 1)
     assert (row.old_outcome, row.new_outcome) == ("team_a_win", "draw")
     assert row.corrected_by_id == organiser.id
@@ -57,7 +66,7 @@ def test_other_organiser_cannot_correct(db):
     other = _make_user(db, "organiser")
 
     assert _correct(match, other, 0, 5).status_code == 403
-    assert db.query(MatchResultCorrection).count() == 0
+    assert _corrections_for(db, match).count() == 0
 
 
 @pytest.mark.parametrize("role", ["scorer", "official", "player", "spectator"])
@@ -128,4 +137,4 @@ def test_failed_correction_rolls_back_everything(db, monkeypatch):
     db.expire_all()
     result = db.query(MatchResult).filter_by(match_id=match.id).one()
     assert (result.team_a_score, result.team_b_score) == (2, 1)
-    assert db.query(MatchResultCorrection).count() == 0
+    assert _corrections_for(db, match).count() == 0

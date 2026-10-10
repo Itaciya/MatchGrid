@@ -14,6 +14,7 @@ from app.modules.match.models.match_result import (
     OUTCOME_TEAM_B_WIN,
     MatchResult,
 )
+from app.modules.match.models.match_result_correction import MatchResultCorrection
 from app.modules.score.models.score import Score, ScoreVerificationStatus
 
 MATCH_STATUS_LIVE = "live"
@@ -118,6 +119,108 @@ def finalize_match_result(
     match.status = MATCH_STATUS_COMPLETED
 
     db.commit()
+    db.refresh(result)
+
+    return result
+
+
+def correct_match_result(
+    db: Session,
+    match_id: int,
+    corrector_id: int,
+    team_a_score: int,
+    team_b_score: int,
+    reason: str,
+) -> MatchResult:
+    """Correct the finalized result of a match and record why.
+
+    Authorisation (organiser of the match's tournament) is enforced by the
+    route dependency verify_match_organiser, not here. The result, the score
+    it came from and the audit row are written in one transaction: all three
+    or none. Standings are derived from match_results when read, so they
+    reflect the correction with nothing separate to recalculate.
+    """
+    match = (
+        db.query(Match)
+        .filter(Match.id == match_id)
+        .with_for_update()
+        .first()
+    )
+    if match is None:
+        raise NotFoundException(detail="Match not found")
+
+    result = (
+        db.query(MatchResult)
+        .filter(MatchResult.match_id == match_id)
+        .with_for_update()
+        .first()
+    )
+    if result is None:
+        raise NotFoundException(
+            detail="No finalized result exists for this match"
+        )
+
+    if (team_a_score, team_b_score) == (
+        result.team_a_score,
+        result.team_b_score,
+    ):
+        raise BadRequestException(
+            detail="The corrected scores are the same as the current result"
+        )
+
+    if match.team_a_id is None or match.team_b_id is None:
+        raise BadRequestException(
+            detail="Both teams must be assigned before a result can be corrected"
+        )
+
+    new_outcome = determine_outcome(team_a_score, team_b_score)
+
+    if new_outcome == OUTCOME_TEAM_A_WIN:
+        winner_team_id, loser_team_id = match.team_a_id, match.team_b_id
+    elif new_outcome == OUTCOME_TEAM_B_WIN:
+        winner_team_id, loser_team_id = match.team_b_id, match.team_a_id
+    else:
+        winner_team_id, loser_team_id = None, None
+
+    db.add(
+        MatchResultCorrection(
+            match_result_id=result.id,
+            corrected_by_id=corrector_id,
+            old_team_a_score=result.team_a_score,
+            old_team_b_score=result.team_b_score,
+            new_team_a_score=team_a_score,
+            new_team_b_score=team_b_score,
+            old_outcome=result.outcome,
+            new_outcome=new_outcome,
+            reason=reason,
+        )
+    )
+
+    result.team_a_score = team_a_score
+    result.team_b_score = team_b_score
+    result.outcome = new_outcome
+    result.winner_team_id = winner_team_id
+    result.loser_team_id = loser_team_id
+
+    # Keep the score the result was built from in step with it.
+    score = (
+        db.query(Score)
+        .filter(Score.match_id == match_id)
+        .with_for_update()
+        .first()
+    )
+    if score is not None:
+        score.team_a_score = team_a_score
+        score.team_b_score = team_b_score
+        score.reviewed_by_id = corrector_id
+        score.reviewed_at = datetime.now(timezone.utc)
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
     db.refresh(result)
 
     return result
