@@ -14,6 +14,8 @@ from app.modules.player_team.models.player import Player
 from app.modules.player_team.models.team import Team
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.match.models.match import Match
+from app.modules.match.models.match_result import MatchResult
+from app.modules.match.models.match_result_correction import MatchResultCorrection
 from app.modules.match.models.tournament_round import TournamentRound
 from app.modules.score.models.score import Score
 from app.modules.official_assignment.models.official_assignment import OfficialAssignment
