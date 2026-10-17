@@ -1,3 +1,4 @@
+
 from datetime import datetime, timezone
 
 from sqlalchemy.exc import IntegrityError
@@ -9,6 +10,7 @@ from app.core.exceptions import (
     ForbiddenException,
     NotFoundException,
 )
+from app.modules.notification.models.notification import Notification
 from app.modules.player_team.models.player import Player
 from app.modules.player_team.models.team import Team, TeamStatus
 from app.modules.player_team.services.player_service import (
@@ -25,6 +27,99 @@ from app.modules.registration.services.registration_validation import (
     validate_player_registration,
 )
 from app.modules.tournament.models.tournament import Tournament
+
+
+def notify_registration_status(
+    db: Session,
+    registration: Registration,
+) -> None:
+    """Create a notification when registration is approved or rejected."""
+
+    if registration.status not in {
+        RegistrationStatus.APPROVED.value,
+        RegistrationStatus.REJECTED.value,
+    }:
+        return
+
+    tournament = (
+        db.query(Tournament)
+        .filter(Tournament.id == registration.tournament_id)
+        .first()
+    )
+
+    if tournament is None:
+        raise NotFoundException(detail="Tournament not found")
+
+    # Find the user who should receive the notification.
+    if registration.registration_type == RegistrationType.PLAYER.value:
+        if registration.player_id is None:
+            raise BadRequestException(
+                detail="Invalid player registration"
+            )
+
+        player = (
+            db.query(Player)
+            .filter(Player.id == registration.player_id)
+            .first()
+        )
+
+        if player is None:
+            raise NotFoundException(detail="Player not found")
+
+        recipient_id = player.user_id
+
+    elif registration.registration_type == RegistrationType.TEAM.value:
+        if registration.team_id is None:
+            raise BadRequestException(
+                detail="Invalid team registration"
+            )
+
+        team = (
+            db.query(Team)
+            .filter(Team.id == registration.team_id)
+            .first()
+        )
+
+        if team is None:
+            raise NotFoundException(detail="Team not found")
+
+        # The team captain receives the team registration notification.
+        recipient_id = team.captain_id
+
+    else:
+        raise BadRequestException(detail="Invalid registration type")
+
+    status = registration.status
+
+    message = (
+        f"Your registration #{registration.id} for tournament "
+        f"'{tournament.name}' has been {status}."
+    )
+
+    # Avoid creating the same notification more than once.
+    existing_notification = (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == recipient_id,
+            Notification.notification_type == "registration_status",
+            Notification.content == message,
+        )
+        .first()
+    )
+
+    if existing_notification is not None:
+        return
+
+    # Add the notification to the current transaction.
+    # Do not commit here; the calling status function commits both changes.
+    notification = Notification(
+        user_id=recipient_id,
+        notification_type="registration_status",
+        content=message,
+        is_read=False,
+    )
+
+    db.add(notification)
 
 
 def create_team_registration(
@@ -198,7 +293,7 @@ def update_registration_status(
     registration_id: int,
     new_status: RegistrationStatus,
 ) -> Registration:
-    """Update registration status using valid status transitions."""
+    """Update registration status and notify the participant if necessary."""
 
     registration = (
         db.query(Registration)
@@ -230,11 +325,18 @@ def update_registration_status(
             )
         )
 
-    registration.status = new_status.value
-    registration.reviewed_at = datetime.now(timezone.utc)
+    try:
+        registration.status = new_status.value
+        registration.reviewed_at = datetime.now(timezone.utc)
 
-    db.commit()
-    db.refresh(registration)
+        notify_registration_status(db, registration)
+
+        db.commit()
+        db.refresh(registration)
+
+    except Exception:
+        db.rollback()
+        raise
 
     return registration
 
@@ -270,7 +372,7 @@ def approve_registration(
     db: Session,
     registration_id: int,
 ) -> Registration:
-    """Approve a valid pending registration."""
+    """Approve a valid pending registration and notify the participant."""
 
     registration = (
         db.query(Registration)
@@ -286,7 +388,7 @@ def approve_registration(
             detail="Only pending registrations can be approved"
         )
 
-    if registration.registration_type == RegistrationType.PLAYER:
+    if registration.registration_type == RegistrationType.PLAYER.value:
         if registration.player_id is None:
             raise BadRequestException(
                 detail="Invalid player registration"
@@ -306,7 +408,7 @@ def approve_registration(
                 detail="Only active players can be approved"
             )
 
-    elif registration.registration_type == RegistrationType.TEAM:
+    elif registration.registration_type == RegistrationType.TEAM.value:
         if registration.team_id is None:
             raise BadRequestException(
                 detail="Invalid team registration"
@@ -334,11 +436,23 @@ def approve_registration(
             team_id=team.id,
         )
 
-    registration.status = RegistrationStatus.APPROVED.value
-    registration.reviewed_at = datetime.now(timezone.utc)
+    else:
+        raise BadRequestException(
+            detail="Invalid registration type"
+        )
 
-    db.commit()
-    db.refresh(registration)
+    try:
+        registration.status = RegistrationStatus.APPROVED.value
+        registration.reviewed_at = datetime.now(timezone.utc)
+
+        notify_registration_status(db, registration)
+
+        db.commit()
+        db.refresh(registration)
+
+    except Exception:
+        db.rollback()
+        raise
 
     return registration
 
@@ -365,7 +479,7 @@ def update_registration(
             detail="Only pending registrations can be updated"
         )
 
-    if registration.registration_type == RegistrationType.PLAYER:
+    if registration.registration_type == RegistrationType.PLAYER.value:
         if registration.player_id is None:
             raise BadRequestException(
                 detail="Invalid player registration"
@@ -385,7 +499,7 @@ def update_registration(
                 detail="You can only update your own registration"
             )
 
-    elif registration.registration_type == RegistrationType.TEAM:
+    elif registration.registration_type == RegistrationType.TEAM.value:
         if registration.team_id is None:
             raise BadRequestException(
                 detail="Invalid team registration"
@@ -423,7 +537,7 @@ def reject_registration(
     db: Session,
     registration_id: int,
 ) -> Registration:
-    """Reject a pending registration."""
+    """Reject a pending registration and notify the participant."""
 
     registration = (
         db.query(Registration)
@@ -439,10 +553,17 @@ def reject_registration(
             detail="Only pending registrations can be rejected"
         )
 
-    registration.status = RegistrationStatus.REJECTED.value
-    registration.reviewed_at = datetime.now(timezone.utc)
+    try:
+        registration.status = RegistrationStatus.REJECTED.value
+        registration.reviewed_at = datetime.now(timezone.utc)
 
-    db.commit()
-    db.refresh(registration)
+        notify_registration_status(db, registration)
+
+        db.commit()
+        db.refresh(registration)
+
+    except Exception:
+        db.rollback()
+        raise
 
     return registration
