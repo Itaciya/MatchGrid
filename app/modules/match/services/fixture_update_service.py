@@ -1,3 +1,4 @@
+
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
@@ -12,6 +13,7 @@ from app.modules.match.schemas.fixture import FixtureUpdate
 from app.modules.match.services.scheduling_conflict_service import (
     validate_schedule_conflicts,
 )
+from app.modules.notification.models.notification import Notification
 from app.modules.player_team.models.team import Team, TeamStatus
 from app.modules.registration.models.registration import Registration
 from app.modules.tournament.models.tournament import Tournament
@@ -19,6 +21,7 @@ from app.modules.venue.models.venue import Venue
 
 
 MATCH_DURATION = timedelta(hours=1)
+FIXTURE_CHANGED_NOTIFICATION = "fixture_changed"
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -38,9 +41,7 @@ def _validate_team_eligibility(
     team = db.query(Team).filter(Team.id == team_id).first()
 
     if team is None:
-        raise NotFoundException(
-            detail=f"Team {team_id} not found"
-        )
+        raise NotFoundException(detail=f"Team {team_id} not found")
 
     if team.status != TeamStatus.ACTIVE:
         raise BadRequestException(
@@ -67,6 +68,104 @@ def _validate_team_eligibility(
         )
 
     return team
+
+
+def _notify_fixture_change(
+    db: Session,
+    tournament: Tournament,
+    match: Match,
+    old_team_ids: set[int],
+) -> None:
+    """
+    Notify captains of the teams affected by a fixture change.
+
+    Old and new teams are included so a captain is notified if their
+    team is replaced in the fixture.
+    """
+    affected_team_ids = old_team_ids | {
+        team_id
+        for team_id in (match.team_a_id, match.team_b_id)
+        if team_id is not None
+    }
+
+    teams = (
+        db.query(Team)
+        .filter(Team.id.in_(affected_team_ids))
+        .all()
+        if affected_team_ids
+        else []
+    )
+
+    # Only notify unique, valid captain IDs.
+    recipient_ids = {
+        team.captain_id
+        for team in teams
+        if team.captain_id is not None
+    }
+
+    venue = None
+    if match.venue_id is not None:
+        venue = (
+            db.query(Venue)
+            .filter(Venue.id == match.venue_id)
+            .first()
+        )
+
+    venue_details = (
+        f"{venue.name} ({venue.location})"
+        if venue is not None
+        else "Not assigned"
+    )
+
+    team_a = (
+        db.query(Team).filter(Team.id == match.team_a_id).first()
+        if match.team_a_id is not None
+        else None
+    )
+    team_b = (
+        db.query(Team).filter(Team.id == match.team_b_id).first()
+        if match.team_b_id is not None
+        else None
+    )
+
+    team_a_name = team_a.name if team_a else "TBD"
+    team_b_name = team_b.name if team_b else "TBD"
+
+    scheduled_at = (
+        _as_utc(match.scheduled_at).strftime("%Y-%m-%d %H:%M UTC")
+        if match.scheduled_at is not None
+        else "Not scheduled"
+    )
+
+    content = (
+        f"Fixture changed for tournament '{tournament.name}'. "
+        f"Match {match.match_number}: {team_a_name} vs {team_b_name}. "
+        f"Date and time: {scheduled_at}. "
+        f"Venue: {venue_details}."
+    )
+
+    for user_id in recipient_ids:
+        # Avoid creating an identical notification for the same user.
+        existing_notification = (
+            db.query(Notification)
+            .filter(
+                Notification.user_id == user_id,
+                Notification.notification_type
+                == FIXTURE_CHANGED_NOTIFICATION,
+                Notification.content == content,
+            )
+            .first()
+        )
+
+        if existing_notification is None:
+            db.add(
+                Notification(
+                    user_id=user_id,
+                    notification_type=FIXTURE_CHANGED_NOTIFICATION,
+                    content=content,
+                    is_read=False,
+                )
+            )
 
 
 def update_fixture_schedule(
@@ -116,6 +215,14 @@ def update_fixture_schedule(
     original_venue_id = match.venue_id
     original_team_a_id = match.team_a_id
     original_team_b_id = match.team_b_id
+
+    # Keep the old teams so their captains can also be notified
+    # if one of the teams is replaced.
+    original_team_ids = {
+        team_id
+        for team_id in (match.team_a_id, match.team_b_id)
+        if team_id is not None
+    }
 
     try:
         # SCRUM-126: Validate and update match date/time.
@@ -197,7 +304,6 @@ def update_fixture_schedule(
             )
 
         # Check conflicts against all scheduled matches.
-        # The validator excludes the candidate match itself.
         scheduled_matches = (
             db.query(Match)
             .filter(Match.status == "scheduled")
@@ -220,6 +326,7 @@ def update_fixture_schedule(
                 }
             )
 
+        # Detect actual changes, not just submitted fields.
         changed = (
             _as_utc(match.scheduled_at)
             != _as_utc(original_scheduled_at)
@@ -228,11 +335,21 @@ def update_fixture_schedule(
             or match.team_b_id != original_team_b_id
         )
 
-        # Keep bracket progression links intact.
-        # Only unpublish fixtures if their actual details changed.
-        if changed and tournament.fixtures_published:
-            tournament.fixtures_published = False
+        if changed:
+            # Add notifications only after all validations pass.
+            _notify_fixture_change(
+                db=db,
+                tournament=tournament,
+                match=match,
+                old_team_ids=original_team_ids,
+            )
 
+            # Changed fixture details mean the published schedule
+            # needs to be published again.
+            if tournament.fixtures_published:
+                tournament.fixtures_published = False
+
+        # Save the fixture change and notifications together.
         db.commit()
         db.refresh(match)
 

@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import datetime, timezone
 
@@ -6,11 +7,12 @@ from fastapi.testclient import TestClient
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.modules.match.models.match import Match
+from app.modules.notification.models.notification import Notification
 from app.modules.player_team.models.team import Team, TeamStatus
+from app.modules.registration.models.registration import Registration
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 from app.modules.venue.models.venue import Venue
-from app.modules.registration.models.registration import Registration
 
 
 client = TestClient(app)
@@ -33,8 +35,12 @@ def create_tournament(db, organizer_id):
     tournament = Tournament(
         name=f"Fixture Update Tournament {uuid.uuid4()}",
         format="round_robin",
-        start_date=datetime(2099, 1, 1, 10, 0, tzinfo=timezone.utc),
-        end_date=datetime(2099, 1, 10, 18, 0, tzinfo=timezone.utc),
+        start_date=datetime(
+            2099, 1, 1, 10, 0, tzinfo=timezone.utc
+        ),
+        end_date=datetime(
+            2099, 1, 10, 18, 0, tzinfo=timezone.utc
+        ),
         status="upcoming",
         organizer_id=organizer_id,
     )
@@ -105,10 +111,23 @@ def update_url(tournament_id, match_id):
     )
 
 
+def approve_team_registration(db, tournament_id, team_id):
+    registration = Registration(
+        tournament_id=tournament_id,
+        team_id=team_id,
+        player_id=None,
+        registration_type="team",
+        status="approved",
+    )
+    db.add(registration)
+    db.commit()
+    db.refresh(registration)
+    return registration
+
+
 def test_update_fixture_schedule_successfully(db):
     organizer = create_user(db)
     tournament = create_tournament(db, organizer.id)
-
     team_a = create_team(db, organizer.id)
     team_b = create_team(db, organizer.id)
 
@@ -183,7 +202,6 @@ def test_update_fixture_rejects_team_conflict(db):
 def test_update_fixture_rejects_invalid_venue(db):
     organizer = create_user(db)
     tournament = create_tournament(db, organizer.id)
-
     team_a = create_team(db, organizer.id)
     team_b = create_team(db, organizer.id)
 
@@ -208,7 +226,6 @@ def test_update_fixture_rejects_invalid_venue(db):
 def test_update_fixture_rejects_schedule_outside_tournament_dates(db):
     organizer = create_user(db)
     tournament = create_tournament(db, organizer.id)
-
     team_a = create_team(db, organizer.id)
     team_b = create_team(db, organizer.id)
 
@@ -233,7 +250,6 @@ def test_update_fixture_rejects_schedule_outside_tournament_dates(db):
 def test_update_fixture_unpublishes_changed_fixtures(db):
     organizer = create_user(db)
     tournament = create_tournament(db, organizer.id)
-
     team_a = create_team(db, organizer.id)
     team_b = create_team(db, organizer.id)
 
@@ -264,8 +280,8 @@ def test_update_fixture_unpublishes_changed_fixtures(db):
 def test_update_fixture_rejects_non_owner(db):
     owner = create_user(db)
     other_organizer = create_user(db)
-
     tournament = create_tournament(db, owner.id)
+
     team_a = create_team(db, owner.id)
     team_b = create_team(db, owner.id)
 
@@ -290,7 +306,6 @@ def test_update_fixture_rejects_non_owner(db):
 def test_update_fixture_requires_authentication(db):
     organizer = create_user(db)
     tournament = create_tournament(db, organizer.id)
-
     team_a = create_team(db, organizer.id)
     team_b = create_team(db, organizer.id)
 
@@ -314,7 +329,6 @@ def test_update_fixture_requires_authentication(db):
 def test_update_fixture_accepts_valid_venue(db):
     organizer = create_user(db)
     tournament = create_tournament(db, organizer.id)
-
     team_a = create_team(db, organizer.id)
     team_b = create_team(db, organizer.id)
     venue = create_venue(db)
@@ -338,20 +352,6 @@ def test_update_fixture_accepts_valid_venue(db):
 
     db.refresh(match)
     assert match.venue_id == venue.id
-
-
-def approve_team_registration(db, tournament_id, team_id):
-    registration = Registration(
-        tournament_id=tournament_id,
-        team_id=team_id,
-        player_id=None,
-        registration_type="team",
-        status="approved",
-    )
-    db.add(registration)
-    db.commit()
-    db.refresh(registration)
-    return registration
 
 
 def test_update_fixture_team_successfully(db):
@@ -489,3 +489,63 @@ def test_update_fixture_rejects_inactive_team(db):
 
     db.refresh(match)
     assert match.team_a_id == team_a.id
+
+
+def test_update_fixture_notifies_affected_team_captains(db):
+    organizer = create_user(db)
+    captain_a = create_user(db, role="participant")
+    captain_b = create_user(db, role="participant")
+    unrelated_captain = create_user(db, role="participant")
+
+    tournament = create_tournament(db, organizer.id)
+
+    team_a = create_team(db, captain_a.id)
+    team_b = create_team(db, captain_b.id)
+    create_team(db, unrelated_captain.id)
+
+    venue = create_venue(db)
+
+    match = create_match(
+        db,
+        tournament.id,
+        1,
+        team_a.id,
+        team_b.id,
+        datetime(2099, 1, 2, 10, 0, tzinfo=timezone.utc),
+    )
+
+    response = client.patch(
+        update_url(tournament.id, match.id),
+        headers=auth_header(organizer),
+        json={
+            "scheduled_at": "2099-01-02T11:00:00Z",
+            "venue_id": venue.id,
+        },
+    )
+
+    assert response.status_code == 200
+
+    expected_recipients = {captain_a.id, captain_b.id}
+
+    notifications = (
+        db.query(Notification)
+        .filter(
+            Notification.notification_type == "fixture_changed",
+            Notification.user_id.in_(expected_recipients),
+            Notification.content.contains(tournament.name),
+        )
+        .all()
+    )
+
+    recipients = {notification.user_id for notification in notifications}
+
+    assert recipients == expected_recipients
+
+    for notification in notifications:
+        assert notification.is_read is False
+        assert "Match 1" in notification.content
+        assert "2099-01-02 11:00 UTC" in notification.content
+        assert venue.name in notification.content
+        assert venue.location in notification.content
+
+    assert unrelated_captain.id not in recipients
