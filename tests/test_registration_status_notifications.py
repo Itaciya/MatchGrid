@@ -212,5 +212,5 @@ def test_notification_failure_rolls_back_registration_status(db, monkeypatch):
         .filter(Registration.id == registration.id)
         .first()
     )
-
+    
     assert refreshed_registration.status == original_status
