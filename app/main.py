@@ -28,6 +28,7 @@ from app.modules.scorer.routes import router as scorer_router
 from app.modules.spectator.routes import router as spectator_router
 from app.modules.tournament.routes import router as tournament_router
 from app.modules.user.routes import router as user_router
+from app.modules.user.models import User  # noqa: F401
 from app.modules.venue.routes import router as venue_router
 from app.modules.official_assignment.routes import (
     router as official_assignment_router,

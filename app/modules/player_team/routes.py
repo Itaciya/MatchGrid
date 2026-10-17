@@ -12,6 +12,7 @@ from app.modules.player_team.schemas.player import (
     PlayerUpdate,
 )
 from app.modules.player_team.schemas.team import (
+    TeamCreate,
     TeamResponse,
     TeamStatusUpdate,
 )
@@ -26,6 +27,7 @@ from app.modules.player_team.services.player_service import (
 )
 from app.modules.player_team.services.team_service import (
     authorize_team_captain,
+    create_team,
     get_team,
     update_team_status,
 )
@@ -113,6 +115,22 @@ def get_team_details(
 ):
     return get_team(db, team_id)
 
+
+@router.post(
+    "/team",
+    response_model=TeamResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_team_endpoint(
+    data: TeamCreate,
+    current_user: User = Depends(require_role("organiser")),
+    db: Session = Depends(get_db),
+):
+    return create_team(
+        db=db,
+        name=data.name.strip(),
+        captain_id=data.captain_id,
+    )
 
 @router.patch(
     "/team/{team_id}/status",
