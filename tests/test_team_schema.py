@@ -26,6 +26,14 @@ def test_team_create_rejects_empty_name():
         )
 
 
+def test_team_create_rejects_whitespace_only_name():
+    with pytest.raises(ValidationError):
+        TeamCreate(
+            name="   ",
+            captain_id=1,
+        )
+
+
 def test_team_create_rejects_invalid_captain_id():
     with pytest.raises(ValidationError):
         TeamCreate(

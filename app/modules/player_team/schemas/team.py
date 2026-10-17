@@ -1,9 +1,10 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.modules.player_team.models.team import TeamStatus
 from app.modules.player_team.schemas.player import PlayerResponse
+
 
 
 class TeamCreate(BaseModel):
@@ -11,6 +12,17 @@ class TeamCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=100)
     captain_id: int = Field(gt=0)
+
+    @field_validator("name")
+    @classmethod
+    def validate_team_name(cls, value: str) -> str:
+        value = value.strip()
+
+        if not value:
+            raise ValueError("Team name cannot be empty or spaces only")
+
+        return value
+
 
 
 class TeamUpdate(BaseModel):
