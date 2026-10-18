@@ -1,6 +1,9 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { API_BASE_URL, apiRequest } from './services/api'
 import ScorerPage from './ScorerPage.jsx'
+import VerificationPage from './VerificationPage.jsx'
+import DisputePage from './DisputePage.jsx'
+import ResultPage from './ResultPage.jsx'
 import './App.css'
 
 const NAV_ITEMS = [
@@ -9,6 +12,9 @@ const NAV_ITEMS = [
   ['create', 'Create tournament'],
   ['team', 'Teams'],
   ['scoring', 'Scoring'],
+  ['verify', 'Verify scores'],
+  ['dispute', 'Disputes'],
+  ['result', 'Match results'],
 ]
 
 function dateLabel(value) {
@@ -633,6 +639,9 @@ function App() {
           </>}
 
           {page === 'scoring' && <ScorerPage />}
+          {page === 'verify' && <VerificationPage />}
+          {page === 'dispute' && <DisputePage />}
+          {page === 'result' && <ResultPage />}
       {page === 'team' && <>
             <div className="page-heading"><div><p className="eyebrow">TEAM DIRECTORY</p><h1>Team lookup</h1><p className="muted">Look up an existing team using its numeric ID.</p></div></div>
             <form className="lookup-card" onSubmit={loadTeam}><div className="field"><label htmlFor="team-id">Team ID</label><input id="team-id" inputMode="numeric" pattern="[1-9][0-9]*" value={teamId} onChange={(event) => setTeamId(event.target.value)} placeholder="e.g. 12" required /></div><button className="button button-primary" type="submit" disabled={teamLoading}>{teamLoading ? 'Searchingâ€¦' : 'Find team'}</button></form>

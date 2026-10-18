@@ -121,3 +121,15 @@ def get_score_endpoint(
 ):
     """Current score for a match. Assigned officials only."""
     return get_score(db, match_id)
+
+@router.get(
+    "/{match_id}/score/review",
+    response_model=ScoreResponse,
+    dependencies=[Depends(verify_match_organiser)],
+)
+def get_score_for_review_endpoint(
+    match_id: int,
+    db: Session = Depends(get_db),
+):
+    """Current score for review. Organiser of the match's tournament only."""
+    return get_score(db, match_id)
