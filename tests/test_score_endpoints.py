@@ -530,3 +530,54 @@ def test_get_score_requires_authentication(db):
     response = client.get(f"/matches/{match.id}/score")
 
     assert response.status_code in (401, 403)
+
+# SCRUM-225: organiser reads a score for review
+
+def test_organiser_can_read_score_for_review(db):
+    match = _make_match(db)
+    official = _assigned_official(db, match)
+    client.post(
+        f"/matches/{match.id}/score",
+        json={"match_id": match.id, "team_a_score": 3, "team_b_score": 2},
+        headers=_auth_header(official),
+    )
+    organiser = db.get(User, match.tournament.organizer_id)
+
+    response = client.get(
+        f"/matches/{match.id}/score/review", headers=_auth_header(organiser)
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["team_a_score"] == 3
+    assert body["verification_status"] == "pending"
+
+
+def test_other_organiser_cannot_read_score_for_review(db):
+    match = _make_match(db)
+    outsider = _make_user(db, "organiser")
+
+    response = client.get(
+        f"/matches/{match.id}/score/review", headers=_auth_header(outsider)
+    )
+
+    assert response.status_code == 403
+
+
+def test_official_cannot_use_review_route(db):
+    match = _make_match(db)
+    official = _assigned_official(db, match)
+
+    response = client.get(
+        f"/matches/{match.id}/score/review", headers=_auth_header(official)
+    )
+
+    assert response.status_code == 403
+
+
+def test_review_route_requires_authentication(db):
+    match = _make_match(db)
+
+    response = client.get(f"/matches/{match.id}/score/review")
+
+    assert response.status_code in (401, 403)
