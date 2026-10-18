@@ -230,3 +230,61 @@ def test_public_result_is_hidden_before_fixture_publication(db):
     )
 
     assert response.status_code == 404
+
+def test_public_match_history_returns_matches_in_order(db):
+    organizer = make_user(db)
+    tournament = make_tournament(
+        db,
+        organizer.id,
+        published=True,
+    )
+    team_a = make_team(db, organizer.id)
+    team_b = make_team(db, organizer.id)
+
+    first_match = make_match(
+        db,
+        tournament.id,
+        team_a.id,
+        team_b.id,
+    )
+
+    second_match = Match(
+        tournament_id=tournament.id,
+        match_number=2,
+        team_a_id=team_a.id,
+        team_b_id=team_b.id,
+        scheduled_at=datetime(
+            2099, 1, 3, 10, 0, tzinfo=timezone.utc
+        ),
+        status="completed",
+    )
+    db.add(second_match)
+    db.commit()
+    db.refresh(second_match)
+
+    response = client.get(
+        f"/spectator/tournaments/{tournament.id}/history"
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [item["id"] for item in data] == [
+        first_match.id,
+        second_match.id,
+    ]
+    assert data[0]["result"] is None
+
+
+def test_public_match_history_hidden_before_publication(db):
+    organizer = make_user(db)
+    tournament = make_tournament(
+        db,
+        organizer.id,
+        published=False,
+    )
+
+    response = client.get(
+        f"/spectator/tournaments/{tournament.id}/history"
+    )
+
+    assert response.status_code == 404

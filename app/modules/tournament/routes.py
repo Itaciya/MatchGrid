@@ -1,13 +1,13 @@
-
-from fastapi import APIRouter, Depends, HTTPException, Query,status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
-from app.modules.tournament.services.standings_service import (
-    calculate_tournament_standings,
-)
+
 from app.data_access.database import get_db
 from app.modules.tournament.schemas.tournament import (
     TournamentResponse,
     TournamentStandingResponse,
+)
+from app.modules.tournament.services.standings_service import (
+    calculate_tournament_standings,
 )
 from app.modules.tournament.services.tournament_service import (
     get_tournament_by_id,
@@ -19,11 +19,13 @@ router = APIRouter(
     prefix="/tournaments",
     tags=["Tournament"],
 )
+
+
 def _require_published_tournament(
     db: Session,
     tournament_id: int,
 ):
-    """Hide unpublished tournaments from public leaderboard requests."""
+    """Ensure public endpoints expose only published tournaments."""
 
     tournament = get_tournament_by_id(
         db,
@@ -33,10 +35,11 @@ def _require_published_tournament(
     if tournament is None or not tournament.fixtures_published:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tournament leaderboard not found",
+            detail="Public tournament not found",
         )
 
     return tournament
+
 
 @router.get(
     "/",
@@ -57,7 +60,7 @@ def get_tournaments(
     response_model=TournamentResponse,
 )
 def get_tournament_details(
-    tournament_id: int,
+    tournament_id: int = Path(gt=0),
     db: Session = Depends(get_db),
 ):
     tournament = get_tournament_by_id(
@@ -67,26 +70,34 @@ def get_tournament_details(
 
     if tournament is None:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Tournament not found",
         )
 
     return tournament
+
+
 @router.get(
     "/{tournament_id}/standings",
     response_model=list[TournamentStandingResponse],
     status_code=status.HTTP_200_OK,
 )
 def get_tournament_standings_endpoint(
-    tournament_id: int,
+    tournament_id: int = Path(gt=0),
     db: Session = Depends(get_db),
 ):
-    """Return standings calculated from official match results."""
+    """Return public standings based on verified official results."""
+
+    _require_published_tournament(
+        db,
+        tournament_id,
+    )
 
     return calculate_tournament_standings(
         db=db,
         tournament_id=tournament_id,
     )
+
 
 @router.get(
     "/{tournament_id}/leaderboard",
@@ -94,12 +105,15 @@ def get_tournament_standings_endpoint(
     status_code=status.HTTP_200_OK,
 )
 def get_public_tournament_leaderboard(
-    tournament_id: int,
+    tournament_id: int = Path(gt=0),
     db: Session = Depends(get_db),
 ):
-    """Return public rankings without requiring authentication."""
+    """Return public team rankings without requiring authentication."""
 
-    _require_published_tournament(db, tournament_id)
+    _require_published_tournament(
+        db,
+        tournament_id,
+    )
 
     return calculate_tournament_standings(
         db=db,
