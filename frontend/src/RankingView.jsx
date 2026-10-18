@@ -61,7 +61,7 @@ export default function RankingView({ title, intro, loadRanking }) {
             <thead>
               <tr>
                 <th>Rank</th><th>Team</th><th>Played</th><th>W</th><th>D</th><th>L</th>
-                <th>Score diff.</th><th>Points</th>
+                <th>For</th><th>Against</th><th>Score diff.</th><th>Points</th>
               </tr>
             </thead>
             <tbody>
@@ -73,7 +73,7 @@ export default function RankingView({ title, intro, loadRanking }) {
                   <td>{row.wins}</td>
                   <td>{row.draws}</td>
                   <td>{row.losses}</td>
-                  <td>{row.score_difference}</td>
+                  <td>{row.score_for}</td><td>{row.score_against}</td><td>{row.score_difference}</td>
                   <td><strong>{row.points}</strong></td>
                 </tr>
               ))}
