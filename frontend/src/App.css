@@ -177,3 +177,92 @@ td { color: var(--text); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* MatchGrid authentication screens */
+.auth-page {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 36px 16px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.06);
+}
+
+.auth-card h1 {
+  margin: 8px 0;
+  font-size: 28px;
+  letter-spacing: -0.7px;
+}
+
+.auth-card .field {
+  margin-top: 18px;
+}
+
+.auth-card .field label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.auth-card .field input,
+.auth-card .field select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.auth-submit {
+  width: 100%;
+  margin-top: 22px;
+}
+
+.auth-switch {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.text-button {
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-home {
+  display: block;
+  margin: 12px auto 0;
+}
+
+.user-badge {
+  max-width: 260px;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .auth-card {
+    padding: 20px;
+  }
+
+  .user-badge {
+    display: none;
+  }
+}
