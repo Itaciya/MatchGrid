@@ -33,10 +33,23 @@ from app.modules.venue.routes import router as venue_router
 from app.modules.official_assignment.routes import (
     router as official_assignment_router,
 )
-
+from contextlib import asynccontextmanager
+from app.modules.notification.routes import router as notification_router
+from app.modules.notification.services.upcoming_match_scheduler import (
+    start_reminder_scheduler,
+    stop_reminder_scheduler,
+)
 configure_logging()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_reminder_scheduler()
+    try:
+        yield
+    finally:
+        stop_reminder_scheduler()
 
-app = FastAPI()
+
+app = FastAPI(lifespan=lifespan)
 logger = logging.getLogger(__name__)
 
 logger.info("MatchGrid API application initialized")
@@ -121,7 +134,7 @@ app.include_router(venue_router)
 app.include_router(tournament_router)
 app.include_router(dispute_router)
 app.include_router(official_assignment_router)
-
+app.include_router(notification_router)
 # Root endpoint
 @app.get("/")
 def root():
