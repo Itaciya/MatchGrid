@@ -65,6 +65,14 @@ function App() {
   const [team, setTeam] = useState(null)
   const [teamLoading, setTeamLoading] = useState(false)
   const [teamError, setTeamError] = useState('')
+  const [playerId, setPlayerId] = useState('')
+  const [player, setPlayer] = useState(null)
+  const [playerLoading, setPlayerLoading] = useState(false)
+  const [playerError, setPlayerError] = useState('')
+  const [rosterPlayerId, setRosterPlayerId] = useState('')
+  const [rosterLoading, setRosterLoading] = useState(false)
+  const [rosterError, setRosterError] = useState('')
+  const [rosterSuccess, setRosterSuccess] = useState('')
 
   const [form, setForm] = useState({
     name: '',
@@ -263,6 +271,59 @@ function App() {
     }
   }
 
+  const loadPlayer = async (event) => {
+    event.preventDefault()
+    setPlayer(null)
+    setPlayerError('')
+
+    if (!/^[1-9]\d*$/.test(playerId)) {
+      setPlayerError('Enter a valid positive player ID.')
+      return
+    }
+
+    setPlayerLoading(true)
+    try {
+      const result = await apiRequest(`/player-team/profile/${Number(playerId)}`)
+      setPlayer(result)
+    } catch (error) {
+      setPlayerError(error.message || 'Could not load player profile.')
+    } finally {
+      setPlayerLoading(false)
+    }
+  }
+
+  const changeRoster = async (action, id) => {
+    if (!team?.id) return
+    if (!/^[1-9]\d*$/.test(String(id))) {
+      setRosterError('Enter a valid positive player ID.')
+      return
+    }
+
+    setRosterError('')
+    setRosterSuccess('')
+    setRosterLoading(true)
+
+    try {
+      const endpoint = `/player-team/team/${team.id}/players/${Number(id)}`
+      const updatedPlayer = action === 'add'
+        ? await apiRequest(endpoint, { method: 'POST' })
+        : await apiRequest(endpoint, { method: 'DELETE' })
+
+      const refreshedTeam = await apiRequest(`/player-team/team/${team.id}`)
+      setTeam(refreshedTeam)
+      setRosterPlayerId('')
+      setRosterSuccess(
+        action === 'add'
+          ? `Player #${updatedPlayer.id} added to the roster.`
+          : `Player #${updatedPlayer.id} removed from the roster.`,
+      )
+    } catch (error) {
+      setRosterError(error.message || 'Could not update the roster.')
+    } finally {
+      setRosterLoading(false)
+    }
+  }
+
   const filteredTournaments = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
     return tournaments.filter((item) => {
@@ -419,6 +480,73 @@ function App() {
             <ErrorNotice>{teamError}</ErrorNotice>
             {teamLoading && <Loading label="Loading team…" />}
             {team && <div className="detail-card"><div className="detail-heading"><div><span className="eyebrow">TEAM #{team.id}</span><h2>{team.name}</h2><p>Captain ID: {team.captain_id ?? team.captain?.id ?? 'Not provided'}</p></div><span className={statusClass(team.status)}>{team.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Created" value={dateLabel(team.created_at)} /><Meta label="Updated" value={dateLabel(team.updated_at)} /><Meta label="Roster members" value={Array.isArray(team.players) ? team.players.length : 'Not provided'} /></div></div>}
+            {team && <>
+              <div className="section-title">
+                <div>
+                  <h2>Team roster</h2>
+                  <p className="muted">Active, eligible players can be added. The API checks captain permissions.</p>
+                </div>
+              </div>
+              <form className="lookup-card" onSubmit={(event) => { event.preventDefault(); changeRoster('add', rosterPlayerId) }}>
+                <div className="field">
+                  <label htmlFor="roster-player-id">Player ID to add</label>
+                  <input id="roster-player-id" inputMode="numeric" pattern="[1-9][0-9]*" value={rosterPlayerId} onChange={(event) => setRosterPlayerId(event.target.value)} placeholder="e.g. 7" required />
+                </div>
+                <button className="button button-primary" type="submit" disabled={rosterLoading}>{rosterLoading ? 'Updating…' : 'Add player'}</button>
+              </form>
+              <ErrorNotice>{rosterError}</ErrorNotice>
+              <SuccessNotice>{rosterSuccess}</SuccessNotice>
+              {rosterLoading && <Loading label="Updating team roster…" />}
+              {Array.isArray(team.players) && team.players.length > 0 ? (
+                <div className="table-wrap">
+                  <table>
+                    <thead><tr><th>Player</th><th>Player ID</th><th>User ID</th><th>Status</th><th>Actions</th></tr></thead>
+                    <tbody>
+                      {team.players.map((rosterPlayer) => (
+                        <tr key={rosterPlayer.id}>
+                          <td><strong>{[rosterPlayer.first_name, rosterPlayer.last_name].filter(Boolean).join(' ') || `Player #${rosterPlayer.id}`}</strong></td>
+                          <td>{rosterPlayer.id}</td>
+                          <td>{rosterPlayer.user_id ?? '—'}</td>
+                          <td><span className={statusClass(rosterPlayer.status)}>{rosterPlayer.status || 'Unknown'}</span></td>
+                          <td><div className="table-actions">
+                            <button type="button" onClick={() => { setPlayerId(String(rosterPlayer.id)); setPlayer(null); setPlayerError(''); }} disabled={rosterLoading}>Use ID</button>
+                            <button type="button" onClick={() => changeRoster('remove', rosterPlayer.id)} disabled={rosterLoading}>Remove</button>
+                          </div></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : <EmptyState title="Roster is empty" text="No players are currently assigned to this team. Add a player using their player ID above." />}
+            </>}
+
+            <div className="section-title">
+              <div>
+                <h2>Player profile lookup</h2>
+                <p className="muted">Find a player by player ID and view their team assignment.</p>
+              </div>
+            </div>
+            <form className="lookup-card" onSubmit={loadPlayer}>
+              <div className="field">
+                <label htmlFor="player-id">Player ID</label>
+                <input id="player-id" inputMode="numeric" pattern="[1-9][0-9]*" value={playerId} onChange={(event) => setPlayerId(event.target.value)} placeholder="e.g. 7" required />
+              </div>
+              <button className="button button-primary" type="submit" disabled={playerLoading}>{playerLoading ? 'Searching…' : 'Find player'}</button>
+            </form>
+            <ErrorNotice>{playerError}</ErrorNotice>
+            {playerLoading && <Loading label="Loading player profile…" />}
+            {player && <div className="detail-card">
+              <div className="detail-heading">
+                <div><span className="eyebrow">PLAYER #{player.id}</span><h2>{[player.first_name, player.last_name].filter(Boolean).join(' ') || 'Player profile'}</h2><p>User ID: {player.user_id ?? 'Not provided'}</p></div>
+                <span className={statusClass(player.status)}>{player.status || 'Unknown'}</span>
+              </div>
+              <div className="detail-meta">
+                <Meta label="Player ID" value={player.id} />
+                <Meta label="Team assignment" value={player.team_id ? `Team #${player.team_id}` : 'Not assigned'} />
+                <Meta label="Created" value={dateLabel(player.created_at)} />
+                <Meta label="Updated" value={dateLabel(player.updated_at)} />
+              </div>
+            </div>}
             <div className="section-title">
               <div>
                 <h2>Create a team</h2>
