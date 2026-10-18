@@ -8,7 +8,7 @@ from app.modules.match.schemas.fixture import FixtureResponse
 from app.modules.score.schemas.match_result import MatchResultResponse
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.tournament.schemas.tournament import TournamentResponse
-
+from app.modules.spectator.schemas.match_history import MatchHistoryResponse
 
 router = APIRouter(
     prefix="/spectator",
@@ -42,7 +42,7 @@ def spectator_home():
     return {"message": "Spectator router is working"}
 
 
-# SCRUM-187: Public tournament list
+
 @router.get(
     "/tournaments",
     response_model=list[TournamentResponse],
@@ -70,7 +70,7 @@ def list_public_tournaments(
     ).all()
 
 
-# SCRUM-188: Public tournament details
+
 @router.get(
     "/tournaments/{tournament_id}",
     response_model=TournamentResponse,
@@ -96,7 +96,7 @@ def get_public_tournament_details(
     return tournament
 
 
-# SCRUM-189: Public fixtures
+
 @router.get(
     "/tournaments/{tournament_id}/fixtures",
     response_model=list[FixtureResponse],
@@ -120,7 +120,7 @@ def list_public_fixtures(
     )
 
 
-# SCRUM-190: Public finalized match result
+
 @router.get(
     "/matches/{match_id}/result",
     response_model=MatchResultResponse,
@@ -152,3 +152,60 @@ def get_public_match_result(
         )
 
     return result
+
+
+@router.get(
+    "/tournaments/{tournament_id}/history",
+    response_model=list[MatchHistoryResponse],
+)
+def get_public_match_history(
+    tournament_id: int,
+    db: Session = Depends(get_db),
+):
+    """Return chronological match history for a published tournament."""
+
+    _get_published_tournament(db, tournament_id)
+
+    matches = (
+        db.query(Match)
+        .filter(Match.tournament_id == tournament_id)
+        .order_by(
+            Match.scheduled_at.asc(),
+            Match.match_number.asc(),
+        )
+        .all()
+    )
+
+    history = []
+
+    for match in matches:
+        result = (
+            db.query(MatchResult)
+            .filter(MatchResult.match_id == match.id)
+            .first()
+        )
+
+        history.append(
+            {
+                "id": match.id,
+                "tournament_id": match.tournament_id,
+                "match_number": match.match_number,
+                "team_a_id": match.team_a_id,
+                "team_b_id": match.team_b_id,
+                "scheduled_at": match.scheduled_at,
+                "status": match.status,
+                "result": (
+                    {
+                        "outcome": result.outcome,
+                        "winner_team_id": result.winner_team_id,
+                        "loser_team_id": result.loser_team_id,
+                        "team_a_score": result.team_a_score,
+                        "team_b_score": result.team_b_score,
+                    }
+                    if result is not None
+                    else None
+                ),
+            }
+        )
+
+    return history
