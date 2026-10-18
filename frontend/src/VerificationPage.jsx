@@ -7,13 +7,14 @@ function MatchRow({ fixture }) {
   const [score, setScore] = useState(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
     let cancelled = false
     getScoreForReview(fixture.id)
       .then((s) => { if (!cancelled) setScore(s) })
-      .catch((err) => { if (!cancelled) setError(err.message) })
+      .catch((err) => { if (cancelled) return; if (/no score/i.test(err.message)) setNote('No score submitted yet.'); else setError(err.message) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [fixture.id])
@@ -37,6 +38,7 @@ function MatchRow({ fixture }) {
       <strong>Match {fixture.match_number}</strong>
       {' '}(Team {fixture.team_a_id ?? 'TBD'} vs Team {fixture.team_b_id ?? 'TBD'})
       {loading && <div>Loading score...</div>}
+      {note && <div style={{ opacity: 0.7 }}>{note}</div>}
       {score && (
         <div style={{ margin: '8px 0' }}>
           Submitted score: <b>{score.team_a_score} - {score.team_b_score}</b>
