@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { useRealtimeEvent } from './RealtimeProvider'
+import { useRealtimeEvent } from './useRealtime'
 
 // Returns { [fixtureId]: { kickoff, ...fields } }, updated live.
 export function useFixtureUpdates(initial = {}) {

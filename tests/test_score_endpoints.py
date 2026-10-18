@@ -474,3 +474,59 @@ def test_update_refreshes_the_server_side_timestamp(db):
     assert response.status_code == 200
     db.refresh(score)
     assert score.updated_at > original_updated_at
+
+
+# SCRUM-223: retrieve current score
+
+def test_get_score_returns_current_score(db):
+    match = _make_match(db)
+    official = _assigned_official(db, match)
+    headers = _auth_header(official)
+    client.post(
+        f"/matches/{match.id}/score",
+        json={"match_id": match.id, "team_a_score": 2, "team_b_score": 1},
+        headers=headers,
+    )
+
+    response = client.get(f"/matches/{match.id}/score", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["match_id"] == match.id
+    assert body["team_a_score"] == 2
+    assert body["team_b_score"] == 1
+
+
+def test_get_score_returns_404_when_no_score_yet(db):
+    match = _make_match(db)
+    official = _assigned_official(db, match)
+
+    response = client.get(f"/matches/{match.id}/score", headers=_auth_header(official))
+
+    assert response.status_code == 404
+
+
+def test_get_score_rejects_unassigned_official(db):
+    match = _make_match(db)
+    outsider = _make_user(db, "scorer")
+
+    response = client.get(f"/matches/{match.id}/score", headers=_auth_header(outsider))
+
+    assert response.status_code == 403
+
+
+def test_get_score_rejects_non_official_role(db):
+    match = _make_match(db)
+    organiser = _make_user(db, "organiser")
+
+    response = client.get(f"/matches/{match.id}/score", headers=_auth_header(organiser))
+
+    assert response.status_code == 403
+
+
+def test_get_score_requires_authentication(db):
+    match = _make_match(db)
+
+    response = client.get(f"/matches/{match.id}/score")
+
+    assert response.status_code in (401, 403)

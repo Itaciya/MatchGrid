@@ -12,7 +12,7 @@ from app.modules.score.schemas.score import (
     ScoreResponse,
     ScoreUpdate,
 )
-from app.modules.score.services.score_service import create_score, update_score
+from app.modules.score.services.score_service import create_score, get_score, update_score
 from app.modules.match.services.match_result_service import (
     correct_match_result,
     finalize_match_result,
@@ -108,3 +108,16 @@ def correct_result_endpoint(
         data.team_b_score,
         data.reason,
     )
+
+
+@router.get(
+    "/{match_id}/score",
+    response_model=ScoreResponse,
+    dependencies=[Depends(verify_assigned_official)],
+)
+def get_score_endpoint(
+    match_id: int,
+    db: Session = Depends(get_db),
+):
+    """Current score for a match. Assigned officials only."""
+    return get_score(db, match_id)

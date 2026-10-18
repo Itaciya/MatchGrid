@@ -101,3 +101,13 @@ def update_score(db: Session, match_id: int, data: ScoreUpdate) -> Score:
     db.refresh(score)
 
     return score
+
+
+def get_score(db: Session, match_id: int) -> Score:
+    """Return the current score for a match (any match status)."""
+    score = db.query(Score).filter(Score.match_id == match_id).first()
+    if score is None:
+        raise NotFoundException(
+            detail="No score has been submitted for this match"
+        )
+    return score

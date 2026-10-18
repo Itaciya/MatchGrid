@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { useRealtimeEvent } from './RealtimeProvider'
+import { useRealtimeEvent } from './useRealtime'
 
 // Returns { [matchId]: 'live' | 'halftime' | ... }, updated live.
 export function useMatchStatus(initial = {}) {

@@ -98,11 +98,12 @@ def verify_tournament_owner(
 
 
 ASSIGNMENT_STATUS_ACTIVE = "active"
+OFFICIAL_ROLES = ("scorer", "official")
 
 
 def verify_assigned_official(
     match_id: int,
-    current_user: User = Depends(require_role("scorer", "official")),
+    current_user: User = Depends(require_role(*OFFICIAL_ROLES)),
     db: Session = Depends(get_db),
 ) -> Match:
     """SCRUM-144: the user must hold an official role AND have an active
