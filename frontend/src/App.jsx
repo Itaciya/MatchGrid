@@ -79,6 +79,10 @@ function App() {
   const [fixtures, setFixtures] = useState([])
   const [fixturesLoading, setFixturesLoading] = useState(false)
   const [fixturesError, setFixturesError] = useState('')
+  const [fixtureStatusFilter, setFixtureStatusFilter] = useState('')
+  const [fixtureTeamFilter, setFixtureTeamFilter] = useState('')
+  const [fixtureVenueFilter, setFixtureVenueFilter] = useState('')
+  const [fixturePage, setFixturePage] = useState(1)
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [detailsError, setDetailsError] = useState('')
   const [formLoading, setFormLoading] = useState(false)
@@ -214,6 +218,10 @@ function App() {
     setStandings([])
     setFixtures([])
     setFixturesError('')
+    setFixtureStatusFilter('')
+    setFixtureTeamFilter('')
+    setFixtureVenueFilter('')
+    setFixturePage(1)
     setDetailsError('')
     setDetailsLoading(true)
     setFixturesLoading(true)
@@ -472,6 +480,35 @@ function App() {
   }, [tournaments, searchTerm])
 
   const totalPages = Math.max(1, Math.ceil(filteredTournaments.length / 10))
+  const filteredFixtures = useMemo(() => {
+    const teamQuery = fixtureTeamFilter.trim()
+    const venueQuery = fixtureVenueFilter.trim()
+
+    return [...fixtures]
+      .filter((fixture) => {
+        if (fixtureStatusFilter && String(fixture.status || '').toLowerCase() !== fixtureStatusFilter) return false
+        if (teamQuery && String(fixture.team_a_id ?? '') !== teamQuery && String(fixture.team_b_id ?? '') !== teamQuery) return false
+        if (venueQuery && String(fixture.venue_id ?? '') !== venueQuery) return false
+        return true
+      })
+      .sort((a, b) => {
+        const aTime = a.scheduled_at ? new Date(a.scheduled_at).getTime() : Number.MAX_SAFE_INTEGER
+        const bTime = b.scheduled_at ? new Date(b.scheduled_at).getTime() : Number.MAX_SAFE_INTEGER
+        return aTime - bTime
+      })
+  }, [fixtures, fixtureStatusFilter, fixtureTeamFilter, fixtureVenueFilter])
+
+  const fixturePageSize = 10
+  const fixturePageCount = Math.max(1, Math.ceil(filteredFixtures.length / fixturePageSize))
+  const paginatedFixtures = filteredFixtures.slice(
+    (fixturePage - 1) * fixturePageSize,
+    fixturePage * fixturePageSize,
+  )
+
+  useEffect(() => {
+    setFixturePage((page) => Math.min(page, fixturePageCount))
+  }, [fixturePageCount])
+
   const paginatedTournaments = filteredTournaments.slice(
     (currentPage - 1) * 10,
     currentPage * 10,
@@ -643,7 +680,58 @@ function App() {
             <div className="page-heading"><div><p className="eyebrow">COMPETITION OVERVIEW</p><h1>Tournament details</h1><p className="muted">Tournament information and standings provided by the API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>â† Back to list</button></div>
             {detailsLoading && <Loading label="Loading tournament detailsâ€¦" />}
             <ErrorNotice>{detailsError}</ErrorNotice>
-            {selectedTournament && <><div className="detail-card"><div className="detail-heading"><div><span className="eyebrow">TOURNAMENT #{selectedTournament.id}</span><h2>{selectedTournament.name}</h2><p>{selectedTournament.description || 'No description provided.'}</p></div><span className={statusClass(selectedTournament.status)}>{selectedTournament.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Format" value={selectedTournament.format} /><Meta label="Starts" value={dateLabel(selectedTournament.start_date)} /><Meta label="Ends" value={dateLabel(selectedTournament.end_date)} /><Meta label="Organizer ID" value={selectedTournament.organizer_id} /></div><div className="detail-actions">{currentUser?.role === 'organiser' && <button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button></div></div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixturesâ€¦" /> : <><ErrorNotice>{fixturesError}</ErrorNotice>{fixtures.length ? <div className="table-wrap"><table><thead><tr><th>Match</th><th>Team A ID</th><th>Team B ID</th><th>Venue ID</th><th>Scheduled at</th><th>Status</th></tr></thead><tbody>{fixtures.map((fixture) => <tr key={fixture.id}><td><strong>#{fixture.match_number}</strong><small className="cell-subtitle">Fixture ID: {fixture.id}</small></td><td>{fixture.team_a_id ?? 'TBD'}</td><td>{fixture.team_b_id ?? 'TBD'}</td><td>{fixture.venue_id ?? 'â€”'}</td><td>{dateLabel(fixture.scheduled_at)}</td><td><span className={statusClass(fixture.status)}>{fixture.status || 'Unknown'}</span></td></tr>)}</tbody></table></div> : !fixturesError ? <EmptyState title="No fixtures available" text="No fixtures have been returned for this tournament yet." /> : null}</>}<div className="section-title"><div><h2>Standings</h2><p className="muted">Calculated rankings returned by the standings endpoint.</p></div></div>{standings.length ? <div className="table-wrap"><table><thead><tr><th>Rank</th><th>Team</th><th>Played</th><th>W</th><th>D</th><th>L</th><th>Score diff.</th><th>Points</th></tr></thead><tbody>{standings.map((row) => <tr key={row.team_id}><td><span className="rank">#{row.rank}</span></td><td><strong>{row.team_name}</strong></td><td>{row.played}</td><td>{row.wins}</td><td>{row.draws}</td><td>{row.losses}</td><td>{row.score_difference}</td><td><strong>{row.points}</strong></td></tr>)}</tbody></table></div> : <EmptyState title="No standings available" text="The API returned no standings for this tournament yet." />}</>}
+            {selectedTournament && <><div className="detail-card"><div className="detail-heading"><div><span className="eyebrow">TOURNAMENT #{selectedTournament.id}</span><h2>{selectedTournament.name}</h2><p>{selectedTournament.description || 'No description provided.'}</p></div><span className={statusClass(selectedTournament.status)}>{selectedTournament.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Format" value={selectedTournament.format} /><Meta label="Starts" value={dateLabel(selectedTournament.start_date)} /><Meta label="Ends" value={dateLabel(selectedTournament.end_date)} /><Meta label="Organizer ID" value={selectedTournament.organizer_id} /></div><div className="detail-actions">{currentUser?.role === 'organiser' && <button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button></div></div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixturesâ€¦" /> : <><ErrorNotice>{fixturesError}</ErrorNotice><div className="fixture-filters filter-row">
+  <label>
+    Status
+    <select value={fixtureStatusFilter} onChange={(event) => { setFixtureStatusFilter(event.target.value); setFixturePage(1) }}>
+      <option value="">All statuses</option>
+      <option value="scheduled">Scheduled</option>
+      <option value="completed">Completed</option>
+      <option value="cancelled">Cancelled</option>
+      <option value="postponed">Postponed</option>
+    </select>
+  </label>
+  <label>
+    Team ID
+    <input type="number" min="1" placeholder="Any team" value={fixtureTeamFilter} onChange={(event) => { setFixtureTeamFilter(event.target.value); setFixturePage(1) }} />
+  </label>
+  <label>
+    Venue ID
+    <input type="number" min="1" placeholder="Any venue" value={fixtureVenueFilter} onChange={(event) => { setFixtureVenueFilter(event.target.value); setFixturePage(1) }} />
+  </label>
+  <button className="button button-secondary" onClick={() => { setFixtureStatusFilter(''); setFixtureTeamFilter(''); setFixtureVenueFilter(''); setFixturePage(1) }}>
+    Clear filters
+  </button>
+</div>
+{filteredFixtures.length ? <>
+  <p className="helper-text">
+    Showing {(fixturePage - 1) * fixturePageSize + 1}–{Math.min(fixturePage * fixturePageSize, filteredFixtures.length)} of {filteredFixtures.length} fixtures
+  </p>
+  <div className="table-wrap">
+    <table>
+      <thead><tr><th>Match</th><th>Team A ID</th><th>Team B ID</th><th>Venue ID</th><th>Scheduled at</th><th>Status</th></tr></thead>
+      <tbody>{paginatedFixtures.map((fixture) => {
+        const status = String(fixture.status || 'unknown').toLowerCase()
+        const scheduledTime = fixture.scheduled_at ? new Date(fixture.scheduled_at).getTime() : NaN
+        const isUpcoming = status === 'scheduled' && Number.isFinite(scheduledTime) && scheduledTime >= Date.now()
+        const displayStatus = isUpcoming ? 'Upcoming' : (status === 'scheduled' ? 'Scheduled' : (fixture.status || 'Unknown'))
+        return <tr key={fixture.id}>
+          <td><strong>#{fixture.match_number}</strong><small className="cell-subtitle">Fixture ID: {fixture.id}</small></td>
+          <td>{fixture.team_a_id ?? 'TBD'}</td>
+          <td>{fixture.team_b_id ?? 'TBD'}</td>
+          <td>{fixture.venue_id ?? '—'}</td>
+          <td>{dateLabel(fixture.scheduled_at)}</td>
+          <td><span className={statusClass(isUpcoming ? 'upcoming' : status)}>{displayStatus}</span></td>
+        </tr>
+      })}</tbody>
+    </table>
+  </div>
+  <div className="pagination-row">
+    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.max(1, value - 1))} disabled={fixturePage <= 1}>Previous</button>
+    <span className="helper-text">Page {fixturePage} of {fixturePageCount}</span>
+    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.min(fixturePageCount, value + 1))} disabled={fixturePage >= fixturePageCount}>Next</button>
+  </div>
+</> : !fixturesError ? <EmptyState title="No matching fixtures" text="Try changing or clearing the fixture filters." /> : null}</>}<div className="section-title"><div><h2>Standings</h2><p className="muted">Calculated rankings returned by the standings endpoint.</p></div></div>{standings.length ? <div className="table-wrap"><table><thead><tr><th>Rank</th><th>Team</th><th>Played</th><th>W</th><th>D</th><th>L</th><th>Score diff.</th><th>Points</th></tr></thead><tbody>{standings.map((row) => <tr key={row.team_id}><td><span className="rank">#{row.rank}</span></td><td><strong>{row.team_name}</strong></td><td>{row.played}</td><td>{row.wins}</td><td>{row.draws}</td><td>{row.losses}</td><td>{row.score_difference}</td><td><strong>{row.points}</strong></td></tr>)}</tbody></table></div> : <EmptyState title="No standings available" text="The API returned no standings for this tournament yet." />}</>}
             {!detailsLoading && !selectedTournament && !detailsError && <IdLookup onSubmit={openTournament} />}
           </>}
 
