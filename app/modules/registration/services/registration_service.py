@@ -567,3 +567,44 @@ def reject_registration(
         raise
 
     return registration
+
+
+def get_my_registrations(
+    db: Session,
+    current_user_id: int,
+    role: str,
+) -> list[Registration]:
+    """Return registrations belonging to the authenticated user."""
+
+    query = db.query(Registration)
+
+    if role == "captain":
+        team_ids = (
+            db.query(Team.id)
+            .filter(Team.captain_id == current_user_id)
+            .subquery()
+        )
+
+        query = query.filter(Registration.team_id.in_(team_ids))
+
+    elif role == "player":
+        player = (
+            db.query(Player)
+            .filter(Player.user_id == current_user_id)
+            .first()
+        )
+
+        if player is None:
+            return []
+
+        query = query.filter(
+            Registration.registration_type == RegistrationType.PLAYER.value,
+            Registration.player_id == player.id,
+        )
+
+    else:
+        raise ForbiddenException(
+            detail="You are not allowed to view these registrations"
+        )
+
+    return query.order_by(Registration.registered_at.desc()).all()

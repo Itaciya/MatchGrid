@@ -9,6 +9,8 @@ import StandingsPage from './StandingsPage.jsx'
 import LeaderboardPage from './LeaderboardPage.jsx'
 import DisputeResolutionPage from './DisputeResolutionPage.jsx'
 import './App.css'
+import RegistrationPage from './RegistrationPage.jsx'
+import RegistrationApprovalPage from './RegistrationApprovalPage.jsx'
 
 const NAV_ITEMS = [
   ['overview', 'Overview'],
@@ -23,6 +25,8 @@ const NAV_ITEMS = [
   ['standings', 'Standings'],
   ['leaderboard', 'Leaderboard'],
   ['resolve', 'Resolve disputes'],
+  ['registrations', 'Tournament registration'],
+  ['registration-approvals', 'Registration approvals'],
 ]
 
 function dateLabel(value) {
@@ -434,6 +438,13 @@ function App() {
   }
 
   const visibleNavItems = NAV_ITEMS.filter(([id]) => {
+    if (id === 'registrations') {
+      return currentUser?.role === 'captain'
+    }
+
+    if (id === 'registration-approvals') {
+      return currentUser?.role === 'organiser'
+    }
     if (id === 'create') {
       return currentUser?.role === 'organiser'
     }
@@ -658,6 +669,8 @@ function App() {
           {page === 'standings' && <StandingsPage />}
           {page === 'leaderboard' && <LeaderboardPage />}
           {page === 'resolve' && <DisputeResolutionPage />}
+          {page === 'registrations' && currentUser?.role === 'captain' && <RegistrationPage />}
+          {page === 'registration-approvals' && currentUser?.role === 'organiser' && <RegistrationApprovalPage />}
       {page === 'team' && <>
             <div className="page-heading"><div><p className="eyebrow">TEAM DIRECTORY</p><h1>Team lookup</h1><p className="muted">Look up an existing team using its numeric ID.</p></div></div>
             <form className="lookup-card" onSubmit={loadTeam}><div className="field"><label htmlFor="team-id">Team ID</label><input id="team-id" inputMode="numeric" pattern="[1-9][0-9]*" value={teamId} onChange={(event) => setTeamId(event.target.value)} placeholder="e.g. 12" required /></div><button className="button button-primary" type="submit" disabled={teamLoading}>{teamLoading ? 'Searchingâ€¦' : 'Find team'}</button></form>

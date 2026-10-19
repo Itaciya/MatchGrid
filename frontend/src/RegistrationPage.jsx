@@ -1,0 +1,180 @@
+﻿import { useCallback, useEffect, useState } from 'react'
+import { apiRequest } from './services/api'
+
+const STATUS_OPTIONS = ['pending', 'approved', 'rejected', 'cancelled']
+
+function showDate(value) {
+  if (!value) return '—'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString()
+}
+
+export default function RegistrationPage() {
+  const [tournamentId, setTournamentId] = useState('')
+  const [teamId, setTeamId] = useState('')
+  const [note, setNote] = useState('')
+  const [registrations, setRegistrations] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  const loadRegistrations = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const result = await apiRequest('/registrations/my')
+      setRegistrations(Array.isArray(result) ? result : [])
+    } catch (err) {
+      setError(err.message || 'Could not load your registrations.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadRegistrations()
+  }, [loadRegistrations])
+
+  async function submitRegistration(event) {
+    event.preventDefault()
+    setError('')
+    setSuccess('')
+
+    if (!/^[1-9]\d*$/.test(tournamentId) || !/^[1-9]\d*$/.test(teamId)) {
+      setError('Enter valid positive tournament and team IDs.')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await apiRequest('/registrations/', {
+        method: 'POST',
+        body: JSON.stringify({
+          tournament_id: Number(tournamentId),
+          team_id: Number(teamId),
+          player_id: null,
+          registration_type: 'team',
+          note: note.trim() || null,
+        }),
+      })
+      setSuccess('Registration submitted. Its initial status is pending.')
+      setNote('')
+      await loadRegistrations()
+    } catch (err) {
+      setError(err.message || 'Registration failed. Check the IDs and your permissions.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">TEAM PARTICIPATION</p>
+          <h1>Tournament registration</h1>
+          <p className="muted">Register your team and follow the review status.</p>
+        </div>
+      </div>
+
+      <form className="auth-card" onSubmit={submitRegistration}>
+        <h2>Register a team</h2>
+        <p className="muted">Use your team ID. The backend verifies captain permissions and eligibility.</p>
+
+        <div className="field">
+          <label htmlFor="registration-tournament">Tournament ID</label>
+          <input
+            id="registration-tournament"
+            type="number"
+            min="1"
+            value={tournamentId}
+            onChange={(event) => setTournamentId(event.target.value)}
+            required
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="registration-team">Team ID</label>
+          <input
+            id="registration-team"
+            type="number"
+            min="1"
+            value={teamId}
+            onChange={(event) => setTeamId(event.target.value)}
+            required
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="registration-note">Note (optional)</label>
+          <input
+            id="registration-note"
+            value={note}
+            maxLength="500"
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Additional information"
+          />
+        </div>
+
+        <button className="button button-primary auth-submit" type="submit" disabled={submitting}>
+          {submitting ? 'Submitting…' : 'Submit registration'}
+        </button>
+      </form>
+
+      {error && <p role="alert" className="notice notice-error">{error}</p>}
+      {success && <p role="status" className="notice notice-success">{success}</p>}
+
+      <div className="section-title">
+        <div>
+          <h2>My registrations</h2>
+          <p className="muted">Review your current registration details and status.</p>
+        </div>
+        <button className="button button-secondary" onClick={loadRegistrations} disabled={loading}>
+          {loading ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
+
+      {loading && <p>Loading registrations…</p>}
+
+      {!loading && registrations.length === 0 && !error && (
+        <div className="detail-card">
+          <p>No registrations found for your account.</p>
+        </div>
+      )}
+
+      {registrations.length > 0 && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Registration</th>
+                <th>Tournament</th>
+                <th>Team / Player</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Registered</th>
+              </tr>
+            </thead>
+            <tbody>
+              {registrations.map((item) => (
+                <tr key={item.id}>
+                  <td>#{item.id}</td>
+                  <td>#{item.tournament_id}</td>
+                  <td>{item.team_id ? `Team #${item.team_id}` : item.player_id ? `Player #${item.player_id}` : '—'}</td>
+                  <td>{item.registration_type || '—'}</td>
+                  <td>
+                    <span className={STATUS_OPTIONS.includes(String(item.status).toLowerCase()) ? `status status-${String(item.status).toLowerCase()}` : ''}>
+                      {item.status || 'Unknown'}
+                    </span>
+                  </td>
+                  <td>{showDate(item.registered_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  )
+}

@@ -1,8 +1,11 @@
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.dependencies import require_role
 from app.data_access.database import get_db
 from app.modules.tournament.schemas.tournament import (
+    TournamentCreate,
     TournamentResponse,
     TournamentStandingResponse,
 )
@@ -10,9 +13,11 @@ from app.modules.tournament.services.standings_service import (
     calculate_tournament_standings,
 )
 from app.modules.tournament.services.tournament_service import (
+    create_tournament,
     get_tournament_by_id,
     list_tournaments,
 )
+from app.modules.user.models import User
 
 
 router = APIRouter(
@@ -52,6 +57,25 @@ def get_tournaments(
     return list_tournaments(
         db,
         status=status,
+    )
+
+
+@router.post(
+    "/",
+    response_model=TournamentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_tournament_endpoint(
+    data: TournamentCreate,
+    current_user: User = Depends(require_role("organiser")),
+    db: Session = Depends(get_db),
+):
+    """Create a tournament as an authorized organizer."""
+
+    return create_tournament(
+        db=db,
+        organizer_id=current_user.id,
+        data=data,
     )
 
 
