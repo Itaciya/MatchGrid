@@ -11,7 +11,9 @@ from app.modules.official_assignment.models.official_assignment import OfficialA
 from app.modules.player_team.models.team import Team, TeamStatus
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
+from unittest.mock import AsyncMock
 
+from app.realtime.connection_manager import manager
 client = TestClient(app)
 
 
@@ -364,3 +366,65 @@ def test_match_without_both_teams_cannot_be_completed(db):
 
     db.refresh(match)
     assert match.status == "live"
+
+
+
+@pytest.mark.parametrize(
+    ("initial_status", "endpoint", "expected_status"),
+    [
+        ("live", "pause", "paused"),
+        ("paused", "resume", "live"),
+        ("scheduled", "cancel", "cancelled"),
+    ],
+)
+def test_status_endpoints_update_and_broadcast(
+    db, monkeypatch, initial_status, endpoint, expected_status
+):
+    user = _make_user(db, "official")
+    match = _make_match(db, status=initial_status)
+    _assign(db, match, user)
+
+    broadcast = AsyncMock()
+    monkeypatch.setattr(manager, "broadcast_to_match", broadcast)
+
+    response = client.post(
+        f"/matches/{match.id}/{endpoint}",
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == expected_status
+
+    db.refresh(match)
+    assert match.status == expected_status
+
+    broadcast.assert_awaited_once_with(
+        match.id,
+        {
+            "type": "match_status:update",
+            "payload": {
+                "match_id": match.id,
+                "status": expected_status,
+            },
+        },
+    )
+
+
+def test_invalid_pause_does_not_broadcast(db, monkeypatch):
+    user = _make_user(db, "official")
+    match = _make_match(db, status="scheduled")
+    _assign(db, match, user)
+
+    broadcast = AsyncMock()
+    monkeypatch.setattr(manager, "broadcast_to_match", broadcast)
+
+    response = client.post(
+        f"/matches/{match.id}/pause",
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 409
+
+    db.refresh(match)
+    assert match.status == "scheduled"
+    broadcast.assert_not_awaited()

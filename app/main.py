@@ -30,6 +30,7 @@ from app.modules.tournament.routes import router as tournament_router
 from app.modules.user.routes import router as user_router
 from app.modules.user.models import User  # noqa: F401
 from app.modules.venue.routes import router as venue_router
+from app.realtime.routes import router as websocket_router
 from app.modules.official_assignment.routes import (
     router as official_assignment_router,
 )
@@ -155,3 +156,5 @@ def database_health():
         logger.error("Database health check failed")
 
     return {"database": result}
+
+app.include_router(websocket_router)

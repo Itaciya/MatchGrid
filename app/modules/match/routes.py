@@ -1,8 +1,6 @@
 from datetime import datetime
-
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
-
 from app.core.dependencies import (
     verify_assigned_official,
     verify_tournament_owner,
@@ -12,7 +10,6 @@ from app.core.exceptions import (
     NotFoundException,
 )
 from app.data_access.database import get_db
-
 from app.modules.match.models.match import Match
 from app.modules.match.schemas.fixture import (
     FixtureCreate,
@@ -32,12 +29,24 @@ from app.modules.match.services.fixture_conflict_resolution_service import (
 from app.modules.match.services.fixture_update_service import (
     update_fixture_schedule,
 )
+from app.modules.match.services.fixture_broadcast_service import (
+    broadcast_fixture_update,
+)
 from app.modules.match.services.fixture_publication_service import (
     publish_fixtures,
 )
 from app.modules.match.services.match_start_service import start_match
+from app.modules.match.services.match_status_broadcast_service import (
+    broadcast_match_status,
+)
+from app.modules.match.services.match_status_service import (
+    complete_match,
+    transition_match_status,
+    MATCH_STATUS_PAUSED,
+    MATCH_STATUS_LIVE,
+    MATCH_STATUS_CANCELLED,
+)
 from app.modules.tournament.models.tournament import Tournament
-from app.modules.match.services.match_status_service import complete_match
 
 router = APIRouter(
     prefix="/matches",
@@ -233,21 +242,26 @@ def resolve_fixture_conflicts_endpoint(
     response_model=FixtureResponse,
     status_code=status.HTTP_200_OK,
 )
-def update_fixture_endpoint(
+async def update_fixture_endpoint(
     tournament_id: int,
     match_id: int,
     data: FixtureUpdate,
     tournament: Tournament = Depends(verify_tournament_owner),
     db: Session = Depends(get_db),
 ):
-    """Update a fixture after validating scheduling conflicts."""
+    """Update a fixture and broadcast its new details."""
 
-    return update_fixture_schedule(
+    match = update_fixture_schedule(
         db=db,
         tournament_id=tournament.id,
         match_id=match_id,
         data=data,
     )
+
+
+    await broadcast_fixture_update(match)
+
+    return match
 
 
 # Start a match
@@ -256,23 +270,86 @@ def update_fixture_endpoint(
     response_model=MatchStatusResponse,
     dependencies=[Depends(verify_assigned_official)],
 )
-def start_match_endpoint(
+async def start_match_endpoint(
     match_id: int,
     db: Session = Depends(get_db),
 ):
-    """Start a scheduled match and record server time."""
+    """Start a scheduled match and broadcast its new status."""
 
-    return start_match(db, match_id)
+    match = start_match(db, match_id)
+    await broadcast_match_status(match)
+    return match
 
+
+# Complete a match
 @router.post(
     "/{match_id}/complete",
     response_model=MatchStatusResponse,
     dependencies=[Depends(verify_assigned_official)],
 )
-def complete_match_endpoint(
+async def complete_match_endpoint(
     match_id: int,
     db: Session = Depends(get_db),
 ):
-    """Complete a live match by an assigned official."""
+    """Complete a match and broadcast its new status."""
 
-    return complete_match(db, match_id)
+    match = complete_match(db, match_id)
+    await broadcast_match_status(match)
+    return match
+
+
+# Pause a live match
+@router.post(
+    "/{match_id}/pause",
+    response_model=MatchStatusResponse,
+    dependencies=[Depends(verify_assigned_official)],
+)
+async def pause_match_endpoint(
+    match_id: int,
+    db: Session = Depends(get_db),
+):
+    """Pause a live match and broadcast its status."""
+
+    match = transition_match_status(
+        db, match_id, MATCH_STATUS_PAUSED
+    )
+    await broadcast_match_status(match)
+    return match
+
+
+# Resume a paused match
+@router.post(
+    "/{match_id}/resume",
+    response_model=MatchStatusResponse,
+    dependencies=[Depends(verify_assigned_official)],
+)
+async def resume_match_endpoint(
+    match_id: int,
+    db: Session = Depends(get_db),
+):
+    """Resume a paused match and broadcast its status."""
+
+    match = transition_match_status(
+        db, match_id, MATCH_STATUS_LIVE
+    )
+    await broadcast_match_status(match)
+    return match
+
+
+# Cancel a scheduled, live, or paused match
+@router.post(
+    "/{match_id}/cancel",
+    response_model=MatchStatusResponse,
+    dependencies=[Depends(verify_assigned_official)],
+)
+async def cancel_match_endpoint(
+    match_id: int,
+    db: Session = Depends(get_db),
+):
+    """Cancel a match and broadcast its status."""
+
+    match = transition_match_status(
+        db, match_id, MATCH_STATUS_CANCELLED
+    )
+    await broadcast_match_status(match)
+    return match
