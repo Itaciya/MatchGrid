@@ -33,7 +33,16 @@ export default function RegistrationPage() {
   }, [])
 
   useEffect(() => {
-    loadRegistrations()
+    let cancelled = false
+
+    Promise.resolve().then(() => {
+      if (!cancelled) return loadRegistrations()
+      return undefined
+    })
+
+    return () => {
+      cancelled = true
+    }
   }, [loadRegistrations])
 
   async function submitRegistration(event) {

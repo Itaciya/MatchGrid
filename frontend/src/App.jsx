@@ -29,6 +29,36 @@ const NAV_ITEMS = [
   ['registration-approvals', 'Registration approvals'],
 ]
 
+
+const PUBLIC_PAGES = new Set([
+  'login',
+  'register',
+  'tournaments',
+  'details',
+  'standings',
+  'leaderboard',
+])
+
+const KNOWN_ROLES = new Set([
+  'organiser',
+  'captain',
+  'player',
+  'spectator',
+  'scorer',
+  'official',
+])
+
+const PAGE_ROLES = {
+  create: ['organiser'],
+  'registration-approvals': ['organiser'],
+  resolve: ['organiser'],
+  registrations: ['captain'],
+  team: ['organiser', 'player'],
+  scoring: ['scorer', 'official'],
+  verify: ['organiser'],
+  dispute: ['player'],
+}
+
 function dateLabel(value) {
   if (!value) return 'â€”'
   const date = new Date(value)
@@ -64,6 +94,7 @@ function Loading({ label = 'Loadingâ€¦' }) {
 function App() {
   const [page, setPage] = useState('overview')
   const [currentUser, setCurrentUser] = useState(null)
+  const [authReady, setAuthReady] = useState(false)
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState('')
   const [authSuccess, setAuthSuccess] = useState('')
@@ -128,19 +159,50 @@ function App() {
   }, [theme])
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
-    if (!token) return
-
     let cancelled = false
+
+    const clearStoredTokens = () => {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('refreshToken')
+    }
+
+    const token =
+      localStorage.getItem('access_token') ||
+      localStorage.getItem('accessToken') ||
+      localStorage.getItem('token')
+
+    if (!token) {
+      Promise.resolve().then(() => {
+        if (!cancelled) setAuthReady(true)
+      })
+
+      return () => {
+        cancelled = true
+      }
+    }
 
     apiRequest('/auth/me')
       .then((user) => {
-        if (!cancelled) setCurrentUser(user)
+        const role =
+          typeof user?.role === 'string'
+            ? user.role.toLowerCase()
+            : ''
+
+        if (!user || !KNOWN_ROLES.has(role)) {
+          throw new Error('Missing or invalid user role.')
+        }
+
+        if (!cancelled) setCurrentUser({ ...user, role })
       })
       .catch(() => {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
+        clearStoredTokens()
         if (!cancelled) setCurrentUser(null)
+      })
+      .finally(() => {
+        if (!cancelled) setAuthReady(true)
       })
 
     return () => {
@@ -411,12 +473,25 @@ function App() {
       localStorage.setItem('refresh_token', tokens.refresh_token)
 
       const user = await apiRequest('/auth/me')
-      setCurrentUser(user)
+      const role =
+        typeof user?.role === 'string'
+          ? user.role.toLowerCase()
+          : ''
+
+      if (!user || !KNOWN_ROLES.has(role)) {
+        throw new Error('Missing or invalid user role.')
+      }
+
+      setCurrentUser({ ...user, role })
+      setAuthReady(true)
       setPage('overview')
     } catch (error) {
       if (mode === 'login') {
         localStorage.removeItem('access_token')
+        localStorage.removeItem('accessToken')
+        localStorage.removeItem('token')
         localStorage.removeItem('refresh_token')
+        localStorage.removeItem('refreshToken')
         setCurrentUser(null)
       }
 
@@ -431,39 +506,72 @@ function App() {
     setAuthSuccess('')
 
     try {
-      if (localStorage.getItem('access_token')) {
+      const token =
+        localStorage.getItem('access_token') ||
+        localStorage.getItem('accessToken') ||
+        localStorage.getItem('token')
+
+      if (token) {
         await apiRequest('/auth/logout', { method: 'POST' })
       }
     } catch (error) {
       console.warn('Server logout failed:', error.message)
     } finally {
       localStorage.removeItem('access_token')
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('token')
       localStorage.removeItem('refresh_token')
+      localStorage.removeItem('refreshToken')
+
       setCurrentUser(null)
+      setAuthReady(true)
       setPage('login')
       setAuthSuccess('You have been signed out.')
     }
   }
 
+  useEffect(() => {
+    if (!authReady || PUBLIC_PAGES.has(page)) return
+
+    let cancelled = false
+
+    Promise.resolve().then(() => {
+      if (cancelled) return
+
+      if (!currentUser) {
+        setPage('login')
+        return
+      }
+
+      const role =
+        typeof currentUser.role === 'string'
+          ? currentUser.role.toLowerCase()
+          : ''
+
+      if (
+        !KNOWN_ROLES.has(role) ||
+        (PAGE_ROLES[page] && !PAGE_ROLES[page].includes(role))
+      ) {
+        setPage('overview')
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [page, currentUser, authReady])
+
   const visibleNavItems = NAV_ITEMS.filter(([id]) => {
-    if (id === 'registrations') {
-      return currentUser?.role === 'captain'
-    }
+    if (id === 'tournaments') return true
+    if (!currentUser) return false
 
-    if (id === 'registration-approvals') {
-      return currentUser?.role === 'organiser'
-    }
-    if (id === 'create') {
-      return currentUser?.role === 'organiser'
-    }
+    const role =
+      typeof currentUser.role === 'string'
+        ? currentUser.role.toLowerCase()
+        : ''
 
-    if (id === 'notifications') {
-      return Boolean(currentUser)
-    }
-
-    if (id === 'team') {
-      return ['organiser', 'player'].includes(currentUser?.role)
-    }
+    if (!KNOWN_ROLES.has(role)) return false
+    if (PAGE_ROLES[id] && !PAGE_ROLES[id].includes(role)) return false
 
     return true
   })
@@ -518,6 +626,14 @@ function App() {
     () => tournaments.filter((item) => String(item.status).toLowerCase() === 'active').length,
     [tournaments],
   )
+
+  if (!authReady && !PUBLIC_PAGES.has(page)) {
+    return (
+      <main className="app-shell">
+        <p>Checking your session...</p>
+      </main>
+    )
+  }
 
   return (
     <main className="app-shell">
