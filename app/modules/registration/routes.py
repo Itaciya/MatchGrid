@@ -17,6 +17,7 @@ from app.modules.registration.services.registration_service import (
     reject_registration,
     update_registration,
     update_registration_status,
+    get_my_registrations,
 )
 from app.modules.user.models import User
 
@@ -25,6 +26,22 @@ router = APIRouter(
     prefix="/registrations",
     tags=["Registration"],
 )
+
+
+@router.get(
+    "/my",
+    response_model=list[RegistrationResponse],
+)
+def read_my_registrations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return get_my_registrations(
+        db=db,
+        current_user_id=current_user.id,
+        role=current_user.role,
+    )
+
 
 
 @router.post(
