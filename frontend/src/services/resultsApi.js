@@ -28,3 +28,22 @@ export function createDispute(matchId, reason) {
 export function getPublicResult(matchId) {
   return apiRequest(`/spectator/matches/${matchId}/result`)
 }
+
+// SCRUM-228: organiser reviews and resolves disputes.
+export function getOpenDisputes() {
+  return apiRequest('/disputes/open')
+}
+
+export function startDisputeReview(disputeId) {
+  return apiRequest(`/disputes/${disputeId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'under_review' }),
+  })
+}
+
+export function resolveDispute(disputeId, body) {
+  return apiRequest(`/disputes/${disputeId}/resolve`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}

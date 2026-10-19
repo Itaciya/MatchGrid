@@ -421,3 +421,29 @@ def resolve_dispute(
     except Exception:
         db.rollback()
         raise
+
+
+OPEN_DISPUTE_STATUSES = ("pending", "under_review")
+
+
+def get_open_disputes_for_organizer(
+    db: Session,
+    current_user_id: int,
+) -> list[Dispute]:
+    """Return pending and under-review disputes for the organiser's tournaments.
+
+    Disputes disappear from the pending list once review starts, so the
+    resolution screen needs this wider list to find them again.
+    """
+
+    return (
+        db.query(Dispute)
+        .join(Match, Dispute.match_id == Match.id)
+        .join(Tournament, Match.tournament_id == Tournament.id)
+        .filter(
+            Tournament.organizer_id == current_user_id,
+            Dispute.status.in_(OPEN_DISPUTE_STATUSES),
+        )
+        .order_by(Dispute.created_at.desc())
+        .all()
+    )

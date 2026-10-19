@@ -13,6 +13,7 @@ from app.modules.dispute.schemas.dispute import (
 from app.modules.dispute.services.dispute_service import (
     create_dispute,
     get_dispute_by_id,
+    get_open_disputes_for_organizer,
     get_disputes_by_match,
     get_pending_disputes_for_organizer,
     update_dispute_status,
@@ -94,6 +95,57 @@ def get_pending_disputes_for_organizer_endpoint(
         }
         for dispute in disputes
     ]
+
+
+def _dispute_review_payload(dispute) -> dict:
+    """Dispute plus its match and current score, for the organiser's review."""
+    score = dispute.match.score
+    return {
+        "id": dispute.id,
+        "match_id": dispute.match_id,
+        "user_id": dispute.user_id,
+        "reason": dispute.reason,
+        "status": dispute.status,
+        "resolution": dispute.resolution,
+        "created_at": dispute.created_at,
+        "updated_at": dispute.updated_at,
+        "match": {
+            "id": dispute.match.id,
+            "match_number": dispute.match.match_number,
+            "scheduled_at": dispute.match.scheduled_at,
+            "status": dispute.match.status,
+            "team_a_id": dispute.match.team_a_id,
+            "team_b_id": dispute.match.team_b_id,
+            "team_a_name": dispute.match.team_a.name,
+            "team_b_name": dispute.match.team_b.name,
+        },
+        "result": (
+            {
+                "team_a_score": score.team_a_score,
+                "team_b_score": score.team_b_score,
+                "verification_status": score.verification_status,
+            }
+            if score is not None
+            else None
+        ),
+    }
+
+
+@router.get(
+    "/open",
+    response_model=list[OrganizerDisputeReviewResponse],
+    status_code=status.HTTP_200_OK,
+)
+def get_open_disputes_for_organizer_endpoint(
+    current_user: User = Depends(require_role("organiser")),
+    db: Session = Depends(get_db),
+):
+    """List pending and under-review disputes for the organiser's tournaments."""
+    disputes = get_open_disputes_for_organizer(
+        db=db,
+        current_user_id=current_user.id,
+    )
+    return [_dispute_review_payload(d) for d in disputes]
 
 
 @router.get(
