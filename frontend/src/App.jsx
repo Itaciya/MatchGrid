@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { API_BASE_URL, apiRequest } from './services/api'
 import ScorerPage from './ScorerPage.jsx'
+import NotificationsPage from './NotificationsPage.jsx'
 import VerificationPage from './VerificationPage.jsx'
 import DisputePage from './DisputePage.jsx'
 import ResultPage from './ResultPage.jsx'
@@ -15,6 +16,7 @@ const NAV_ITEMS = [
   ['create', 'Create tournament'],
   ['team', 'Teams'],
   ['scoring', 'Scoring'],
+  ['notifications', 'Notifications'],
   ['verify', 'Verify scores'],
   ['dispute', 'Disputes'],
   ['result', 'Match results'],
@@ -436,6 +438,10 @@ function App() {
       return currentUser?.role === 'organiser'
     }
 
+    if (id === 'notifications') {
+      return Boolean(currentUser)
+    }
+
     if (id === 'team') {
       return ['organiser', 'player'].includes(currentUser?.role)
     }
@@ -645,6 +651,7 @@ function App() {
           </>}
 
           {page === 'scoring' && <ScorerPage />}
+          {page === 'notifications' && <NotificationsPage onOpenPage={setPage} />}
           {page === 'verify' && <VerificationPage />}
           {page === 'dispute' && <DisputePage />}
           {page === 'result' && <ResultPage />}

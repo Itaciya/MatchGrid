@@ -1,5 +1,6 @@
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user
@@ -10,6 +11,7 @@ from app.modules.notification.schemas.notification import (
     NotificationResponse,
 )
 from app.modules.notification.services.notification_service import (
+    count_unread_notifications,
     get_user_notifications,
     mark_notification_as_read,
     update_notification_read_status,
@@ -30,6 +32,8 @@ router = APIRouter(
 )
 def read_my_notifications(
     unread_only: bool = Query(default=False),
+    limit: int | None = Query(default=None, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -38,6 +42,8 @@ def read_my_notifications(
         db=db,
         user_id=current_user.id,
         unread_only=unread_only,
+        limit=limit,
+        offset=offset,
     )
 
 @router.patch(
@@ -73,3 +79,24 @@ def update_my_notification_status(
         user_id=current_user.id,
         is_read=status_data.is_read,
     )
+
+
+class UnreadCountResponse(BaseModel):
+    unread_count: int
+
+
+@router.get(
+    "/unread-count",
+    response_model=UnreadCountResponse,
+)
+def read_my_unread_count(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Count the authenticated user's unread notifications."""
+    return {
+        "unread_count": count_unread_notifications(
+            db=db,
+            user_id=current_user.id,
+        )
+    }

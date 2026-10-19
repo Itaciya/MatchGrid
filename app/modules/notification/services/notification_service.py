@@ -1,4 +1,5 @@
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundException
@@ -43,6 +44,8 @@ def get_user_notifications(
     db: Session,
     user_id: int,
     unread_only: bool = False,
+    limit: int | None = None,
+    offset: int = 0,
 ) -> list[Notification]:
     """Retrieve notifications belonging to one user."""
     query = db.query(Notification).filter(
@@ -52,11 +55,18 @@ def get_user_notifications(
     if unread_only:
         query = query.filter(Notification.is_read.is_(False))
 
-    return (
-        query
-        .order_by(Notification.created_at.desc())
-        .all()
+    ordered = query.order_by(
+        Notification.created_at.desc(),
+        Notification.id.desc(),
     )
+
+    if offset:
+        ordered = ordered.offset(offset)
+
+    if limit is not None:
+        ordered = ordered.limit(limit)
+
+    return ordered.all()
 
 def mark_notification_as_read(
     db: Session,
@@ -120,3 +130,16 @@ def update_notification_read_status(
         raise
 
     return notification
+
+
+def count_unread_notifications(db: Session, user_id: int) -> int:
+    """Count the user's unread notifications."""
+    return (
+        db.query(func.count(Notification.id))
+        .filter(
+            Notification.user_id == user_id,
+            Notification.is_read.is_(False),
+        )
+        .scalar()
+        or 0
+    )
