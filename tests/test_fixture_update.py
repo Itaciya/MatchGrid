@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
@@ -13,7 +14,9 @@ from app.modules.registration.models.registration import Registration
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 from app.modules.venue.models.venue import Venue
-from app.realtime.connection_manager import manager
+from app.realtime.redis_pubsub import pubsub_manager
+
+
 client = TestClient(app)
 
 
@@ -536,7 +539,9 @@ def test_update_fixture_notifies_affected_team_captains(db):
         .all()
     )
 
-    recipients = {notification.user_id for notification in notifications}
+    recipients = {
+        notification.user_id for notification in notifications
+    }
 
     assert recipients == expected_recipients
 
@@ -548,6 +553,7 @@ def test_update_fixture_notifies_affected_team_captains(db):
         assert venue.location in notification.content
 
     assert unrelated_captain.id not in recipients
+
 
 def test_update_fixture_broadcasts_updated_details(db, monkeypatch):
     organizer = create_user(db)
@@ -565,8 +571,12 @@ def test_update_fixture_broadcasts_updated_details(db, monkeypatch):
         datetime(2099, 1, 2, 10, 0, tzinfo=timezone.utc),
     )
 
-    broadcast = AsyncMock()
-    monkeypatch.setattr(manager, "broadcast_to_match", broadcast)
+    broadcast = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        pubsub_manager,
+        "publish_event",
+        broadcast,
+    )
 
     response = client.patch(
         update_url(tournament.id, match.id),
@@ -580,16 +590,16 @@ def test_update_fixture_broadcasts_updated_details(db, monkeypatch):
     assert response.status_code == 200
 
     broadcast.assert_awaited_once_with(
-        match.id,
         {
             "type": "fixture:update",
             "payload": {
+                "match_id": match.id,
                 "fixture_id": match.id,
                 "scheduled_at": "2099-01-02T17:00:00+06:00",
                 "venue_id": venue.id,
                 "status": "scheduled",
             },
-        },
+        }
     )
 
 
@@ -610,8 +620,12 @@ def test_invalid_fixture_update_does_not_broadcast(
         datetime(2099, 1, 2, 10, 0, tzinfo=timezone.utc),
     )
 
-    broadcast = AsyncMock()
-    monkeypatch.setattr(manager, "broadcast_to_match", broadcast)
+    broadcast = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        pubsub_manager,
+        "publish_event",
+        broadcast,
+    )
 
     response = client.patch(
         update_url(tournament.id, match.id),

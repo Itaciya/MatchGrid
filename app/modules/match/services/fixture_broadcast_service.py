@@ -1,15 +1,15 @@
+
 from app.modules.match.models.match import Match
-from app.realtime.connection_manager import manager
+from app.realtime.redis_pubsub import pubsub_manager
 
 
 async def broadcast_fixture_update(match: Match) -> None:
-    """Broadcast updated fixture details to clients subscribed to the match."""
-
-    await manager.broadcast_to_match(
-        match.id,
+    """Publish fixture changes for WebSocket subscribers across instances."""
+    await pubsub_manager.publish_event(
         {
             "type": "fixture:update",
             "payload": {
+                "match_id": match.id,
                 "fixture_id": match.id,
                 "scheduled_at": (
                     match.scheduled_at.isoformat()
@@ -19,5 +19,5 @@ async def broadcast_fixture_update(match: Match) -> None:
                 "venue_id": match.venue_id,
                 "status": match.status,
             },
-        },
+        }
     )
