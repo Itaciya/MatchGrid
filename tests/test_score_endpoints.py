@@ -3,7 +3,10 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock
 
+from app.realtime.connection_manager import manager
+from app.modules.player_team.models.team import Team
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.modules.match.models.match import Match
@@ -581,3 +584,120 @@ def test_review_route_requires_authentication(db):
     response = client.get(f"/matches/{match.id}/score/review")
 
     assert response.status_code in (401, 403)
+
+
+
+# Live score broadcasting tests
+
+def test_score_submission_broadcasts_live_update(db, monkeypatch):
+    match = _make_match(db)
+    official = _assigned_official(db, match)
+
+    captain_a = _make_user(db, "player")
+    captain_b = _make_user(db, "player")
+
+    team_a = Team(name=f"Team A {uuid.uuid4()}", captain_id=captain_a.id)
+    team_b = Team(name=f"Team B {uuid.uuid4()}", captain_id=captain_b.id)
+    db.add_all([team_a, team_b])
+    db.commit()
+    db.refresh(team_a)
+    db.refresh(team_b)
+
+    match.team_a_id = team_a.id
+    match.team_b_id = team_b.id
+    db.commit()
+
+    broadcast = AsyncMock()
+    monkeypatch.setattr(manager, "broadcast_to_match", broadcast)
+
+    response = client.post(
+        f"/matches/{match.id}/score",
+        json=_payload(match, 3, 1),
+        headers=_auth_header(official),
+    )
+
+    assert response.status_code == 201
+    broadcast.assert_awaited_once()
+
+    args = broadcast.await_args.args
+    assert args[0] == match.id
+
+    event = args[1]
+    assert event["type"] == "live_score:update"
+
+    payload = event["payload"]
+    assert payload["match_id"] == match.id
+    assert payload["team_a"]["name"] == team_a.name
+    assert payload["team_a"]["score"] == 3
+    assert payload["team_b"]["name"] == team_b.name
+    assert payload["team_b"]["score"] == 1
+    assert payload["score"] == {
+        "team_a_score": 3,
+        "team_b_score": 1,
+    }
+
+
+def test_score_update_broadcasts_new_score(db, monkeypatch):
+    match = _make_match(db)
+    official = _assigned_official(db, match)
+    _make_score(db, match, team_a_score=1, team_b_score=0)
+
+    broadcast = AsyncMock()
+    monkeypatch.setattr(manager, "broadcast_to_match", broadcast)
+
+    response = client.patch(
+        f"/matches/{match.id}/score",
+        json={"team_a_score": 4, "team_b_score": 2},
+        headers=_auth_header(official),
+    )
+
+    assert response.status_code == 200
+    broadcast.assert_awaited_once()
+
+    args = broadcast.await_args.args
+    assert args[0] == match.id
+
+    event = args[1]
+    assert event["type"] == "live_score:update"
+    assert event["payload"]["score"] == {
+        "team_a_score": 4,
+        "team_b_score": 2,
+    }
+
+
+def test_invalid_score_does_not_broadcast(db, monkeypatch):
+    match = _make_match(db)
+    official = _assigned_official(db, match)
+
+    broadcast = AsyncMock()
+    monkeypatch.setattr(manager, "broadcast_to_match", broadcast)
+
+    response = client.post(
+        f"/matches/{match.id}/score",
+        json={
+            "match_id": match.id,
+            "team_a_score": -1,
+            "team_b_score": 0,
+        },
+        headers=_auth_header(official),
+    )
+
+    assert response.status_code == 422
+    broadcast.assert_not_awaited()
+
+
+def test_unauthorized_score_submission_does_not_broadcast(db, monkeypatch):
+    match = _make_match(db)
+    outsider = _make_user(db, "scorer")
+
+    broadcast = AsyncMock()
+    monkeypatch.setattr(manager, "broadcast_to_match", broadcast)
+
+    response = client.post(
+        f"/matches/{match.id}/score",
+        json=_payload(match),
+        headers=_auth_header(outsider),
+    )
+
+    assert response.status_code == 403
+    broadcast.assert_not_awaited()

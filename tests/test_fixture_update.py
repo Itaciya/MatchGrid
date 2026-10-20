@@ -1,6 +1,6 @@
-
 import uuid
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
 
@@ -13,8 +13,7 @@ from app.modules.registration.models.registration import Registration
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 from app.modules.venue.models.venue import Venue
-
-
+from app.realtime.connection_manager import manager
 client = TestClient(app)
 
 
@@ -549,3 +548,76 @@ def test_update_fixture_notifies_affected_team_captains(db):
         assert venue.location in notification.content
 
     assert unrelated_captain.id not in recipients
+
+def test_update_fixture_broadcasts_updated_details(db, monkeypatch):
+    organizer = create_user(db)
+    tournament = create_tournament(db, organizer.id)
+    team_a = create_team(db, organizer.id)
+    team_b = create_team(db, organizer.id)
+    venue = create_venue(db)
+
+    match = create_match(
+        db,
+        tournament.id,
+        1,
+        team_a.id,
+        team_b.id,
+        datetime(2099, 1, 2, 10, 0, tzinfo=timezone.utc),
+    )
+
+    broadcast = AsyncMock()
+    monkeypatch.setattr(manager, "broadcast_to_match", broadcast)
+
+    response = client.patch(
+        update_url(tournament.id, match.id),
+        headers=auth_header(organizer),
+        json={
+            "scheduled_at": "2099-01-02T11:00:00Z",
+            "venue_id": venue.id,
+        },
+    )
+
+    assert response.status_code == 200
+
+    broadcast.assert_awaited_once_with(
+        match.id,
+        {
+            "type": "fixture:update",
+            "payload": {
+                "fixture_id": match.id,
+                "scheduled_at": "2099-01-02T17:00:00+06:00",
+                "venue_id": venue.id,
+                "status": "scheduled",
+            },
+        },
+    )
+
+
+def test_invalid_fixture_update_does_not_broadcast(
+    db, monkeypatch
+):
+    organizer = create_user(db)
+    tournament = create_tournament(db, organizer.id)
+    team_a = create_team(db, organizer.id)
+    team_b = create_team(db, organizer.id)
+
+    match = create_match(
+        db,
+        tournament.id,
+        1,
+        team_a.id,
+        team_b.id,
+        datetime(2099, 1, 2, 10, 0, tzinfo=timezone.utc),
+    )
+
+    broadcast = AsyncMock()
+    monkeypatch.setattr(manager, "broadcast_to_match", broadcast)
+
+    response = client.patch(
+        update_url(tournament.id, match.id),
+        headers=auth_header(organizer),
+        json={"venue_id": 999999999},
+    )
+
+    assert response.status_code == 404
+    broadcast.assert_not_awaited()

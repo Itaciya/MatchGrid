@@ -5,10 +5,12 @@ from sqlalchemy.orm import Session
 
 from app.modules.match.models.match import Match
 from app.modules.notification.models.notification import Notification
+from app.modules.notification.services.notification_broadcast_service import (
+    schedule_notification_broadcast,
+)
 from app.modules.player_team.models.player import Player
-from app.modules.registration.models.registration import Registration
 from app.modules.player_team.models.team import Team
-
+from app.modules.registration.models.registration import Registration
 
 REMINDER_NOTIFICATION_TYPE = "upcoming_match_reminder"
 
@@ -20,10 +22,7 @@ def generate_upcoming_match_reminders(
     window_minutes: int = 1,
 ) -> int:
     """
-    Create reminders for scheduled matches approaching their reminder time.
-
-    The time window allows a scheduler running periodically to find matches
-    whose reminder time has just arrived.
+    Create upcoming-match reminders and schedule WebSocket broadcasts.
 
     Returns the number of notifications created.
     """
@@ -37,8 +36,8 @@ def generate_upcoming_match_reminders(
         now = datetime.now(timezone.utc)
 
     reminder_start = now + timedelta(
-    minutes=reminder_minutes - window_minutes
-)
+        minutes=reminder_minutes - window_minutes
+    )
     reminder_end = now + timedelta(minutes=reminder_minutes)
 
     matches = (
@@ -52,6 +51,7 @@ def generate_upcoming_match_reminders(
     )
 
     created_count = 0
+    created_notifications: list[Notification] = []
 
     try:
         for match in matches:
@@ -106,7 +106,7 @@ def generate_upcoming_match_reminders(
                 )
                 time_zone_text = "server-local time"
             else:
-                scheduled_time_text = scheduled_time.astimezone(
+                scheduled_time_text = match.scheduled_at.astimezone(
                     timezone.utc
                 ).strftime("%Y-%m-%d %H:%M UTC")
                 time_zone_text = "UTC"
@@ -115,7 +115,7 @@ def generate_upcoming_match_reminders(
                 f"Reminder: Match {match.match_number} "
                 f"(Match ID {match.id}) is scheduled for "
                 f"{scheduled_time_text} ({time_zone_text}). "
-                f"Please prepare for your upcoming match."
+                "Please prepare for your upcoming match."
             )
 
             for user_id in recipient_ids:
@@ -141,9 +141,19 @@ def generate_upcoming_match_reminders(
                 )
 
                 db.add(notification)
+                created_notifications.append(notification)
                 created_count += 1
 
+        # Persist notifications before scheduling any WebSocket messages.
         db.commit()
+
+        # Schedule broadcasts only after the transaction succeeds.
+        for notification in created_notifications:
+            try:
+                schedule_notification_broadcast(notification)
+            except Exception:
+                # A broadcast failure must not undo saved notifications.
+                continue
 
     except Exception:
         db.rollback()

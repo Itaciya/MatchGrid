@@ -1,6 +1,6 @@
 const DEFAULTS = {
   url: import.meta.env.VITE_WS_URL || 'ws://localhost:8080',
-  getToken: () => localStorage.getItem('token'),
+  getToken: () => localStorage.getItem('access_token') || localStorage.getItem('accessToken') || localStorage.getItem('token'),
   baseDelay: 1000,
   maxDelay: 30000,
   heartbeatMs: 25000,

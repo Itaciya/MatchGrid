@@ -19,11 +19,49 @@ from app.modules.match.services.match_result_service import (
 )
 from app.modules.score.schemas.match_result import MatchResultResponse
 from app.modules.score.schemas.match_result_correction import MatchResultCorrectionRequest
-
+from app.modules.match.models.match import Match
+from app.realtime.connection_manager import manager
 router = APIRouter(
     prefix="/matches",
     tags=["Score"],
 )
+
+async def broadcast_live_score_update(db: Session, match_id: int, score: ScoreResponse) -> None:
+    """Broadcast a successfully saved score to clients subscribed to its match."""
+    match = db.query(Match).filter(Match.id == match_id).first()
+
+    if match is None:
+        return
+
+    event = {
+        "type": "live_score:update",
+        "payload": {
+            "match_id": match.id,
+            "match_number": match.match_number,
+            "status": match.status,
+            "team_a": {
+                "id": match.team_a_id,
+                "name": match.team_a.name if match.team_a else None,
+                "score": score.team_a_score,
+            },
+            "team_b": {
+                "id": match.team_b_id,
+                "name": match.team_b.name if match.team_b else None,
+                "score": score.team_b_score,
+            },
+            "score": {
+                "team_a_score": score.team_a_score,
+                "team_b_score": score.team_b_score,
+            },
+            "updated_at": (
+                score.updated_at.isoformat()
+                if score.updated_at
+                else None
+            ),
+        },
+    }
+
+    await manager.broadcast_to_match(match_id, event)
 
 
 @router.post(
@@ -32,33 +70,50 @@ router = APIRouter(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(verify_assigned_official)],
 )
-def submit_score_endpoint(
+
+@router.post(
+    "/{match_id}/score",
+    response_model=ScoreResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_assigned_official)],
+)
+async def submit_score_endpoint(
     match_id: int,
     data: ScoreCreate,
     db: Session = Depends(get_db),
 ):
-    """Submit a live score. Assigned officials only."""
+    """Submit a score and broadcast it after successful persistence."""
     if data.match_id != match_id:
         raise BadRequestException(
             detail="Match ID in request body does not match path"
         )
 
-    return create_score(db, match_id, data)
+    score = create_score(db, match_id, data)
+    await broadcast_live_score_update(db, match_id, score)
 
+    return score
 
 @router.patch(
     "/{match_id}/score",
     response_model=ScoreResponse,
     dependencies=[Depends(verify_assigned_official)],
 )
-def update_score_endpoint(
+
+@router.patch(
+    "/{match_id}/score",
+    response_model=ScoreResponse,
+    dependencies=[Depends(verify_assigned_official)],
+)
+async def update_score_endpoint(
     match_id: int,
     data: ScoreUpdate,
     db: Session = Depends(get_db),
 ):
-    """Update a live score. Assigned officials only; finalized scores are locked."""
-    return update_score(db, match_id, data)
+    """Update a score and broadcast it after successful persistence."""
+    score = update_score(db, match_id, data)
+    await broadcast_live_score_update(db, match_id, score)
 
+    return score
 
 @router.patch(
     "/{match_id}/score/verification",
@@ -79,14 +134,34 @@ def review_score_endpoint(
     response_model=MatchResultResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def finalize_result_endpoint(
+async def finalize_result_endpoint(
     match_id: int,
     organiser: User = Depends(verify_match_organiser),
     db: Session = Depends(get_db),
 ):
-    """Finalize a match result from its verified score. Organiser of the match's tournament only."""
-    return finalize_match_result(db, match_id, organiser.id)
+    """Finalize a match result and broadcast its completed status."""
 
+    result = finalize_match_result(db, match_id, organiser.id)
+
+    match = (
+        db.query(Match)
+        .filter(Match.id == match_id)
+        .first()
+    )
+
+    if match is not None:
+        await manager.broadcast_to_match(
+            match.id,
+            {
+                "type": "match_status:update",
+                "payload": {
+                    "match_id": match.id,
+                    "status": match.status,
+                },
+            },
+        )
+
+    return result
 
 @router.patch(
     "/{match_id}/result",
