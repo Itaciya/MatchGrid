@@ -189,3 +189,49 @@ async def test_disconnect_removes_match_subscriptions():
     assert 1 not in manager.active_connections
     assert 10 not in manager.match_connections
     assert 20 not in manager.match_connections
+
+
+@pytest.mark.anyio
+async def test_reconnected_client_can_connect_after_disconnect():
+    manager = ConnectionManager()
+    websocket1 = MagicMock()
+    websocket2 = MagicMock()
+
+    await manager.connect(1, websocket1)
+    manager.disconnect(1, websocket1)
+
+    await manager.connect(1, websocket2)
+
+    assert 1 in manager.active_connections
+    assert websocket2 in manager.active_connections[1]
+    assert websocket1 not in manager.active_connections[1]
+
+
+@pytest.mark.anyio
+async def test_failed_match_broadcast_removes_failed_client_only():
+    manager = ConnectionManager()
+
+    failed_socket = MagicMock()
+    failed_socket.send_json = AsyncMock(
+        side_effect=RuntimeError("Connection failed")
+    )
+
+    working_socket = MagicMock()
+    working_socket.send_json = AsyncMock()
+
+    await manager.connect(1, failed_socket)
+    await manager.connect(2, working_socket)
+
+    manager.subscribe_to_match(10, failed_socket)
+    manager.subscribe_to_match(10, working_socket)
+
+    message = {"type": "live_score:update", "payload": {"match_id": 10}}
+    await manager.broadcast_to_match(10, message)
+
+    failed_socket.send_json.assert_awaited_once_with(message)
+    working_socket.send_json.assert_awaited_once_with(message)
+
+    assert 1 not in manager.active_connections
+    assert 2 in manager.active_connections
+    assert failed_socket not in manager.match_connections.get(10, set())
+    assert working_socket in manager.match_connections[10]

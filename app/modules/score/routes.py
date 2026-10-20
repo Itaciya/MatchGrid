@@ -20,7 +20,7 @@ from app.modules.match.services.match_result_service import (
 from app.modules.score.schemas.match_result import MatchResultResponse
 from app.modules.score.schemas.match_result_correction import MatchResultCorrectionRequest
 from app.modules.match.models.match import Match
-from app.realtime.connection_manager import manager
+from app.realtime.redis_pubsub import pubsub_manager
 router = APIRouter(
     prefix="/matches",
     tags=["Score"],
@@ -61,7 +61,7 @@ async def broadcast_live_score_update(db: Session, match_id: int, score: ScoreRe
         },
     }
 
-    await manager.broadcast_to_match(match_id, event)
+    await manager.broadcast_to_match(event)
 
 
 @router.post(
@@ -150,16 +150,15 @@ async def finalize_result_endpoint(
     )
 
     if match is not None:
-        await manager.broadcast_to_match(
-            match.id,
-            {
-                "type": "match_status:update",
-                "payload": {
-                    "match_id": match.id,
-                    "status": match.status,
-                },
-            },
-        )
+        await pubsub_manager.publish_event(
+    {
+        "type": "match_status:update",
+        "payload": {
+            "match_id": match.id,
+            "status": match.status,
+        },
+    }
+)
 
     return result
 

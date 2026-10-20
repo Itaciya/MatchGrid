@@ -7,6 +7,8 @@ import pytest
 from app.modules.notification.services.notification_broadcast_service import (
     broadcast_notification,
 )
+from app.realtime.redis_pubsub import pubsub_manager
+
 
 
 @pytest.mark.anyio
@@ -19,14 +21,15 @@ async def test_broadcast_notification_sends_to_intended_recipient():
     notification.is_read = False
     notification.created_at = datetime(2026, 10, 20, tzinfo=timezone.utc)
 
-    with patch(
-        "app.modules.notification.services.notification_broadcast_service.manager"
-    ) as mock_manager:
-        mock_manager.send_personal_message = AsyncMock()
-
+    with patch.object(
+        pubsub_manager,
+        "publish_event",
+        new_callable=AsyncMock,
+        return_value=True,
+    ) as mock_publish:
         await broadcast_notification(notification)
 
-        mock_manager.send_personal_message.assert_awaited_once_with(
+        mock_publish.assert_awaited_once_with(
             {
                 "type": "notification:new",
                 "payload": {
@@ -38,9 +41,9 @@ async def test_broadcast_notification_sends_to_intended_recipient():
                     "is_read": False,
                     "created_at": "2026-10-20T00:00:00+00:00",
                 },
-            },
-            5,
+            }
         )
+
 @pytest.mark.anyio
 async def test_create_and_broadcast_notification():
     from app.modules.notification.services.notification_broadcast_service import (
