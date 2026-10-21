@@ -57,8 +57,8 @@ def test_get_tournament_details_returns_correct_tournament(db):
     assert data["name"] == tournament.name
     assert data["description"] == tournament.description
     assert data["format"] == tournament.format
-    assert data["start_date"] == tournament.start_date.isoformat()
-    assert data["end_date"] == tournament.end_date.isoformat()
+    assert datetime.fromisoformat(data["start_date"].replace("Z", "+00:00")) == tournament.start_date
+    assert datetime.fromisoformat(data["end_date"].replace("Z", "+00:00")) == tournament.end_date
     assert data["status"] == tournament.status
     assert data["organizer_id"] == organiser.id
 
