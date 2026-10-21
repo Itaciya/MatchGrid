@@ -22,7 +22,7 @@ ROLE_GATED = [
     ("PATCH", f"/player-team/profile/{MISSING}", {"player"}),
     ("PATCH", f"/player-team/profile/{MISSING}/status", {"organiser"}),
     ("POST", "/player-team/team", {"organiser"}),
-    ("POST", "/registrations/", {"captain"}),
+    ("POST", "/registrations/", {"captain", "player"}),
     ("POST", "/registrations/player", {"player"}),
     ("GET", f"/registrations/pending/{MISSING}", {"organiser"}),
     ("PATCH", f"/registrations/{MISSING}/approve", {"organiser"}),
