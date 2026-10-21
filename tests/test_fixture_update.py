@@ -555,6 +555,16 @@ def test_update_fixture_notifies_affected_team_captains(db):
     assert unrelated_captain.id not in recipients
 
 
+class _SameInstant:
+    """Equal to any ISO timestamp string that is the same instant, whatever its offset."""
+
+    def __init__(self, iso):
+        self.instant = datetime.fromisoformat(iso)
+
+    def __eq__(self, other):
+        return isinstance(other, str) and datetime.fromisoformat(other) == self.instant
+
+
 def test_update_fixture_broadcasts_updated_details(db, monkeypatch):
     organizer = create_user(db)
     tournament = create_tournament(db, organizer.id)
@@ -595,7 +605,7 @@ def test_update_fixture_broadcasts_updated_details(db, monkeypatch):
             "payload": {
                 "match_id": match.id,
                 "fixture_id": match.id,
-                "scheduled_at": "2099-01-02T17:00:00+06:00",
+                "scheduled_at": _SameInstant("2099-01-02T11:00:00+00:00"),
                 "venue_id": venue.id,
                 "status": "scheduled",
             },
