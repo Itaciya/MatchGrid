@@ -6,6 +6,45 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import os
+
+from dotenv import load_dotenv
+from sqlalchemy.engine import make_url
+
+load_dotenv()
+
+
+def _use_test_database() -> None:
+    """Run the suite only against a database whose name ends in "_test".
+
+    The app reads DATABASE_URL when app.data_access.database is imported, so
+    the override has to happen before that import. Without a test database the
+    run is aborted, so tests can never write to the development database.
+    """
+    url = os.environ.get("TEST_DATABASE_URL")
+    if not url:
+        candidate = os.environ.get("DATABASE_URL", "")
+        if candidate and (make_url(candidate).database or "").endswith("_test"):
+            url = candidate
+    if not url:
+        pytest.exit(
+            "TEST_DATABASE_URL is not set. Create a database whose name ends "
+            "in '_test', run 'alembic upgrade head' against it, and set "
+            "TEST_DATABASE_URL.",
+            returncode=2,
+        )
+    database = make_url(url).database or ""
+    if not database.endswith("_test"):
+        pytest.exit(
+            f"Refusing to run tests against '{database}': the database name "
+            "must end in '_test'.",
+            returncode=2,
+        )
+    os.environ["DATABASE_URL"] = url
+
+
+_use_test_database()
+
 from app.data_access.database import SessionLocal
 
 # Import all SQLAlchemy models before tests start.
