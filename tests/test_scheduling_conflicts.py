@@ -385,10 +385,6 @@ def test_large_schedule_with_one_clash_reports_exactly_one_conflict():
     assert _keys(conflicts) == {("team_conflict", frozenset({1, 999}))}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Conflicts are de-duplicated by match id, so several conflicts between unsaved matches (id None) collapse into one",
-)
 def test_every_conflict_between_unsaved_candidates_is_reported():
     # create_round_robin_fixtures validates unsaved matches, which all have id None.
     candidates = [_match(None, a=1, b=2), _match(None, a=1, b=3), _match(None, a=1, b=4)]

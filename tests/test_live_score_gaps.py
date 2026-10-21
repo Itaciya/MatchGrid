@@ -189,10 +189,6 @@ def test_largest_database_integer_is_accepted_and_stored(db):
     assert stored.team_a_score == MAX_DB_INTEGER
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="ScoreValue has no upper bound, so a score above the 32-bit column limit fails in Postgres instead of returning 422",
-)
 def test_score_above_the_database_limit_is_rejected_on_submit(db):
     match_id = _make_match(db)
     headers = _assigned_official(db, match_id)
@@ -204,10 +200,6 @@ def test_score_above_the_database_limit_is_rejected_on_submit(db):
     assert _score_count(db, match_id) == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="ScoreValue has no upper bound, so a score above the 32-bit column limit fails in Postgres instead of returning 422",
-)
 def test_score_above_the_database_limit_is_rejected_on_update(db):
     match_id = _make_match(db)
     headers = _assigned_official(db, match_id)

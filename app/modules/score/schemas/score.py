@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # strict=True: reject "3", 2.5 and True instead of silently coercing them.
-ScoreValue = Annotated[int, Field(ge=0, strict=True)]
+ScoreValue = Annotated[int, Field(ge=0, le=2_147_483_647, strict=True)]
 MatchId = Annotated[int, Field(ge=1, strict=True)]
 
 
