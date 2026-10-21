@@ -16,11 +16,6 @@ from app.modules.player_team.models.team import Team
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 
-BYE_BUG = pytest.mark.xfail(
-    strict=True,
-    reason="Byes are appended at the end, so 2+ byes create a (None, None) first-round match",
-)
-
 POW2_SIZES = [4, 8, 16, 32, 64, 128]
 OK_SIZES = [3, 4, 7, 8, 15, 16, 31, 32, 64, 127, 128]
 BUG_SIZES = [5, 6, 9, 10, 11, 12, 13, 14, 17, 33, 100]
@@ -58,10 +53,7 @@ def test_winners_bracket_has_every_participant_once_and_a_single_final(n):
     assert winners[-1] == [(None, None)]
 
 
-@pytest.mark.parametrize(
-    "n",
-    [pytest.param(n, marks=BYE_BUG) if n in BUG_SIZES else n for n in ALL_SIZES],
-)
+@pytest.mark.parametrize("n", ALL_SIZES)
 def test_no_first_round_match_is_two_byes(n):
     first_round = generate_double_elimination_bracket(_ids(n))["winners"][0]
 
@@ -347,3 +339,11 @@ def test_invalid_participants_are_rejected_when_saving(db, ids_factory):
         )
 
     assert db.query(Match).filter(Match.tournament_id == tournament.id).count() == 0
+
+
+# Fix: byes are spread across separate first-round matches
+
+@pytest.mark.parametrize("n", ALL_SIZES)
+def test_every_first_round_match_has_at_least_one_team(n):
+    for pair in generate_double_elimination_bracket(_ids(n))["winners"][0]:
+        assert any(team is not None for team in pair)

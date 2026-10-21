@@ -15,11 +15,6 @@ from app.modules.player_team.models.team import Team
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 
-BYE_BUG = pytest.mark.xfail(
-    strict=True,
-    reason="Byes are appended at the end, so 2+ byes create a (None, None) first-round match",
-)
-
 # Sizes with at most one bye work today.
 OK_SIZES = [2, 3, 4, 7, 8, 15, 16, 31, 32, 64, 127, 128]
 # Sizes with two or more byes hit the bye-placement bug.
@@ -125,10 +120,7 @@ def test_seven_teams_have_a_single_bye_for_the_last_seed():
     ]
 
 
-@pytest.mark.parametrize(
-    "n",
-    [pytest.param(n, marks=BYE_BUG) if n in BUG_SIZES else n for n in ALL_SIZES],
-)
+@pytest.mark.parametrize("n", ALL_SIZES)
 def test_no_first_round_match_is_two_byes(n):
     first_round = generate_single_elimination_bracket(_ids(n))[0]
 
@@ -345,3 +337,28 @@ def test_invalid_participants_are_rejected_when_saving(db, ids_factory):
         )
 
     assert db.query(Match).filter(Match.tournament_id == tournament.id).count() == 0
+
+
+# Fix: byes are spread across separate first-round matches
+
+def test_five_teams_spread_the_byes_across_separate_matches():
+    assert generate_single_elimination_bracket(_ids(5))[0] == [
+        (1, 2),
+        (3, None),
+        (4, None),
+        (5, None),
+    ]
+
+
+@pytest.mark.parametrize("n", ALL_SIZES)
+def test_every_first_round_match_has_at_least_one_team(n):
+    for pair in generate_single_elimination_bracket(_ids(n))[0]:
+        assert any(team is not None for team in pair)
+
+
+def test_five_teams_bye_teams_fill_the_second_round_slots(db):
+    _, teams, _, matches_by_round = _build(db, 5)
+    semi_finals = matches_by_round[1]
+
+    assert {semi_finals[0].team_a_id, semi_finals[0].team_b_id} == {teams[2].id, None}
+    assert {semi_finals[1].team_a_id, semi_finals[1].team_b_id} == {teams[3].id, teams[4].id}

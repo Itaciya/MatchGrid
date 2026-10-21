@@ -9,15 +9,8 @@ from app.modules.player_team.models.team import Team
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 
-LOSERS_LINK_BUG = pytest.mark.xfail(
-    strict=True,
-    reason="Losers rounds that halve link L[r][i] to L[r+1][i] instead of L[r+1][i // 2], leaving dangling matches",
-)
-
-# 4 teams are fully linked today; larger brackets hit the losers-link bug.
 SIZES = [4, 8, 16, 32]
 ALL_SIZES = SIZES
-BUG_SIZES = [4, pytest.param(8, marks=LOSERS_LINK_BUG), pytest.param(16, marks=LOSERS_LINK_BUG), pytest.param(32, marks=LOSERS_LINK_BUG)]
 
 
 def _build(db, count):
@@ -180,7 +173,7 @@ def test_every_winners_match_advances_its_winner(db, n):
     assert all(m.winner_next_match_id is not None for r in grid["winners"] for m in r)
 
 
-@pytest.mark.parametrize("n", BUG_SIZES)
+@pytest.mark.parametrize("n", ALL_SIZES)
 def test_every_losers_match_advances_its_winner(db, n):
     grid = _build(db, n)
 
@@ -221,7 +214,7 @@ def test_no_match_receives_more_than_two_entrants(db, n):
         assert counts["winner"] + counts["loser"] <= 2
 
 
-@pytest.mark.parametrize("n", BUG_SIZES)
+@pytest.mark.parametrize("n", ALL_SIZES)
 def test_every_match_after_the_first_round_receives_exactly_two_entrants(db, n):
     grid = _build(db, n)
     counts = _feeder_counts(grid)
@@ -252,7 +245,7 @@ def test_odd_losers_rounds_get_one_survivor_and_one_dropped_winners_loser(db, n)
             assert counts[match.id] == {"winner": 1, "loser": 1}
 
 
-@pytest.mark.parametrize("n", BUG_SIZES)
+@pytest.mark.parametrize("n", ALL_SIZES)
 def test_halving_losers_rounds_pair_two_survivors_per_match(db, n):
     grid = _build(db, n)
 
@@ -264,15 +257,20 @@ def test_halving_losers_rounds_pair_two_survivors_per_match(db, n):
             assert match.winner_next_match_id == nxt[i // 2].id
 
 
-# Two-team double elimination (suspected crash: no losers rounds to create)
+# Two-team double elimination
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=ValueError,
-    reason="Two teams produce zero losers rounds and create_tournament_rounds rejects zero rounds",
-)
 def test_two_team_double_elimination_can_be_saved(db):
     grid = _build(db, 2)
 
     assert len(grid["winners"]) == 1
     assert len(grid["final"]) == 1
+
+
+def test_two_team_grand_final_receives_both_teams_of_the_winners_match(db):
+    grid = _build(db, 2)
+    winners_match = grid["winners"][0][0]
+    grand_final = grid["final"][0][0]
+
+    assert grid["losers"] == []
+    assert winners_match.winner_next_match_id == grand_final.id
+    assert winners_match.loser_next_match_id == grand_final.id
