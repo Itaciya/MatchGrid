@@ -20,6 +20,7 @@ from app.modules.match.services.match_result_service import (
 from app.modules.score.schemas.match_result import MatchResultResponse
 from app.modules.score.schemas.match_result_correction import MatchResultCorrectionRequest
 from app.modules.match.models.match import Match
+from app.realtime.connection_manager import manager
 from app.realtime.redis_pubsub import pubsub_manager
 router = APIRouter(
     prefix="/matches",
@@ -61,7 +62,7 @@ async def broadcast_live_score_update(db: Session, match_id: int, score: ScoreRe
         },
     }
 
-    await manager.broadcast_to_match(event)
+    await manager.broadcast_to_match(match_id, event)
 
 
 @router.post(
