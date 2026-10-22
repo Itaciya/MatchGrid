@@ -1,3 +1,4 @@
+from sqlalchemy import and_, or_, select
 
 from datetime import datetime, timezone
 
@@ -576,35 +577,34 @@ def get_my_registrations(
 ) -> list[Registration]:
     """Return registrations belonging to the authenticated user."""
 
-    query = db.query(Registration)
-
-    if role == "captain":
-        team_ids = (
-            db.query(Team.id)
-            .filter(Team.captain_id == current_user_id)
-            .subquery()
-        )
-
-        query = query.filter(Registration.team_id.in_(team_ids))
-
-    elif role == "player":
-        player = (
-            db.query(Player)
-            .filter(Player.user_id == current_user_id)
-            .first()
-        )
-
-        if player is None:
-            return []
-
-        query = query.filter(
-            Registration.registration_type == RegistrationType.PLAYER.value,
-            Registration.player_id == player.id,
-        )
-
-    else:
+    if role not in ("player", "captain"):
         raise ForbiddenException(
             detail="You are not allowed to view these registrations"
         )
 
-    return query.order_by(Registration.registered_at.desc()).all()
+    conditions = []
+
+    # Registrations for teams this user captains.
+    team_ids = select(Team.id).where(Team.captain_id == current_user_id)
+    conditions.append(Registration.team_id.in_(team_ids))
+
+    # The user's own player registrations.
+    player = (
+        db.query(Player)
+        .filter(Player.user_id == current_user_id)
+        .first()
+    )
+    if player is not None:
+        conditions.append(
+            and_(
+                Registration.registration_type == RegistrationType.PLAYER.value,
+                Registration.player_id == player.id,
+            )
+        )
+
+    return (
+        db.query(Registration)
+        .filter(or_(*conditions))
+        .order_by(Registration.registered_at.desc())
+        .all()
+    )

@@ -51,7 +51,7 @@ def read_my_registrations(
 )
 def create_team_registration_endpoint(
     data: RegistrationCreate,
-    current_user: User = Depends(require_role("captain")),
+    current_user: User = Depends(require_role("player", "captain")),
     db: Session = Depends(get_db),
 ):
     """Register a team for a tournament."""
