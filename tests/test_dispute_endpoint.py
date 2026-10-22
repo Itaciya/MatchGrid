@@ -861,3 +861,44 @@ def test_invalid_resolution_decision_is_rejected(db):
     db.refresh(dispute)
     assert dispute.status == "under_review"
     assert dispute.resolution is None
+
+
+def test_same_player_cannot_create_duplicate_dispute_for_same_match(db):
+    organiser = create_user(db, role="organiser")
+    player_user = create_user(db, role="player")
+
+    team_a = create_team(db, player_user, "DuplicateA")
+    team_b = create_team(db, organiser, "DuplicateB")
+
+    create_player(db, player_user, team_a)
+    match = create_match(db, organiser, team_a, team_b)
+
+    headers = auth_header(player_user)
+    payload = {
+        "match_id": match.id,
+        "reason": "Incorrect match result",
+    }
+
+    first_response = client.post(
+        "/disputes/",
+        json=payload,
+        headers=headers,
+    )
+    assert first_response.status_code == 201
+
+    second_response = client.post(
+        "/disputes/",
+        json=payload,
+        headers=headers,
+    )
+
+    assert second_response.status_code == 409
+    assert (
+        db.query(Dispute)
+        .filter(
+            Dispute.match_id == match.id,
+            Dispute.user_id == player_user.id,
+        )
+        .count()
+        == 1
+    )
