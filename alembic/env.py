@@ -26,6 +26,7 @@ from app.modules.match.models.match_result_correction import MatchResultCorrecti
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.tournament_team.models.tournament_team import TournamentTeam
 from app.modules.venue.models.venue import Venue
+from app.modules.audit.models.audit_log import AuditLog
 
 # Load environment variables from .env
 load_dotenv()

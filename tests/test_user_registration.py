@@ -139,12 +139,16 @@ def test_register_accepts_every_supported_role(role):
     [(7, 422), (8, 201), (72, 201), (73, 422)],
 )
 def test_register_password_length_boundaries(length, expected_status):
+    # Keep the password within the length boundary while satisfying
+    # the letter + number policy.
+    password = "a" * (length - 1) + "1" if length >= 8 else "a" * length
+
     response = client.post(
-        "/auth/register", json=_payload(password="a" * length)
+        "/auth/register",
+        json=_payload(password=password),
     )
 
     assert response.status_code == expected_status
-
 
 # SCRUM-239: database records
 
