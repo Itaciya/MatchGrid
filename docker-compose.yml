@@ -1,4 +1,5 @@
-﻿services:
+
+services:
   db:
     image: postgres:18-alpine
     restart: unless-stopped
@@ -19,8 +20,18 @@
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    volumes:
+      - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        - CMD-SHELL
+        - 'redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" ping | grep -q PONG'
       interval: 5s
       timeout: 3s
       retries: 10
@@ -37,7 +48,7 @@
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379/0
     ports:
       - "8000:8000"
     depends_on:
@@ -76,6 +87,7 @@
 
 volumes:
   postgres_data:
+  redis_data:
 
 networks:
   matchgrid:
