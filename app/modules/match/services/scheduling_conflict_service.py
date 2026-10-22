@@ -274,16 +274,17 @@ def validate_schedule_conflicts(
     seen = set()
 
     for conflict in conflicts:
-        match_ids = tuple(
-            sorted(
-                str(match_id)
-                for match_id in conflict["match_ids"]
-            )
-        )
+        match_ids = conflict["match_ids"]
+
+        if any(match_id is None for match_id in match_ids):
+            # Unsaved matches all share id None, so their conflict records
+            # cannot be told apart. Keep every one instead of collapsing them.
+            unique_conflicts.append(conflict)
+            continue
 
         key = (
             conflict["type"],
-            match_ids,
+            tuple(sorted(str(match_id) for match_id in match_ids)),
         )
 
         if key not in seen:
