@@ -880,3 +880,111 @@ def test_public_leaderboard_hides_unpublished_tournament(db):
     )
 
     assert response.status_code == 404
+
+
+
+def test_large_tournament_standings_calculate_correctly(db):
+    tournament, organiser, team_a, team_b = (
+        _make_tournament_with_teams(db)
+    )
+
+    teams = [team_a, team_b]
+
+    # Register 18 additional teams, making 20 teams in total.
+    for index in range(18):
+        team = Team(
+            name=f"Large Tournament Team {index:02d} {uuid.uuid4().hex}",
+            captain_id=organiser.id,
+            status=TeamStatus.ACTIVE,
+        )
+        db.add(team)
+        db.flush()
+
+        db.add(
+            TournamentTeam(
+                tournament_id=tournament.id,
+                team_id=team.id,
+            )
+        )
+        teams.append(team)
+
+    db.commit()
+
+    # Ten completed, verified matches: each winner earns 3 points.
+    for index in range(0, 20, 2):
+        _make_match_with_score(
+            db,
+            tournament,
+            teams[index],
+            teams[index + 1],
+            match_number=index // 2 + 1,
+            match_status="completed",
+            score_status="verified",
+            team_a_score=2,
+            team_b_score=0,
+        )
+
+    standings = calculate_tournament_standings(
+        db=db,
+        tournament_id=tournament.id,
+    )
+
+    assert len(standings) == 20
+    assert [row["rank"] for row in standings] == list(range(1, 21))
+
+    by_id = {row["team_id"]: row for row in standings}
+
+    for index in range(0, 20, 2):
+        winner = teams[index]
+        loser = teams[index + 1]
+
+        assert by_id[winner.id]["played"] == 1
+        assert by_id[winner.id]["wins"] == 1
+        assert by_id[winner.id]["points"] == 3
+
+        assert by_id[loser.id]["played"] == 1
+        assert by_id[loser.id]["losses"] == 1
+        assert by_id[loser.id]["points"] == 0
+
+def test_standings_calculation_is_deterministic(db):
+    tournament, _, team_a, team_b = _make_tournament_with_teams(db)
+
+    _make_match_with_score(
+        db,
+        tournament,
+        team_a,
+        team_b,
+        match_number=1,
+        match_status="completed",
+        score_status="verified",
+        team_a_score=3,
+        team_b_score=1,
+    )
+
+    first = calculate_tournament_standings(
+        db=db,
+        tournament_id=tournament.id,
+    )
+    second = calculate_tournament_standings(
+        db=db,
+        tournament_id=tournament.id,
+    )
+
+    fields = (
+        "rank",
+        "team_id",
+        "played",
+        "wins",
+        "draws",
+        "losses",
+        "score_for",
+        "score_against",
+        "score_difference",
+        "points",
+    )
+
+    assert [
+        tuple(row[field] for field in fields) for row in first
+    ] == [
+        tuple(row[field] for field in fields) for row in second
+    ]

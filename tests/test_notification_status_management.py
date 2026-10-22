@@ -102,3 +102,26 @@ def test_status_endpoint_requires_authentication():
         )
 
     assert response.status_code in (401, 403)
+
+
+def test_update_notification_read_status_rolls_back_and_reraises_db_error():
+    db = MagicMock()
+
+    notification = MagicMock(spec=Notification)
+    notification.id = 5
+    notification.user_id = 10
+    notification.is_read = False
+
+    query = db.query.return_value
+    query.filter.return_value.first.return_value = notification
+    db.commit.side_effect = RuntimeError("Database commit failed")
+
+    with pytest.raises(RuntimeError, match="Database commit failed"):
+        update_notification_read_status(
+            db=db,
+            notification_id=5,
+            user_id=10,
+            is_read=True,
+        )
+
+    db.rollback.assert_called_once()

@@ -56,9 +56,24 @@ def create_dispute(
             detail="Only active players can submit a dispute"
         )
 
+
     if player.team_id not in (match.team_a_id, match.team_b_id):
         raise ForbiddenException(
             detail="You are not a participant in this match"
+        )
+
+    existing_dispute = (
+        db.query(Dispute)
+        .filter(
+            Dispute.match_id == match.id,
+            Dispute.user_id == current_user_id,
+        )
+        .first()
+    )
+
+    if existing_dispute is not None:
+        raise ConflictException(
+            detail="You have already submitted a dispute for this match"
         )
 
     dispute = Dispute(

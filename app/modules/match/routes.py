@@ -257,8 +257,6 @@ async def update_fixture_endpoint(
         match_id=match_id,
         data=data,
     )
-
-
     await broadcast_fixture_update(match)
 
     return match
