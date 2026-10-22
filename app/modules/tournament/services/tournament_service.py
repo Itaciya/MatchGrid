@@ -1,6 +1,8 @@
+
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import BadRequestException
+from app.data_access.cache import delete_cached_keys
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.tournament.schemas.tournament import (
     TournamentCreate,
@@ -16,10 +18,34 @@ TOURNAMENT_FORMATS = {
     "double_elimination",
 }
 
+TOURNAMENT_STATUSES = {
+    "upcoming",
+    "ongoing",
+    "completed",
+    "archived",
+}
+
+VALID_STATUS_TRANSITIONS = {
+    "upcoming": {"ongoing"},
+    "ongoing": {"completed"},
+    "completed": {"archived"},
+    "archived": set(),
+}
+
+
+def invalidate_public_tournament_cache() -> None:
+    """Invalidate cached public tournament lists."""
+    delete_cached_keys(
+        "spectator:tournaments:status:all",
+        *(
+            f"spectator:tournaments:status:{status}"
+            for status in TOURNAMENT_STATUSES
+        ),
+    )
+
 
 def validate_tournament_format(format: str) -> None:
     """Validate that a tournament format is supported."""
-
     if format not in TOURNAMENT_FORMATS:
         raise BadRequestException(
             detail=f"Invalid tournament format: {format}"
@@ -31,7 +57,6 @@ def validate_tournament_format_config(
     format_config: dict | None,
 ) -> None:
     """Validate format-specific tournament configuration."""
-
     validate_tournament_format(format)
 
     if format == "round_robin":
@@ -113,29 +138,12 @@ def validate_tournament_format_config(
         )
 
 
-TOURNAMENT_STATUSES = {
-    "upcoming",
-    "ongoing",
-    "completed",
-    "archived",
-}
-
-
-VALID_STATUS_TRANSITIONS = {
-    "upcoming": {"ongoing"},
-    "ongoing": {"completed"},
-    "completed": {"archived"},
-    "archived": set(),
-}
-
-
 def create_tournament(
     db: Session,
     organizer_id: int,
     data: TournamentCreate,
 ) -> Tournament:
     """Create a new tournament with upcoming status."""
-
     format_config = (
         data.format_config.model_dump()
         if data.format_config is not None
@@ -162,6 +170,8 @@ def create_tournament(
     db.commit()
     db.refresh(tournament)
 
+    invalidate_public_tournament_cache()
+
     return tournament
 
 
@@ -175,7 +185,6 @@ def update_tournament(
     Tournament status must be changed through the centralized
     status transition logic instead of a normal update.
     """
-
     updates = data.model_dump(exclude_unset=True)
 
     if "status" in updates:
@@ -225,12 +234,13 @@ def update_tournament(
     db.commit()
     db.refresh(tournament)
 
+    invalidate_public_tournament_cache()
+
     return tournament
 
 
 def validate_tournament_status(status: str) -> None:
     """Validate that a tournament status is supported."""
-
     if status not in TOURNAMENT_STATUSES:
         raise BadRequestException(
             detail=f"Invalid tournament status: {status}"
@@ -242,7 +252,6 @@ def can_transition_tournament_status(
     new_status: str,
 ) -> bool:
     """Return whether a status transition is allowed."""
-
     validate_tournament_status(current_status)
     validate_tournament_status(new_status)
 
@@ -255,7 +264,6 @@ def change_tournament_status(
     new_status: str,
 ) -> Tournament:
     """Change tournament status using the centralized transition rules."""
-
     validate_tournament_status(new_status)
 
     current_status = tournament.status
@@ -276,6 +284,8 @@ def change_tournament_status(
     db.commit()
     db.refresh(tournament)
 
+    invalidate_public_tournament_cache()
+
     return tournament
 
 
@@ -284,7 +294,6 @@ def list_tournaments(
     status: str | None = None,
 ) -> list[Tournament]:
     """Return tournaments, optionally filtered by status."""
-
     query = db.query(Tournament)
 
     if status is not None:
@@ -302,7 +311,6 @@ def get_tournament_by_id(
     tournament_id: int,
 ) -> Tournament | None:
     """Return a tournament by ID, or None if it does not exist."""
-
     return (
         db.query(Tournament)
         .filter(Tournament.id == tournament_id)
@@ -315,7 +323,6 @@ def archive_tournament(
     tournament: Tournament,
 ) -> Tournament:
     """Archive a completed tournament without deleting its history."""
-
     if tournament.status != "completed":
         raise BadRequestException(
             detail="Only completed tournaments can be archived"

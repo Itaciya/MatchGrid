@@ -15,7 +15,7 @@ from app.modules.spectator.schemas.match_history import MatchHistoryResponse
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.tournament.schemas.tournament import TournamentResponse
 from app.modules.tournament_team.models.tournament_team import TournamentTeam
-
+from app.data_access.cache import get_cached_json, set_cached_json
 
 router = APIRouter(
     prefix="/spectator",
@@ -49,15 +49,7 @@ def spectator_home():
     return {"message": "Spectator router is working"}
 
 
-@router.get(
-    "/tournaments",
-    response_model=list[TournamentResponse],
-)
-
-@router.get(
-    "/tournaments",
-    response_model=list[TournamentResponse],
-)
+@router.get("/tournaments", response_model=list[TournamentResponse])
 def list_public_tournaments(
     tournament_status: str | None = Query(
         default=None,
@@ -66,17 +58,33 @@ def list_public_tournaments(
     ),
     db: Session = Depends(get_db),
 ):
-    """List tournaments without requiring authentication."""
+    """List public tournaments, using Redis to cache responses briefly."""
+    cache_key = f"spectator:tournaments:status:{tournament_status or 'all'}"
+
+    cached_data = get_cached_json(cache_key)
+    if cached_data is not None:
+        return cached_data
 
     query = db.query(Tournament)
 
     if tournament_status is not None:
         query = query.filter(Tournament.status == tournament_status)
 
-    return query.order_by(
+    tournaments = query.order_by(
         Tournament.start_date.asc(),
         Tournament.id.asc(),
     ).all()
+
+    response_data = [
+        tournament.model_dump(mode="json")
+        if hasattr(tournament, "model_dump")
+        else TournamentResponse.model_validate(tournament).model_dump(mode="json")
+        for tournament in tournaments
+    ]
+
+    set_cached_json(cache_key, response_data, ttl_seconds=60)
+
+    return response_data
 
 
 
@@ -187,21 +195,34 @@ def get_public_match_history(
         .all()
     )
 
+    # No matches means there's no reason to query for results.
+    if not matches:
+        return []
+
+    match_ids = [match.id for match in matches]
+
+    # Fetch all verified results in one query instead of one query per match.
+    verified_rows = (
+        db.query(MatchResult, Score)
+        .join(Score, Score.match_id == MatchResult.match_id)
+        .filter(
+            MatchResult.match_id.in_(match_ids),
+            Score.verification_status
+            == ScoreVerificationStatus.VERIFIED.value,
+            Score.is_verified.is_(True),
+        )
+        .all()
+    )
+
+    verified_by_match_id = {
+        result.match_id: (result, score)
+        for result, score in verified_rows
+    }
+
     history = []
 
     for match in matches:
-        verified_data = (
-            db.query(MatchResult, Score)
-            .join(Score, Score.match_id == MatchResult.match_id)
-            .filter(
-                MatchResult.match_id == match.id,
-                Score.verification_status
-                == ScoreVerificationStatus.VERIFIED.value,
-                Score.is_verified.is_(True),
-            )
-            .first()
-        )
-
+        verified_data = verified_by_match_id.get(match.id)
         result_data = None
 
         if verified_data is not None:
@@ -228,7 +249,6 @@ def get_public_match_history(
         )
 
     return history
-
 
 @router.get("/teams/{team_id}")
 def get_public_team_information(
