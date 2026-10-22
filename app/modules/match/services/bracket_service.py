@@ -20,6 +20,28 @@ ROUND_NAMES = {
 }
 
 
+def _place_byes(
+    participants: list[int],
+    bracket_size: int,
+) -> list[int | None]:
+    """Spread byes so that no first-round match is empty.
+
+    Seed order is kept. The first matches hold two teams each and every
+    remaining match holds one team and one bye, so byes sit in the last
+    matches. There are always fewer byes than first-round matches.
+    """
+
+    bye_count = bracket_size - len(participants)
+    full_match_teams = len(participants) - bye_count
+
+    seeded: list[int | None] = list(participants[:full_match_teams])
+
+    for participant in participants[full_match_teams:]:
+        seeded.extend([participant, None])
+
+    return seeded
+
+
 def generate_single_elimination_bracket(
     participant_ids: list[int],
 ) -> list[list[tuple[int | None, int | None]]]:
@@ -34,9 +56,7 @@ def generate_single_elimination_bracket(
         raise ValueError("Duplicate participants are not allowed")
 
     bracket_size = 2 ** ceil(log2(len(participants)))
-    bye_count = bracket_size - len(participants)
-
-    seeded_participants = participants + [None] * bye_count
+    seeded_participants = _place_byes(participants, bracket_size)
 
     rounds: list[list[tuple[int | None, int | None]]] = []
 
@@ -259,9 +279,7 @@ def generate_double_elimination_bracket(
         raise ValueError("Duplicate participants are not allowed")
 
     bracket_size = 2 ** ceil(log2(len(participants)))
-    bye_count = bracket_size - len(participants)
-
-    seeded_participants = participants + [None] * bye_count
+    seeded_participants = _place_byes(participants, bracket_size)
 
     winners_rounds: list[
         list[tuple[int | None, int | None]]
@@ -372,11 +390,16 @@ def create_double_elimination_bracket(
         bracket_type="winners",
     )
 
-    losers_rounds = create_tournament_rounds(
-        db=db,
-        tournament_id=tournament_id,
-        number_of_rounds=len(losers_bracket),
-        bracket_type="losers",
+    # Two teams produce no losers bracket, so there are no rounds to create.
+    losers_rounds = (
+        create_tournament_rounds(
+            db=db,
+            tournament_id=tournament_id,
+            number_of_rounds=len(losers_bracket),
+            bracket_type="losers",
+        )
+        if losers_bracket
+        else []
     )
 
     final_rounds = create_tournament_rounds(
@@ -527,9 +550,11 @@ def create_double_elimination_bracket(
         for match_index, match in enumerate(
             current_round
         ):
-            if match_index < len(next_round):
+            next_match_index = match_index // 2
+
+            if next_match_index < len(next_round):
                 match.winner_next_match_id = (
-                    next_round[match_index].id
+                    next_round[next_match_index].id
                 )
 
     # Losers of later winners rounds drop into
@@ -575,6 +600,11 @@ def create_double_elimination_bracket(
         winners_final.winner_next_match_id = (
             final_matches[0].id
         )
+
+    # With no losers bracket (two teams), the loser of the winners match
+    # takes its second chance directly in the grand final.
+    if not losers_matches and winners_matches and final_matches:
+        winners_matches[-1][0].loser_next_match_id = final_matches[0].id
 
     db.commit()
 
