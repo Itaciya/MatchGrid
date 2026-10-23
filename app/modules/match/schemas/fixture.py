@@ -1,6 +1,12 @@
 from datetime import date, datetime, time
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    model_validator,
+)
 
 
 class FixtureCreate(BaseModel):
@@ -45,6 +51,12 @@ class FixtureUpdate(BaseModel):
         return self
 
 
+class MatchStreamUpdate(BaseModel):
+    """Schema for adding, changing, or removing a match stream URL."""
+
+    stream_url: HttpUrl | None = None
+
+
 class FixtureResponse(BaseModel):
     """Schema for returning a match fixture."""
 
@@ -59,5 +71,6 @@ class FixtureResponse(BaseModel):
     venue_id: int | None
     scheduled_at: datetime
     status: str
+    stream_url: str | None = None
     created_at: datetime
     updated_at: datetime

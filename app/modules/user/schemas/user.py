@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from typing import Literal
 
@@ -8,6 +7,7 @@ from pydantic import (
     EmailStr,
     Field,
     field_validator,
+    model_validator,
 )
 
 UserRole = Literal["organiser", "player", "scorer", "spectator", "official"]
@@ -70,3 +70,5 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: Literal["bearer"] = "bearer"
+
+

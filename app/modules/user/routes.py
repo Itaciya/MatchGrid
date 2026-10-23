@@ -4,7 +4,12 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user
 from app.data_access.database import get_db
 from app.modules.user.models import User
-from app.modules.user.schemas.user import TokenResponse, UserLogin, UserRegister, UserResponse
+from app.modules.user.schemas.user import (
+    TokenResponse,
+    UserLogin,
+    UserRegister,
+    UserResponse,
+)
 from app.modules.user.services.auth_service import authenticate_user, logout_user
 from app.modules.user.services.user_service import register_user
 
@@ -44,7 +49,7 @@ def login(
 def logout(
     current_user: User = Depends(get_current_user),
 ):
-    """Invalidate the current session (SCRUM-51)."""
+    """Invalidate the current session."""
     logout_user(current_user.id)
 
 
@@ -55,5 +60,7 @@ def logout(
 def read_current_user(
     current_user: User = Depends(get_current_user),
 ):
-    """Protected route: proves the authentication dependency works end-to-end."""
+    """Return the currently authenticated user."""
     return current_user
+
+

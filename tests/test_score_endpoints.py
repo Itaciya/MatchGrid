@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock
 
 from app.realtime.connection_manager import manager
+from app.modules.score.routes import pubsub_manager
 from app.modules.player_team.models.team import Team
 from app.core.security import create_access_token, hash_password
 from app.main import app
@@ -607,8 +608,8 @@ def test_score_submission_broadcasts_live_update(db, monkeypatch):
     match.team_b_id = team_b.id
     db.commit()
 
-    broadcast = AsyncMock()
-    monkeypatch.setattr(manager, "broadcast_to_match", broadcast)
+    publish = AsyncMock()
+    monkeypatch.setattr(pubsub_manager, "publish_event", publish)
 
     response = client.post(
         f"/matches/{match.id}/score",
@@ -617,12 +618,9 @@ def test_score_submission_broadcasts_live_update(db, monkeypatch):
     )
 
     assert response.status_code == 201
-    broadcast.assert_awaited_once()
+    publish.assert_awaited_once()
 
-    args = broadcast.await_args.args
-    assert args[0] == match.id
-
-    event = args[1]
+    event = publish.await_args.args[0]
     assert event["type"] == "live_score:update"
 
     payload = event["payload"]
@@ -642,8 +640,8 @@ def test_score_update_broadcasts_new_score(db, monkeypatch):
     official = _assigned_official(db, match)
     _make_score(db, match, team_a_score=1, team_b_score=0)
 
-    broadcast = AsyncMock()
-    monkeypatch.setattr(manager, "broadcast_to_match", broadcast)
+    publish = AsyncMock()
+    monkeypatch.setattr(pubsub_manager, "publish_event", publish)
 
     response = client.patch(
         f"/matches/{match.id}/score",
@@ -652,12 +650,9 @@ def test_score_update_broadcasts_new_score(db, monkeypatch):
     )
 
     assert response.status_code == 200
-    broadcast.assert_awaited_once()
+    publish.assert_awaited_once()
 
-    args = broadcast.await_args.args
-    assert args[0] == match.id
-
-    event = args[1]
+    event = publish.await_args.args[0]
     assert event["type"] == "live_score:update"
     assert event["payload"]["score"] == {
         "team_a_score": 4,
