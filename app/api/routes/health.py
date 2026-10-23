@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.data_access.redis_client import test_redis_connection
@@ -34,10 +34,11 @@ def redis_health():
 
     if result == "Redis connection successful":
         logger.info("Redis health check successful")
-    else:
-        logger.error("Redis health check failed")
+        return {"redis": result}
 
-    return {
-        "redis": result
-    }
+    logger.error("Redis health check failed")
+    raise HTTPException(
+        status_code=503,
+        detail={"redis": result},
+    )
       

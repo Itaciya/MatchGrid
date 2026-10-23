@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str
 
+    # CORS
+    CORS_ORIGINS: str = "http://localhost:5173"
+
     # API Rate Limiting
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_PUBLIC_REQUESTS: int = 100

@@ -114,6 +114,18 @@ function App() {
   const [fixtureTeamFilter, setFixtureTeamFilter] = useState('')
   const [fixtureVenueFilter, setFixtureVenueFilter] = useState('')
   const [fixturePage, setFixturePage] = useState(1)
+  const [currentTime, setCurrentTime] = useState(0)
+  useEffect(() => {
+    const updateCurrentTime = () => setCurrentTime(Date.now())
+    const initialTimerId = window.setTimeout(updateCurrentTime, 0)
+    const intervalId = window.setInterval(updateCurrentTime, 30000)
+
+    return () => {
+      window.clearTimeout(initialTimerId)
+      window.clearInterval(intervalId)
+    }
+  }, [])
+
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [detailsError, setDetailsError] = useState('')
   const [formLoading, setFormLoading] = useState(false)
@@ -608,14 +620,11 @@ function App() {
 
   const fixturePageSize = 10
   const fixturePageCount = Math.max(1, Math.ceil(filteredFixtures.length / fixturePageSize))
+  const effectiveFixturePage = Math.min(fixturePage, fixturePageCount)
   const paginatedFixtures = filteredFixtures.slice(
-    (fixturePage - 1) * fixturePageSize,
-    fixturePage * fixturePageSize,
+    (effectiveFixturePage - 1) * fixturePageSize,
+    effectiveFixturePage * fixturePageSize,
   )
-
-  useEffect(() => {
-    setFixturePage((page) => Math.min(page, fixturePageCount))
-  }, [fixturePageCount])
 
   const paginatedTournaments = filteredTournaments.slice(
     (currentPage - 1) * 10,
@@ -829,7 +838,7 @@ function App() {
       <tbody>{paginatedFixtures.map((fixture) => {
         const status = String(fixture.status || 'unknown').toLowerCase()
         const scheduledTime = fixture.scheduled_at ? new Date(fixture.scheduled_at).getTime() : NaN
-        const isUpcoming = status === 'scheduled' && Number.isFinite(scheduledTime) && scheduledTime >= Date.now()
+        const isUpcoming = status === 'scheduled' && Number.isFinite(scheduledTime) && scheduledTime >= currentTime
         const displayStatus = isUpcoming ? 'Upcoming' : (status === 'scheduled' ? 'Scheduled' : (fixture.status || 'Unknown'))
         return <tr key={fixture.id}>
           <td><strong>#{fixture.match_number}</strong><small className="cell-subtitle">Fixture ID: {fixture.id}</small></td>
