@@ -802,7 +802,7 @@ function App() {
           </>}
 
           {page === 'details' && <>
-            <div className="page-heading"><div><p className="eyebrow">COMPETITION OVERVIEW</p><h1>Tournament details</h1><p className="muted">Tournament information and standings provided by the API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Back to list</button></div>
+            <div className="page-heading"><div><p className="eyebrow">COMPETITION OVERVIEW</p><h1>Tournament details</h1><p className="muted">Tournament information and standings provided by the API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Back to list</button></div>
             {detailsLoading && <Loading label="Loading tournament details..." />}
             <ErrorNotice>{detailsError}</ErrorNotice>
             {selectedTournament && <><div className="detail-card"><div className="detail-heading"><div><span className="eyebrow">TOURNAMENT #{selectedTournament.id}</span><h2>{selectedTournament.name}</h2><p>{selectedTournament.description || 'No description provided.'}</p></div><span className={statusClass(selectedTournament.status)}>{selectedTournament.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Format" value={selectedTournament.format} /><Meta label="Starts" value={dateLabel(selectedTournament.start_date)} /><Meta label="Ends" value={dateLabel(selectedTournament.end_date)} /><Meta label="Organizer ID" value={selectedTournament.organizer_id} /></div><div className="detail-actions">{currentUser?.role === 'organiser' && <button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button></div></div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixtures..." /> : <><ErrorNotice>{fixturesError}</ErrorNotice><div className="fixture-filters filter-row">
@@ -847,7 +847,7 @@ function App() {
           <td>{fixture.venue_id ?? '|'}</td>
           <td>{dateLabel(fixture.scheduled_at)}</td>
           <td><span className={statusClass(isUpcoming ? 'upcoming' : status)}>{displayStatus}</span></td>
-          <td><StreamUrlControl fixture={fixture} tournamentId={selectedTournament.id} canManage={currentUser?.role === 'organiser' || currentUser?.role === 'organizer'} onSaved={() => openTournament(selectedTournament.id)} /></td>
+          <td><StreamUrlControl key={`${fixture.id}-${fixture.stream_url || ''}`} fixture={fixture} tournamentId={selectedTournament.id} canManage={currentUser?.role === 'organiser' || currentUser?.role === 'organizer'} onSaved={() => openTournament(selectedTournament.id)} /></td>
         </tr>
       })}</tbody>
     </table>
@@ -1263,10 +1263,6 @@ function StreamUrlControl({ fixture, tournamentId, canManage, onSaved }) {
   const [url, setUrl] = useState(fixture.stream_url || '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-
-  useEffect(() => {
-    setUrl(fixture.stream_url || '')
-  }, [fixture.stream_url])
 
   async function saveStream(event) {
     event.preventDefault()
