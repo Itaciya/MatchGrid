@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+﻿from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import verify_assigned_official, verify_match_organiser
@@ -62,7 +62,7 @@ async def broadcast_live_score_update(db: Session, match_id: int, score: ScoreRe
         },
     }
 
-    await manager.broadcast_to_match(match_id, event)
+    await pubsub_manager.publish_event(event)
 
 
 @router.post(

@@ -36,9 +36,9 @@ export class WebSocketClient {
     ws.onopen = () => {
       if (this.ws !== ws) return;
       this.attempts = 0;
-      this._setStatus('open');
       const token = this.opts.getToken?.();
       if (token) this._send({ type: 'auth', token });
+      this._setStatus('open');
       this._startHeartbeat();
     };
 
