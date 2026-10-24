@@ -3,6 +3,7 @@ import { getMyMatches, getScore, saveScore } from './services/scorerApi'
 import { useLiveScores } from './realtime/useLiveScores'
 import { useMatchStatus } from './realtime/useMatchStatus'
 import { useRealtimeStatus } from './realtime/useRealtime'
+import { wsClient } from './realtime/websocketClient'
 
 // Adapter: the only place that knows the backend's match field names.
 function normalize(m) {
@@ -92,6 +93,23 @@ export default function ScorerPage() {
     return () => { cancelled = true }
   }, [])
 
+  useEffect(() => {
+    if (wsStatus !== 'open' || matches.length === 0) return
+
+    const matchIds = matches.map((match) => match.id)
+
+    matchIds.forEach((match_id) => {
+      wsClient.send('subscribe_match', { match_id })
+    })
+
+    return () => {
+      if (wsClient.status === 'open') {
+        matchIds.forEach((match_id) => {
+          wsClient.send('unsubscribe_match', { match_id })
+        })
+      }
+    }
+  }, [matches, wsStatus])
   const hasToken = Boolean(localStorage.getItem('access_token') || localStorage.getItem('accessToken') || localStorage.getItem('token'))
 
   return (

@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str
@@ -24,6 +25,7 @@ class Settings(BaseSettings):
 
     # Audit Logging
     AUDIT_ADMIN_USER_IDS: str = ""
+
 
     model_config = SettingsConfigDict(
         env_file=".env",

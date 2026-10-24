@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { API_BASE_URL, apiRequest } from './services/api'
 import ScorerPage from './ScorerPage.jsx'
 import NotificationsPage from './NotificationsPage.jsx'
@@ -60,7 +60,7 @@ const PAGE_ROLES = {
 }
 
 function dateLabel(value) {
-  if (!value) return 'â€”'
+  if (!value) return '-'
   const date = new Date(value)
   return Number.isNaN(date.getTime())
     ? String(value)
@@ -87,7 +87,7 @@ function SuccessNotice({ children }) {
   return children ? <div className="notice notice-success" role="status">{children}</div> : null
 }
 
-function Loading({ label = 'Loadingâ€¦' }) {
+function Loading({ label = 'Loading...' }) {
   return <div className="loading-state"><span className="spinner" />{label}</div>
 }
 
@@ -660,7 +660,7 @@ function App() {
           {currentUser ? (
             <>
               <span className="user-badge">
-                {currentUser.email} · {currentUser.role}
+                {currentUser.email} | {currentUser.role}
               </span>
               <button
                 className="button button-secondary"
@@ -726,27 +726,27 @@ function App() {
           )}
 
           {page === 'overview' && <>
-            <div className="page-heading"><div><p className="eyebrow">YOUR SPORTS HUB</p><h1>Manage the game.</h1><p className="muted">Create tournaments, follow standings, and keep your competition organized.</p></div><button className="button button-primary" onClick={() => { resetForm(); setPage('create') }}>ï¼‹ Create tournament</button></div>
-            <div className="hero-panel"><div><p className="eyebrow">MATCHGRID WORKSPACE</p><h2>Every competition.<br />One clear view.</h2><p>Keep tournament information and team performance in one place.</p><button className="button button-on-dark" onClick={() => setPage('tournaments')}>Browse tournaments <span>â†’</span></button></div><div className="hero-orbit" aria-hidden="true"><span>MG</span><i /><b /></div></div>
+            <div className="page-heading"><div><p className="eyebrow">YOUR SPORTS HUB</p><h1>Manage the game.</h1><p className="muted">Create tournaments, follow standings, and keep your competition organized.</p></div>{currentUser?.role === 'organiser' && <button className="button button-primary" onClick={() => { resetForm(); setPage('create') }}>+ Create tournament</button>}</div>
+            <div className="hero-panel"><div><p className="eyebrow">MATCHGRID WORKSPACE</p><h2>Every competition.<br />One clear view.</h2><p>Keep tournament information and team performance in one place.</p><button className="button button-on-dark" onClick={() => setPage('tournaments')}>Browse tournaments <span>-&gt;</span></button></div><div className="hero-orbit" aria-hidden="true"><span>MG</span><i /><b /></div></div>
             <div className="stats-grid">
-              <article className="stat-card"><span className="stat-icon">â–¦</span><p>Total tournaments</p><strong>{tournaments.length}</strong><small>Returned by the API</small></article>
-              <article className="stat-card"><span className="stat-icon green">â†—</span><p>Active tournaments</p><strong>{activeCount}</strong><small>Based on current status</small></article>
-              <article className="stat-card"><span className="stat-icon violet">â—Ž</span><p>Competition formats</p><strong>{new Set(tournaments.map((item) => item.format).filter(Boolean)).size}</strong><small>Formats in your list</small></article>
+              <article className="stat-card"><span className="stat-icon">#</span><p>Total tournaments</p><strong>{tournaments.length}</strong><small>Returned by the API</small></article>
+              <article className="stat-card"><span className="stat-icon green">OK</span><p>Active tournaments</p><strong>{activeCount}</strong><small>Based on current status</small></article>
+              <article className="stat-card"><span className="stat-icon violet">*</span><p>Competition formats</p><strong>{new Set(tournaments.map((item) => item.format).filter(Boolean)).size}</strong><small>Formats in your list</small></article>
             </div>
             <div className="section-title"><div><h2>Recent tournaments</h2><p className="muted">Latest items returned by the tournament API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>View all</button></div>
             {listError && <ErrorNotice>{listError}</ErrorNotice>}
-            {listLoading ? <Loading label="Loading tournamentsâ€¦" /> : tournaments.length ? <TournamentTable items={tournaments.slice(0, 5)} onOpen={openTournament} onEdit={beginEdit} canManage={currentUser?.role === 'organiser'} /> : <EmptyState title="No tournaments to show" text="Create a tournament or check back when the API has data." action={() => { resetForm(); setPage('create') }} />}
+            {listLoading ? <Loading label="Loading tournaments..." /> : tournaments.length ? <TournamentTable items={tournaments.slice(0, 5)} onOpen={openTournament} onEdit={beginEdit} canManage={currentUser?.role === 'organiser'} /> : <EmptyState title="No tournaments to show" text="Create a tournament or check back when the API has data." action={() => { resetForm(); setPage('create') }} />}
           </>}
 
           {page === 'tournaments' && <>
-            <div className="page-heading"><div><p className="eyebrow">COMPETITIONS</p><h1>Tournaments</h1><p className="muted">Browse tournament details and current standings.</p></div><button className="button button-primary" onClick={() => { resetForm(); setPage('create') }}>ï¼‹ Create tournament</button></div>
+            <div className="page-heading"><div><p className="eyebrow">COMPETITIONS</p><h1>Tournaments</h1><p className="muted">Browse tournament details and current standings.</p></div>{currentUser?.role === 'organiser' && <button className="button button-primary" onClick={() => { resetForm(); setPage('create') }}>+ Create tournament</button>}</div>
             <div className="filter-row">
               <label>
                 Search tournaments
                 <input
                   type="search"
                   value={searchTerm}
-                  placeholder="Search by name or IDâ€¦"
+                  placeholder="Search by name or ID..."
                   onChange={(event) => {
                     setSearchTerm(event.target.value)
                     setCurrentPage(1)
@@ -774,38 +774,38 @@ function App() {
               <button className="button button-secondary" onClick={loadTournaments}>Refresh</button>
             </div>
             <ErrorNotice>{listError}</ErrorNotice>
-            {listLoading ? <Loading label="Loading tournamentsâ€¦" /> : filteredTournaments.length ? (
+            {listLoading ? <Loading label="Loading tournaments..." /> : filteredTournaments.length ? (
               <>
                 <p className="helper-text">
-                  Showing {(currentPage - 1) * 10 + 1}â€“{Math.min(currentPage * 10, filteredTournaments.length)} of {filteredTournaments.length} tournaments
+                  Showing {(currentPage - 1) * 10 + 1}-{Math.min(currentPage * 10, filteredTournaments.length)} of {filteredTournaments.length} tournaments
                 </p>
                 <TournamentTable items={paginatedTournaments} onOpen={openTournament} onEdit={beginEdit} canManage={currentUser?.role === 'organiser'} />
                 <div className="pagination-row">
-                  <button
-                    className="button button-secondary"
-                    onClick={() => setCurrentPage((value) => Math.max(1, value - 1))}
-                    disabled={currentPage === 1}
-                  >
-                    â† Previous
-                  </button>
-                  <span>Page {currentPage} of {totalPages}</span>
-                  <button
-                    className="button button-secondary"
-                    onClick={() => setCurrentPage((value) => Math.min(totalPages, value + 1))}
-                    disabled={currentPage >= totalPages}
-                  >
-                    Next â†’
-                  </button>
-                </div>
+  <button
+    className="button button-secondary"
+    onClick={() => setCurrentPage((value) => Math.max(1, value - 1))}
+    disabled={currentPage === 1}
+  >
+    Previous
+  </button>
+  <span>Page {currentPage} of {totalPages}</span>
+  <button
+    className="button button-secondary"
+    onClick={() => setCurrentPage((value) => Math.min(totalPages, value + 1))}
+    disabled={currentPage === totalPages}
+  >
+    Next
+  </button>
+</div>
               </>
             ) : <EmptyState title="No matching tournaments" text="Try another search or status filter, or create a tournament." action={() => { resetForm(); setPage('create') }} />}
           </>}
 
           {page === 'details' && <>
-            <div className="page-heading"><div><p className="eyebrow">COMPETITION OVERVIEW</p><h1>Tournament details</h1><p className="muted">Tournament information and standings provided by the API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>â† Back to list</button></div>
-            {detailsLoading && <Loading label="Loading tournament detailsâ€¦" />}
+            <div className="page-heading"><div><p className="eyebrow">COMPETITION OVERVIEW</p><h1>Tournament details</h1><p className="muted">Tournament information and standings provided by the API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Back to list</button></div>
+            {detailsLoading && <Loading label="Loading tournament details..." />}
             <ErrorNotice>{detailsError}</ErrorNotice>
-            {selectedTournament && <><div className="detail-card"><div className="detail-heading"><div><span className="eyebrow">TOURNAMENT #{selectedTournament.id}</span><h2>{selectedTournament.name}</h2><p>{selectedTournament.description || 'No description provided.'}</p></div><span className={statusClass(selectedTournament.status)}>{selectedTournament.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Format" value={selectedTournament.format} /><Meta label="Starts" value={dateLabel(selectedTournament.start_date)} /><Meta label="Ends" value={dateLabel(selectedTournament.end_date)} /><Meta label="Organizer ID" value={selectedTournament.organizer_id} /></div><div className="detail-actions">{currentUser?.role === 'organiser' && <button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button></div></div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixturesâ€¦" /> : <><ErrorNotice>{fixturesError}</ErrorNotice><div className="fixture-filters filter-row">
+            {selectedTournament && <><div className="detail-card"><div className="detail-heading"><div><span className="eyebrow">TOURNAMENT #{selectedTournament.id}</span><h2>{selectedTournament.name}</h2><p>{selectedTournament.description || 'No description provided.'}</p></div><span className={statusClass(selectedTournament.status)}>{selectedTournament.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Format" value={selectedTournament.format} /><Meta label="Starts" value={dateLabel(selectedTournament.start_date)} /><Meta label="Ends" value={dateLabel(selectedTournament.end_date)} /><Meta label="Organizer ID" value={selectedTournament.organizer_id} /></div><div className="detail-actions">{currentUser?.role === 'organiser' && <button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button></div></div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixtures..." /> : <><ErrorNotice>{fixturesError}</ErrorNotice><div className="fixture-filters filter-row">
   <label>
     Status
     <select value={fixtureStatusFilter} onChange={(event) => { setFixtureStatusFilter(event.target.value); setFixturePage(1) }}>
@@ -830,11 +830,11 @@ function App() {
 </div>
 {filteredFixtures.length ? <>
   <p className="helper-text">
-    Showing {(fixturePage - 1) * fixturePageSize + 1}–{Math.min(fixturePage * fixturePageSize, filteredFixtures.length)} of {filteredFixtures.length} fixtures
+    Showing {(fixturePage - 1) * fixturePageSize + 1}|{Math.min(fixturePage * fixturePageSize, filteredFixtures.length)} of {filteredFixtures.length} fixtures
   </p>
   <div className="table-wrap">
     <table>
-      <thead><tr><th>Match</th><th>Team A ID</th><th>Team B ID</th><th>Venue ID</th><th>Scheduled at</th><th>Status</th></tr></thead>
+      <thead><tr><th>Match</th><th>Team A ID</th><th>Team B ID</th><th>Venue ID</th><th>Scheduled at</th><th>Status</th><th>Live Stream</th></tr></thead>
       <tbody>{paginatedFixtures.map((fixture) => {
         const status = String(fixture.status || 'unknown').toLowerCase()
         const scheduledTime = fixture.scheduled_at ? new Date(fixture.scheduled_at).getTime() : NaN
@@ -844,17 +844,18 @@ function App() {
           <td><strong>#{fixture.match_number}</strong><small className="cell-subtitle">Fixture ID: {fixture.id}</small></td>
           <td>{fixture.team_a_id ?? 'TBD'}</td>
           <td>{fixture.team_b_id ?? 'TBD'}</td>
-          <td>{fixture.venue_id ?? '—'}</td>
+          <td>{fixture.venue_id ?? '|'}</td>
           <td>{dateLabel(fixture.scheduled_at)}</td>
           <td><span className={statusClass(isUpcoming ? 'upcoming' : status)}>{displayStatus}</span></td>
+          <td><StreamUrlControl key={`${fixture.id}-${fixture.stream_url || ''}`} fixture={fixture} tournamentId={selectedTournament.id} canManage={currentUser?.role === 'organiser' || currentUser?.role === 'organizer'} onSaved={() => openTournament(selectedTournament.id)} /></td>
         </tr>
       })}</tbody>
     </table>
   </div>
   <div className="pagination-row">
-    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.max(1, value - 1))} disabled={fixturePage <= 1}>Previous</button>
+    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.max(1, value - 1))} disabled={fixturePage <= 1}>â† Previous</button>
     <span className="helper-text">Page {fixturePage} of {fixturePageCount}</span>
-    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.min(fixturePageCount, value + 1))} disabled={fixturePage >= fixturePageCount}>Next</button>
+    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.min(fixturePageCount, value + 1))} disabled={fixturePage >= fixturePageCount}>Next â†’</button>
   </div>
 </> : !fixturesError ? <EmptyState title="No matching fixtures" text="Try changing or clearing the fixture filters." /> : null}</>}<div className="section-title"><div><h2>Standings</h2><p className="muted">Calculated rankings returned by the standings endpoint.</p></div></div>{standings.length ? <div className="table-wrap"><table><thead><tr><th>Rank</th><th>Team</th><th>Played</th><th>W</th><th>D</th><th>L</th><th>Score diff.</th><th>Points</th></tr></thead><tbody>{standings.map((row) => <tr key={row.team_id}><td><span className="rank">#{row.rank}</span></td><td><strong>{row.team_name}</strong></td><td>{row.played}</td><td>{row.wins}</td><td>{row.draws}</td><td>{row.losses}</td><td>{row.score_difference}</td><td><strong>{row.points}</strong></td></tr>)}</tbody></table></div> : <EmptyState title="No standings available" text="The API returned no standings for this tournament yet." />}</>}
             {!detailsLoading && !selectedTournament && !detailsError && <IdLookup onSubmit={openTournament} />}
@@ -864,13 +865,13 @@ function App() {
             <div className="page-heading"><div><p className="eyebrow">TOURNAMENT SETUP</p><h1>{editingId ? 'Edit tournament' : 'Create a tournament'}</h1><p className="muted">{editingId ? 'Update tournament details. The backend checks organizer ownership.' : 'Set the essentials before your competition begins.'}</p></div><button className="button button-secondary" onClick={() => { resetForm(); setPage('tournaments') }}>Cancel</button></div>
             <form className="form-card" onSubmit={submitTournament}>
               <div className="form-section-heading"><span className="step-number">01</span><div><h2>Basic information</h2><p>Give your tournament a clear identity.</p></div></div>
-              <div className="field"><label htmlFor="tournament-name">Tournament name <span>*</span></label><input id="tournament-name" value={form.name} minLength={3} maxLength={150} required placeholder="e.g. Spring Championship" onChange={(event) => setForm({ ...form, name: event.target.value })} /><small>3â€“150 characters</small></div>
+              <div className="field"><label htmlFor="tournament-name">Tournament name <span>*</span></label><input id="tournament-name" value={form.name} minLength={3} maxLength={150} required placeholder="e.g. Spring Championship" onChange={(event) => setForm({ ...form, name: event.target.value })} /><small>3ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“150 characters</small></div>
               <div className="field"><label htmlFor="tournament-description">Description</label><textarea id="tournament-description" rows="3" value={form.description} placeholder="What should participants know?" onChange={(event) => setForm({ ...form, description: event.target.value })} /></div>
               <div className="form-grid"><div className="field"><label htmlFor="tournament-format">Tournament format <span>*</span></label><select id="tournament-format" value={form.format} required onChange={(event) => setForm({ ...form, format: event.target.value })}><option value="round_robin">Round robin</option><option value="single_elimination">Single elimination</option><option value="double_elimination">Double elimination</option></select></div><div className="field"><label htmlFor="number-teams">Number of teams</label><input id="number-teams" type="number" min="2" max="256" value={form.number_of_teams} required onChange={(event) => setForm({ ...form, number_of_teams: event.target.value })} /><small>At least 2 teams</small></div></div>
               <div className="form-section-heading second"><span className="step-number">02</span><div><h2>Schedule</h2><p>Choose the start and end of the competition.</p></div></div>
               <div className="form-grid"><div className="field"><label htmlFor="start-date">Start date and time <span>*</span></label><input id="start-date" type="datetime-local" value={form.start_date} required onChange={(event) => setForm({ ...form, start_date: event.target.value })} /></div><div className="field"><label htmlFor="end-date">End date and time <span>*</span></label><input id="end-date" type="datetime-local" value={form.end_date} min={form.start_date || undefined} required onChange={(event) => setForm({ ...form, end_date: event.target.value })} /></div></div>
               <ErrorNotice>{formError}</ErrorNotice><SuccessNotice>{formSuccess}</SuccessNotice>
-              <div className="form-footer"><p><span>*</span> Required fields. Sign in as an organiser to submit.</p><button className="button button-primary" type="submit" disabled={formLoading}>{formLoading ? 'Savingâ€¦' : editingId ? 'Save changes â†’' : 'Create tournament â†’'}</button></div>
+              <div className="form-footer"><p><span>*</span> Required fields. Sign in as an organiser to submit.</p><button className="button button-primary" type="submit" disabled={formLoading}>{formLoading ? 'Saving...' : editingId ? 'Save changes ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢' : 'Create tournament ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢'}</button></div>
             </form>
           </>}
 
@@ -886,9 +887,9 @@ function App() {
           {page === 'registration-approvals' && currentUser?.role === 'organiser' && <RegistrationApprovalPage />}
       {page === 'team' && <>
             <div className="page-heading"><div><p className="eyebrow">TEAM DIRECTORY</p><h1>Team lookup</h1><p className="muted">Look up an existing team using its numeric ID.</p></div></div>
-            <form className="lookup-card" onSubmit={loadTeam}><div className="field"><label htmlFor="team-id">Team ID</label><input id="team-id" inputMode="numeric" pattern="[1-9][0-9]*" value={teamId} onChange={(event) => setTeamId(event.target.value)} placeholder="e.g. 12" required /></div><button className="button button-primary" type="submit" disabled={teamLoading}>{teamLoading ? 'Searchingâ€¦' : 'Find team'}</button></form>
+            <form className="lookup-card" onSubmit={loadTeam}><div className="field"><label htmlFor="team-id">Team ID</label><input id="team-id" inputMode="numeric" pattern="[1-9][0-9]*" value={teamId} onChange={(event) => setTeamId(event.target.value)} placeholder="e.g. 12" required /></div><button className="button button-primary" type="submit" disabled={teamLoading}>{teamLoading ? 'Searching...' : 'Find team'}</button></form>
             <ErrorNotice>{teamError}</ErrorNotice>
-            {teamLoading && <Loading label="Loading teamâ€¦" />}
+            {teamLoading && <Loading label="Loading team..." />}
             {team && <div className="detail-card"><div className="detail-heading"><div><span className="eyebrow">TEAM #{team.id}</span><h2>{team.name}</h2><p>Captain ID: {team.captain_id ?? team.captain?.id ?? 'Not provided'}</p></div><span className={statusClass(team.status)}>{team.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Created" value={dateLabel(team.created_at)} /><Meta label="Updated" value={dateLabel(team.updated_at)} /><Meta label="Roster members" value={Array.isArray(team.players) ? team.players.length : 'Not provided'} /></div></div>}
             {team && <>
               <div className="section-title">
@@ -902,11 +903,11 @@ function App() {
                   <label htmlFor="roster-player-id">Player ID to add</label>
                   <input id="roster-player-id" inputMode="numeric" pattern="[1-9][0-9]*" value={rosterPlayerId} onChange={(event) => setRosterPlayerId(event.target.value)} placeholder="e.g. 7" required />
                 </div>
-                <button className="button button-primary" type="submit" disabled={rosterLoading}>{rosterLoading ? 'Updatingâ€¦' : 'Add player'}</button>
+                <button className="button button-primary" type="submit" disabled={rosterLoading}>{rosterLoading ? 'Updating...' : 'Add player'}</button>
               </form>
               <ErrorNotice>{rosterError}</ErrorNotice>
               <SuccessNotice>{rosterSuccess}</SuccessNotice>
-              {rosterLoading && <Loading label="Updating team rosterâ€¦" />}
+              {rosterLoading && <Loading label="Updating team roster..." />}
               {Array.isArray(team.players) && team.players.length > 0 ? (
                 <div className="table-wrap">
                   <table>
@@ -916,7 +917,7 @@ function App() {
                         <tr key={rosterPlayer.id}>
                           <td><strong>{[rosterPlayer.first_name, rosterPlayer.last_name].filter(Boolean).join(' ') || `Player #${rosterPlayer.id}`}</strong></td>
                           <td>{rosterPlayer.id}</td>
-                          <td>{rosterPlayer.user_id ?? 'â€”'}</td>
+                          <td>{rosterPlayer.user_id ?? '-'}</td>
                           <td><span className={statusClass(rosterPlayer.status)}>{rosterPlayer.status || 'Unknown'}</span></td>
                           <td><div className="table-actions">
                             <button type="button" onClick={() => { setPlayerId(String(rosterPlayer.id)); setPlayer(null); setPlayerError(''); }} disabled={rosterLoading}>Use ID</button>
@@ -941,10 +942,10 @@ function App() {
                 <label htmlFor="player-id">Player ID</label>
                 <input id="player-id" inputMode="numeric" pattern="[1-9][0-9]*" value={playerId} onChange={(event) => setPlayerId(event.target.value)} placeholder="e.g. 7" required />
               </div>
-              <button className="button button-primary" type="submit" disabled={playerLoading}>{playerLoading ? 'Searchingâ€¦' : 'Find player'}</button>
+              <button className="button button-primary" type="submit" disabled={playerLoading}>{playerLoading ? 'Searching...' : 'Find player'}</button>
             </form>
             <ErrorNotice>{playerError}</ErrorNotice>
-            {playerLoading && <Loading label="Loading player profileâ€¦" />}
+            {playerLoading && <Loading label="Loading player profile..." />}
             {player && <div className="detail-card">
               <div className="detail-heading">
                 <div><span className="eyebrow">PLAYER #{player.id}</span><h2>{[player.first_name, player.last_name].filter(Boolean).join(' ') || 'Player profile'}</h2><p>User ID: {player.user_id ?? 'Not provided'}</p></div>
@@ -971,7 +972,7 @@ function App() {
             />
           </>}
 
-          <footer className="footer"><span>Â© MatchGrid 2026</span><span>Sports management, made clearer.</span><span className="footer-api">{API_BASE_URL || 'API URL missing'}</span></footer>
+          <footer className="footer"><span>Ãƒâ€š(c) MatchGrid 2026</span><span>Sports management, made clearer.</span><span className="footer-api">{API_BASE_URL || 'API URL missing'}</span></footer>
         </section>
       </div>
     </main>
@@ -1000,7 +1001,7 @@ function TournamentTable({ items, onOpen, onEdit, canManage }) {
                 </button>
                 <small className="cell-subtitle">ID: {item.id}</small>
               </td>
-              <td>{item.format || '—'}</td>
+              <td>{item.format || '|'}</td>
               <td>
                 <span>{dateLabel(item.start_date)}</span>
                 <small className="cell-subtitle">to {dateLabel(item.end_date)}</small>
@@ -1027,11 +1028,11 @@ function TournamentTable({ items, onOpen, onEdit, canManage }) {
 }
 
 function Meta({ label, value }) {
-  return <div className="meta-item"><span>{label}</span><strong>{value ?? 'â€”'}</strong></div>
+  return <div className="meta-item"><span>{label}</span><strong>{value ?? '-'}</strong></div>
 }
 
 function EmptyState({ title, text, action }) {
-  return <div className="empty-state"><span className="empty-icon">â–¦</span><h3>{title}</h3><p>{text}</p>{action && <button className="button button-secondary" onClick={action}>Create tournament</button>}</div>
+  return <div className="empty-state"><span className="empty-icon">#</span><h3>{title}</h3><p>{text}</p>{action && <button className="button button-secondary" onClick={action}>Create tournament</button>}</div>
 }
 
 function IdLookup({ onSubmit }) {
@@ -1121,7 +1122,7 @@ function TeamCreationForm({ onCreated }) {
       <div className="form-footer">
         <p>Sign in as an organiser to create a team.</p>
         <button className="button button-primary" type="submit" disabled={loading}>
-          {loading ? 'Creating teamâ€¦' : 'Create team'}
+          {loading ? 'Creating team...' : 'Create team'}
         </button>
       </div>
     </form>
@@ -1131,6 +1132,7 @@ function TeamCreationForm({ onCreated }) {
 function AuthPanel({ mode, loading, error, success, onSubmit, onSwitch }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [role, setRole] = useState('player')
 
   const isRegister = mode === 'register'
@@ -1139,9 +1141,7 @@ function AuthPanel({ mode, loading, error, success, onSubmit, onSwitch }) {
     <div className="auth-page">
       <form
         className="auth-card"
-        onSubmit={(event) =>
-          onSubmit(event, mode, { email, password, role })
-        }
+        onSubmit={(event) => onSubmit(event, mode, { email, password, role })}
       >
         <p className="eyebrow">MATCHGRID ACCOUNT</p>
         <h1>{isRegister ? 'Create your account' : 'Welcome back'}</h1>
@@ -1167,22 +1167,44 @@ function AuthPanel({ mode, loading, error, success, onSubmit, onSwitch }) {
           />
         </div>
 
-        <div className="field">
+                <div className="field">
           <label htmlFor="auth-password">Password</label>
-          <input
-            id="auth-password"
-            type="password"
-            autoComplete={isRegister ? 'new-password' : 'current-password'}
-            minLength={isRegister ? 8 : undefined}
-            maxLength={72}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder={isRegister ? 'At least 8 characters' : 'Enter your password'}
-            required
-          />
+          <div className="password-input-wrapper">
+            <input
+              id="auth-password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete={isRegister ? 'new-password' : 'current-password'}
+              minLength={isRegister ? 8 : undefined}
+              maxLength={72}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder={isRegister ? 'At least 8 characters' : 'Enter your password'}
+              required
+            />
+            <button
+              type="button"
+              className="text-button password-toggle"
+              onClick={() => setShowPassword((current) => !current)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              title={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? (
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 3l18 18" />
+                  <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
+                  <path d="M9.9 5.2A11 11 0 0 1 12 5c5 0 9 5 9 7a10 10 0 0 1-2.1 3.2" />
+                  <path d="M6.2 6.2C4.2 7.5 3 9.5 3 12c0 2 4 7 9 7 1 0 2-.2 2.9-.6" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
-
-        {isRegister && (
+{isRegister && (
           <div className="field">
             <label htmlFor="auth-role">Account role</label>
             <select
@@ -1198,7 +1220,6 @@ function AuthPanel({ mode, loading, error, success, onSubmit, onSwitch }) {
             </select>
           </div>
         )}
-
         <button
           className="button button-primary auth-submit"
           type="submit"
@@ -1227,16 +1248,71 @@ function AuthPanel({ mode, loading, error, success, onSubmit, onSwitch }) {
         <button
           type="button"
           className="text-button auth-home"
-          onClick={() => onSwitch('overview')}
+          onClick={() => onSwitch('tournaments')}
         >
           Back to dashboard
         </button>
+        {!isRegister && <button type="button" className="button button-secondary auth-submit" onClick={() => onSwitch('tournaments')}>Continue as guest</button>}
       </form>
     </div>
   )
 }
 
+
+function StreamUrlControl({ fixture, tournamentId, canManage, onSaved }) {
+  const [url, setUrl] = useState(fixture.stream_url || '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function saveStream(event) {
+    event.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      await apiRequest(
+        `/matches/tournaments/${tournamentId}/fixtures/${fixture.id}/stream`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ stream_url: url.trim() || null }),
+        }
+      )
+      await onSaved()
+    } catch (err) {
+      setError(err.message || 'Could not save stream URL.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!canManage) {
+    return fixture.stream_url
+      ? <a href={fixture.stream_url} target="_blank" rel="noreferrer">Watch Live</a>
+      : <span className="muted">Not available</span>
+  }
+
+  return (
+    <form onSubmit={saveStream} className="stream-url-form">
+      <input
+        type="url"
+        value={url}
+        onChange={(event) => setUrl(event.target.value)}
+        placeholder="https://stream-link"
+        aria-label={`Stream URL for fixture ${fixture.id}`}
+      />
+      <button className="button button-secondary" type="submit" disabled={saving}>
+        {saving ? 'Saving...' : 'Save'}
+      </button>
+      {error && <small role="alert">{error}</small>}
+      {fixture.stream_url && <a href={fixture.stream_url} target="_blank" rel="noreferrer">Preview</a>}
+    </form>
+  )
+}
+
 export default App
+
+
+
+
 
 
 
