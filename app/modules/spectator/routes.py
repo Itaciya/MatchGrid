@@ -1,8 +1,11 @@
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import String, func, or_
 from sqlalchemy.orm import Session, aliased
 
+from app.data_access.cache import get_cached_json, set_cached_json
 from app.data_access.database import get_db
 from app.modules.match.models.match import Match
 from app.modules.match.models.match_result import MatchResult
@@ -15,12 +18,8 @@ from app.modules.spectator.schemas.match_history import MatchHistoryResponse
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.tournament.schemas.tournament import TournamentResponse
 from app.modules.tournament_team.models.tournament_team import TournamentTeam
-from app.data_access.cache import get_cached_json, set_cached_json
 
-router = APIRouter(
-    prefix="/spectator",
-    tags=["Spectator"],
-)
+router = APIRouter(prefix="/spectator", tags=["Spectator"])
 
 
 def _get_published_tournament(
@@ -28,14 +27,16 @@ def _get_published_tournament(
     tournament_id: int,
 ) -> Tournament:
     """Return a tournament only when its fixtures are published."""
-
     tournament = (
         db.query(Tournament)
-        .filter(Tournament.id == tournament_id)
+        .filter(
+            Tournament.id == tournament_id,
+            Tournament.fixtures_published.is_(True),
+        )
         .first()
     )
 
-    if tournament is None or not tournament.fixtures_published:
+    if tournament is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Tournament not found",
@@ -58,8 +59,11 @@ def list_public_tournaments(
     ),
     db: Session = Depends(get_db),
 ):
-    """List public tournaments, using Redis to cache responses briefly."""
-    cache_key = f"spectator:tournaments:status:{tournament_status or 'all'}"
+    """List public tournaments with short-lived caching."""
+    cache_key = (
+        f"spectator:tournaments:v3:status:"
+        f"{tournament_status or 'all'}"
+    )
 
     cached_data = get_cached_json(cache_key)
     if cached_data is not None:
@@ -76,17 +80,14 @@ def list_public_tournaments(
     ).all()
 
     response_data = [
-        tournament.model_dump(mode="json")
-        if hasattr(tournament, "model_dump")
-        else TournamentResponse.model_validate(tournament).model_dump(mode="json")
+        TournamentResponse.model_validate(tournament).model_dump(
+            mode="json"
+        )
         for tournament in tournaments
     ]
 
     set_cached_json(cache_key, response_data, ttl_seconds=60)
-
     return response_data
-
-
 
 
 @router.get(
@@ -97,8 +98,7 @@ def get_public_tournament_details(
     tournament_id: int,
     db: Session = Depends(get_db),
 ):
-    """Return the details of a tournament."""
-
+    """Return public tournament details."""
     tournament = (
         db.query(Tournament)
         .filter(Tournament.id == tournament_id)
@@ -114,28 +114,56 @@ def get_public_tournament_details(
     return tournament
 
 
-
 @router.get(
     "/tournaments/{tournament_id}/fixtures",
     response_model=list[FixtureResponse],
 )
 def list_public_fixtures(
     tournament_id: int,
+    start_at: datetime | None = Query(default=None),
+    end_at: datetime | None = Query(default=None),
+    team_id: int | None = Query(default=None, ge=1),
+    match_status: str | None = Query(
+        default=None,
+        alias="status",
+        min_length=1,
+    ),
     db: Session = Depends(get_db),
 ):
-    """List fixtures only after the tournament publishes them."""
-
+    """List published fixtures with optional date, team and status filters."""
     _get_published_tournament(db, tournament_id)
 
-    return (
-        db.query(Match)
-        .filter(Match.tournament_id == tournament_id)
-        .order_by(
-            Match.scheduled_at.asc(),
-            Match.match_number.asc(),
+    if start_at and end_at and start_at > end_at:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="start_at must be before or equal to end_at",
         )
-        .all()
+
+    query = db.query(Match).filter(
+        Match.tournament_id == tournament_id
     )
+
+    if start_at is not None:
+        query = query.filter(Match.scheduled_at >= start_at)
+
+    if end_at is not None:
+        query = query.filter(Match.scheduled_at <= end_at)
+
+    if team_id is not None:
+        query = query.filter(
+            or_(
+                Match.team_a_id == team_id,
+                Match.team_b_id == team_id,
+            )
+        )
+
+    if match_status is not None:
+        query = query.filter(Match.status == match_status)
+
+    return query.order_by(
+        Match.scheduled_at.asc(),
+        Match.match_number.asc(),
+    ).all()
 
 
 @router.get(
@@ -146,8 +174,7 @@ def get_public_match_result(
     match_id: int,
     db: Session = Depends(get_db),
 ):
-    """Expose only results backed by a verified score."""
-
+    """Expose only verified results from published tournaments."""
     result = (
         db.query(MatchResult)
         .join(Match, Match.id == MatchResult.match_id)
@@ -182,7 +209,6 @@ def get_public_match_history(
     db: Session = Depends(get_db),
 ):
     """Return match history without exposing unverified results."""
-
     _get_published_tournament(db, tournament_id)
 
     matches = (
@@ -195,13 +221,11 @@ def get_public_match_history(
         .all()
     )
 
-    # No matches means there's no reason to query for results.
     if not matches:
         return []
 
     match_ids = [match.id for match in matches]
 
-    # Fetch all verified results in one query instead of one query per match.
     verified_rows = (
         db.query(MatchResult, Score)
         .join(Score, Score.match_id == MatchResult.match_id)
@@ -250,13 +274,13 @@ def get_public_match_history(
 
     return history
 
+
 @router.get("/teams/{team_id}")
 def get_public_team_information(
     team_id: int,
     db: Session = Depends(get_db),
 ):
-    """Return public team details, active roster and published tournaments."""
-
+    """Return public team details, roster and published tournaments."""
     if team_id <= 0:
         raise HTTPException(
             status_code=422,
@@ -341,8 +365,7 @@ def get_public_player_information(
     player_id: int,
     db: Session = Depends(get_db),
 ):
-    """Return public player profile and performance from verified scores."""
-
+    """Return public player profile and verified performance."""
     if player_id <= 0:
         raise HTTPException(
             status_code=422,
@@ -376,6 +399,12 @@ def get_public_player_information(
             .first()
         )
 
+    if team is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Public player not found",
+        )
+
     memberships = (
         db.query(TournamentTeam)
         .join(
@@ -383,16 +412,14 @@ def get_public_player_information(
             Tournament.id == TournamentTeam.tournament_id,
         )
         .filter(
-            TournamentTeam.team_id == player.team_id,
+            TournamentTeam.team_id == team.id,
             Tournament.fixtures_published.is_(True),
         )
         .order_by(Tournament.start_date.desc())
         .all()
-        if player.team_id is not None and team is not None
-        else []
     )
 
-    if team is None or not memberships:
+    if not memberships:
         raise HTTPException(
             status_code=404,
             detail="Public player not found",
@@ -410,10 +437,7 @@ def get_public_player_information(
     verified_matches = (
         db.query(Match, Score)
         .join(Score, Score.match_id == Match.id)
-        .join(
-            Tournament,
-            Tournament.id == Match.tournament_id,
-        )
+        .join(Tournament, Tournament.id == Match.tournament_id)
         .filter(
             Match.status == "completed",
             Tournament.fixtures_published.is_(True),
@@ -479,7 +503,6 @@ def search_public_information(
     db: Session = Depends(get_db),
 ):
     """Search public tournaments, teams, players and matches."""
-
     term = q.strip()
 
     if len(term) < 2:
@@ -604,10 +627,7 @@ def search_public_information(
 
         query = (
             db.query(Match)
-            .join(
-                Tournament,
-                Tournament.id == Match.tournament_id,
-            )
+            .join(Tournament, Tournament.id == Match.tournament_id)
             .outerjoin(team_a, Match.team_a_id == team_a.id)
             .outerjoin(team_b, Match.team_b_id == team_b.id)
             .filter(

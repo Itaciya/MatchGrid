@@ -19,13 +19,13 @@ class Match(Base):
 
     id: Mapped[int] = mapped_column(
         primary_key=True,
-        index=True
+        index=True,
     )
 
     tournament_id: Mapped[int] = mapped_column(
         ForeignKey("tournaments.id"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     match_number: Mapped[int] = mapped_column(
@@ -36,68 +36,74 @@ class Match(Base):
     round_id: Mapped[int | None] = mapped_column(
         ForeignKey("tournament_rounds.id"),
         nullable=True,
-        index=True
+        index=True,
     )
 
     team_a_id: Mapped[int | None] = mapped_column(
         ForeignKey("teams.id"),
         nullable=True,
-        index=True
+        index=True,
     )
 
     team_b_id: Mapped[int | None] = mapped_column(
         ForeignKey("teams.id"),
         nullable=True,
-        index=True
+        index=True,
     )
 
     venue_id: Mapped[int | None] = mapped_column(
         ForeignKey("venues.id"),
         nullable=True,
-        index=True
+        index=True,
     )
 
     scheduled_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        index=True
+        index=True,
     )
 
     started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
-        nullable=True
+        nullable=True,
     )
 
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
         default="scheduled",
-        index=True
+        index=True,
+    )
+
+    # Optional public live-stream URL
+    stream_url: Mapped[str | None] = mapped_column(
+        String(2048),
+        nullable=True,
     )
 
     winner_next_match_id: Mapped[int | None] = mapped_column(
         ForeignKey("matches.id"),
         nullable=True,
-        index=True
+        index=True,
     )
 
     loser_next_match_id: Mapped[int | None] = mapped_column(
         ForeignKey("matches.id"),
         nullable=True,
-        index=True
+        index=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        nullable=False
+        nullable=False,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
-        nullable=False
+        nullable=False,
     )
 
     __table_args__ = (
@@ -114,24 +120,24 @@ class Match(Base):
 
     tournament = relationship(
         "Tournament",
-        backref="matches"
+        backref="matches",
     )
 
     round = relationship(
         "TournamentRound",
-        back_populates="matches"
+        back_populates="matches",
     )
 
     team_a = relationship(
         "Team",
         foreign_keys=[team_a_id],
-        backref="home_matches"
+        backref="home_matches",
     )
 
     team_b = relationship(
         "Team",
         foreign_keys=[team_b_id],
-        backref="away_matches"
+        backref="away_matches",
     )
 
     venue = relationship(
@@ -143,18 +149,18 @@ class Match(Base):
         "Match",
         foreign_keys=[winner_next_match_id],
         remote_side=[id],
-        backref="winner_previous_matches"
+        backref="winner_previous_matches",
     )
 
     loser_next_match = relationship(
         "Match",
         foreign_keys=[loser_next_match_id],
         remote_side=[id],
-        backref="loser_previous_matches"
+        backref="loser_previous_matches",
     )
 
     score = relationship(
         "Score",
         back_populates="match",
-        uselist=False
+        uselist=False,
     )
