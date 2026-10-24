@@ -50,8 +50,8 @@ jobs:
         run: alembic upgrade head
 
       - name: Run backend tests
-        run: pytest -q
-
+        run: pytest -vv -x --durations=20
+        timeout-minutes: 30
   frontend:
     runs-on: ubuntu-latest
 
