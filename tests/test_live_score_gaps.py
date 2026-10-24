@@ -15,6 +15,20 @@ from app.modules.score.models.score import Score
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 from app.realtime.connection_manager import manager
+from app.realtime.redis_pubsub import pubsub_manager
+
+
+
+@pytest.fixture(autouse=True)
+def mock_realtime_redis_publish(monkeypatch):
+    async def fake_publish_event(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr(
+        pubsub_manager,
+        "publish_event",
+        fake_publish_event,
+    )
 
 client = TestClient(app)
 
@@ -291,6 +305,8 @@ def test_simultaneous_partial_updates_do_not_lose_either_change(db, monkeypatch)
 
 def test_simultaneous_submissions_for_different_matches_do_not_interfere(db, monkeypatch):
     monkeypatch.setattr(manager, "broadcast_to_match", AsyncMock())
+
+
     setups = []
     for _ in range(4):
         match_id = _make_match(db)
