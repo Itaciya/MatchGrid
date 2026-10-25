@@ -1,4 +1,4 @@
-name: Backend tests
+﻿name: Backend tests
 
 on:
   push:
@@ -48,4 +48,4 @@ jobs:
         run: alembic upgrade head
 
       - name: Run tests
-        run: pytest -q
+        run: pytest tests -q
