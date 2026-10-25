@@ -7,9 +7,10 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import settings
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
-
+from app.modules.audit.routes import router as audit_router
 from app.api.routes.health import router as health_router
 from app.core.exception_handlers import (
     app_exception_handler,
@@ -45,6 +46,7 @@ from app.modules.venue.routes import router as venue_router
 
 from app.realtime.redis_pubsub import pubsub_manager
 from app.realtime.routes import router as websocket_router
+from app.core.rate_limit_middleware import rate_limit_middleware
 
 
 configure_logging()
@@ -100,7 +102,7 @@ app = FastAPI(lifespan=lifespan)
 
 logger.info("MatchGrid API application initialized")
 
-
+app.middleware("http")(rate_limit_middleware)
 
 
 app.add_exception_handler(
@@ -130,7 +132,11 @@ app.add_exception_handler(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        origin.strip()
+        for origin in settings.CORS_ORIGINS.split(",")
+        if origin.strip()
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -191,6 +197,7 @@ app.include_router(dispute_router)
 app.include_router(official_assignment_router)
 app.include_router(notification_router)
 app.include_router(websocket_router)
+app.include_router(audit_router)
 
 @app.get("/")
 def root():

@@ -15,6 +15,7 @@ from app.modules.match.schemas.fixture import (
     FixtureCreate,
     FixtureResponse,
     FixtureUpdate,
+    MatchStreamUpdate,
 )
 from app.modules.match.schemas.match import MatchStatusResponse
 from app.modules.match.services.fixture_service import (
@@ -54,7 +55,7 @@ router = APIRouter(
 )
 
 
-# SCRUM-123: List fixtures with optional filters
+
 @router.get(
     "/tournaments/{tournament_id}/fixtures",
     response_model=list[FixtureResponse],
@@ -113,7 +114,7 @@ def list_fixtures_endpoint(
     ).all()
 
 
-# SCRUM-124: Get fixture details by ID
+
 @router.get(
     "/tournaments/{tournament_id}/fixtures/{match_id}",
     response_model=FixtureResponse,
@@ -141,7 +142,7 @@ def get_fixture_details_endpoint(
     return fixture
 
 
-# Generate fixtures
+
 @router.post(
     "/tournaments/{tournament_id}/fixtures/generate",
     response_model=list[FixtureResponse],
@@ -170,7 +171,7 @@ def generate_fixtures_endpoint(
     )
 
 
-# Regenerate fixtures
+
 @router.post(
     "/tournaments/{tournament_id}/fixtures/regenerate",
     response_model=list[FixtureResponse],
@@ -199,7 +200,6 @@ def regenerate_fixtures_endpoint(
     )
 
 
-# SCRUM-130: Publish fixtures after validation
 @router.post(
     "/tournaments/{tournament_id}/fixtures/publish",
     status_code=status.HTTP_200_OK,
@@ -217,7 +217,6 @@ def publish_fixtures_endpoint(
     )
 
 
-# Resolve fixture scheduling conflicts
 @router.post(
     "/tournaments/{tournament_id}/fixtures/resolve-conflicts",
     status_code=status.HTTP_200_OK,
@@ -235,8 +234,6 @@ def resolve_fixture_conflicts_endpoint(
     )
 
 
-# SCRUM-125: Update fixture schedule or venue
-# SCRUM-131: Organizer authorization is enforced by the dependency.
 @router.patch(
     "/tournaments/{tournament_id}/fixtures/{match_id}",
     response_model=FixtureResponse,
@@ -257,14 +254,44 @@ async def update_fixture_endpoint(
         match_id=match_id,
         data=data,
     )
-
-
     await broadcast_fixture_update(match)
 
     return match
 
 
-# Start a match
+@router.patch(
+    "/tournaments/{tournament_id}/fixtures/{match_id}/stream",
+    response_model=FixtureResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def update_fixture_stream_endpoint(
+    tournament_id: int,
+    match_id: int,
+    data: MatchStreamUpdate,
+    tournament: Tournament = Depends(verify_tournament_owner),
+    db: Session = Depends(get_db),
+):
+    """Set or remove the public stream URL for an owned tournament fixture."""
+    match = (
+        db.query(Match)
+        .filter(
+            Match.tournament_id == tournament.id,
+            Match.id == match_id,
+        )
+        .first()
+    )
+
+    if match is None:
+        raise NotFoundException(detail="Fixture not found")
+
+    match.stream_url = str(data.stream_url) if data.stream_url else None
+    db.commit()
+    db.refresh(match)
+
+    await broadcast_fixture_update(match)
+    return match
+
+
 @router.post(
     "/{match_id}/start",
     response_model=MatchStatusResponse,
@@ -281,7 +308,6 @@ async def start_match_endpoint(
     return match
 
 
-# Complete a match
 @router.post(
     "/{match_id}/complete",
     response_model=MatchStatusResponse,
@@ -298,7 +324,7 @@ async def complete_match_endpoint(
     return match
 
 
-# Pause a live match
+
 @router.post(
     "/{match_id}/pause",
     response_model=MatchStatusResponse,
@@ -317,7 +343,7 @@ async def pause_match_endpoint(
     return match
 
 
-# Resume a paused match
+
 @router.post(
     "/{match_id}/resume",
     response_model=MatchStatusResponse,
@@ -336,7 +362,7 @@ async def resume_match_endpoint(
     return match
 
 
-# Cancel a scheduled, live, or paused match
+
 @router.post(
     "/{match_id}/cancel",
     response_model=MatchStatusResponse,

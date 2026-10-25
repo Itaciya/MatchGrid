@@ -7,3 +7,7 @@ __pycache__/
 
 *.log
 *.bak
+*.dump
+migration_preview*.sql
+frontend/src/App.jsx.backup
+production-work-staged.patch

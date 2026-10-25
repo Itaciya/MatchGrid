@@ -1,0 +1,29 @@
+﻿services:
+  db:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-matchgrid}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  migrate:
+    networks:
+      - matchgrid
+    build:
+      context: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: "postgresql://${MATCHGRID_MIGRATOR_USER:-matchgrid_migrator}:${MATCHGRID_MIGRATOR_PASSWORD}@db:5432/${POSTGRES_DB:-matchgrid}"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: "postgresql://${MATCHGRID_APP_USER:-matchgrid_app}:${MATCHGRID_APP_PASSWORD}@db:5432/${POSTGRES_DB:-matchgrid}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

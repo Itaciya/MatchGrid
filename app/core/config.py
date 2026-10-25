@@ -14,6 +14,19 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str
 
+    # CORS
+    CORS_ORIGINS: str = "http://localhost:5173"
+
+    # API Rate Limiting
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_PUBLIC_REQUESTS: int = 100
+    RATE_LIMIT_AUTHENTICATED_REQUESTS: int = 200
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+    # Audit Logging
+    AUDIT_ADMIN_USER_IDS: str = ""
+
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -20,9 +20,6 @@ from app.modules.match.services.scheduling_conflict_service import (
 )
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.venue.models.venue import Venue
-from app.modules.venue.services.venue_service import (
-    check_venue_availability,
-)
 
 
 MATCH_TIME_INTERVAL = timedelta(hours=1)
@@ -198,14 +195,34 @@ def create_round_robin_fixtures(
             detail="Fixture schedule exceeds the tournament end date"
         )
 
-    # Check venue availability first to preserve the expected error.
-    if venue_id is not None:
+    # Check venue availability using a single query.
+    if venue_id is not None and fixture_data:
+        scheduled_times = [
+            fixture["scheduled_at"]
+            for fixture in fixture_data
+        ]
+
+        booked_matches = (
+            db.query(Match)
+            .filter(
+                Match.venue_id == venue_id,
+                Match.status == "scheduled",
+                Match.scheduled_at.in_(scheduled_times),
+            )
+            .all()
+        )
+
+        booked_times = {
+            (
+                match.scheduled_at.replace(tzinfo=timezone.utc)
+                if match.scheduled_at.tzinfo is None
+                else match.scheduled_at.astimezone(timezone.utc)
+            )
+            for match in booked_matches
+        }
+
         for fixture in fixture_data:
-            if not check_venue_availability(
-                db=db,
-                venue_id=venue_id,
-                scheduled_at=fixture["scheduled_at"],
-            ):
+            if fixture["scheduled_at"] in booked_times:
                 raise ConflictException(
                     detail=(
                         "Venue is already booked at "

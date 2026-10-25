@@ -1,4 +1,4 @@
-from logging.config import fileConfig
+﻿from logging.config import fileConfig
 import os
 
 from dotenv import load_dotenv
@@ -26,6 +26,7 @@ from app.modules.match.models.match_result_correction import MatchResultCorrecti
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.tournament_team.models.tournament_team import TournamentTeam
 from app.modules.venue.models.venue import Venue
+from app.modules.audit.models.audit_log import AuditLog
 
 # Load environment variables from .env
 load_dotenv()
@@ -34,7 +35,7 @@ load_dotenv()
 config = context.config
 
 # Get DATABASE_URL from .env
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("MIGRATION_DATABASE_URL") or os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL is not set in .env")

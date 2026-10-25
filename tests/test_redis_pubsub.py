@@ -194,3 +194,84 @@ async def test_notification_event_is_valid():
         assert await manager.publish_event(event) is True
     finally:
         await redis.aclose()
+
+@pytest.mark.anyio
+async def test_listener_broadcasts_match_event(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    import app.realtime.redis_pubsub as redis_pubsub
+
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    pubsub_manager = RedisPubSubManager(redis)
+    broadcast = AsyncMock()
+
+    monkeypatch.setattr(
+        redis_pubsub.connection_manager,
+        "broadcast_to_match",
+        broadcast,
+    )
+
+    listener = asyncio.create_task(
+        pubsub_manager.listen_for_events()
+    )
+
+    event = {
+        "type": "match_status:update",
+        "payload": {"match_id": 12, "status": "in_progress"},
+    }
+
+    try:
+        for _ in range(50):
+            subscribers = await redis.pubsub_numsub(
+                REALTIME_EVENTS_CHANNEL
+            )
+            if subscribers and subscribers[0][1] > 0:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            pytest.fail("Redis listener did not subscribe")
+
+        await pubsub_manager.publish_event(event)
+
+        for _ in range(50):
+            if broadcast.await_count:
+                break
+            await asyncio.sleep(0.01)
+
+        broadcast.assert_awaited_once_with(12, event)
+    finally:
+        listener.cancel()
+        try:
+            await asyncio.wait_for(listener, timeout=2)
+        except asyncio.CancelledError:
+            pass
+        await redis.aclose()
+
+
+@pytest.mark.anyio
+async def test_listener_sends_notification_to_recipient(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    import app.realtime.redis_pubsub as redis_pubsub
+
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    pubsub_manager = RedisPubSubManager(redis)
+    send_personal = AsyncMock()
+
+    monkeypatch.setattr(
+        redis_pubsub.connection_manager,
+        "send_personal_message",
+        send_personal,
+    )
+
+    listener = asyncio.create_task(
+        pubsub_manager.listen_for_events()
+    )
+
+    event = {
+        "type": "notification:new",
+        "payload": {
+            "recipient_id": 5,
+            "notification_id": 19,
+            "message": "Match starts soon",
+        }}
