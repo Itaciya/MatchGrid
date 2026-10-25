@@ -71,13 +71,6 @@ async def broadcast_live_score_update(db: Session, match_id: int, score: ScoreRe
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(verify_assigned_official)],
 )
-
-@router.post(
-    "/{match_id}/score",
-    response_model=ScoreResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(verify_assigned_official)],
-)
 async def submit_score_endpoint(
     match_id: int,
     data: ScoreCreate,
@@ -93,12 +86,6 @@ async def submit_score_endpoint(
     await broadcast_live_score_update(db, match_id, score)
 
     return score
-
-@router.patch(
-    "/{match_id}/score",
-    response_model=ScoreResponse,
-    dependencies=[Depends(verify_assigned_official)],
-)
 
 @router.patch(
     "/{match_id}/score",
