@@ -1,4 +1,4 @@
-﻿
+
 name: MatchGrid CI
 
 on:
@@ -50,8 +50,9 @@ jobs:
         run: alembic upgrade head
 
       - name: Run backend tests
-        run: pytest -vv -x --durations=20
+        run: pytest tests -vv -x --durations=20
         timeout-minutes: 30
+
   frontend:
     runs-on: ubuntu-latest
 

@@ -89,3 +89,9 @@ def fake_redis(monkeypatch):
         lambda: fake,
     )
     return fake
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
