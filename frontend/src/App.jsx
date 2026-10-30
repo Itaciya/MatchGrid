@@ -727,13 +727,13 @@ function App() {
 
           {page === 'overview' && <>
             <div className="page-heading"><div><p className="eyebrow">YOUR SPORTS HUB</p><h1>Manage the game.</h1><p className="muted">Create tournaments, follow standings, and keep your competition organized.</p></div>{currentUser?.role === 'organiser' && <button className="button button-primary" onClick={() => { resetForm(); setPage('create') }}>+ Create tournament</button>}</div>
-            <div className="hero-panel"><div><p className="eyebrow">MATCHGRID WORKSPACE</p><h2>Every competition.<br />One clear view.</h2><p>Keep tournament information and team performance in one place.</p><button className="button button-on-dark" onClick={() => setPage('tournaments')}>Browse tournaments <span>-&gt;</span></button></div><div className="hero-orbit" aria-hidden="true"><span>MG</span><i /><b /></div></div>
+            <div className="hero-panel"><div><p className="eyebrow">MATCHGRID WORKSPACE</p><h2>Every competition.<br />One clear view.</h2><p>Keep tournament information and team performance in one place.</p><button className="button button-on-dark" onClick={() => setPage('tournaments')}>← Back to list</button></div><div className="hero-orbit" aria-hidden="true"><span>MG</span><i /><b /></div></div>
             <div className="stats-grid">
               <article className="stat-card"><span className="stat-icon">#</span><p>Total tournaments</p><strong>{tournaments.length}</strong><small>Returned by the API</small></article>
               <article className="stat-card"><span className="stat-icon green">OK</span><p>Active tournaments</p><strong>{activeCount}</strong><small>Based on current status</small></article>
               <article className="stat-card"><span className="stat-icon violet">*</span><p>Competition formats</p><strong>{new Set(tournaments.map((item) => item.format).filter(Boolean)).size}</strong><small>Formats in your list</small></article>
             </div>
-            <div className="section-title"><div><h2>Recent tournaments</h2><p className="muted">Latest items returned by the tournament API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>View all</button></div>
+            <div className="section-title"><div><h2>Recent tournaments</h2><p className="muted">Latest items returned by the tournament API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>← Back to list</button></div>
             {listError && <ErrorNotice>{listError}</ErrorNotice>}
             {listLoading ? <Loading label="Loading tournaments..." /> : tournaments.length ? <TournamentTable items={tournaments.slice(0, 5)} onOpen={openTournament} onEdit={beginEdit} canManage={currentUser?.role === 'organiser'} /> : <EmptyState title="No tournaments to show" text="Create a tournament or check back when the API has data." action={() => { resetForm(); setPage('create') }} />}
           </>}
@@ -802,7 +802,7 @@ function App() {
           </>}
 
           {page === 'details' && <>
-            <div className="page-heading"><div><p className="eyebrow">COMPETITION OVERVIEW</p><h1>Tournament details</h1><p className="muted">Tournament information and standings provided by the API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>ÃƒÂ¢Ã¢â‚¬Â Ã‚Â Back to list</button></div>
+            <div className="page-heading"><div><p className="eyebrow">COMPETITION OVERVIEW</p><h1>Tournament details</h1><p className="muted">Tournament information and standings provided by the API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>← Back to list</button></div>
             {detailsLoading && <Loading label="Loading tournament details..." />}
             <ErrorNotice>{detailsError}</ErrorNotice>
             {selectedTournament && <><div className="detail-card"><div className="detail-heading"><div><span className="eyebrow">TOURNAMENT #{selectedTournament.id}</span><h2>{selectedTournament.name}</h2><p>{selectedTournament.description || 'No description provided.'}</p></div><span className={statusClass(selectedTournament.status)}>{selectedTournament.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Format" value={selectedTournament.format} /><Meta label="Starts" value={dateLabel(selectedTournament.start_date)} /><Meta label="Ends" value={dateLabel(selectedTournament.end_date)} /><Meta label="Organizer ID" value={selectedTournament.organizer_id} /></div><div className="detail-actions">{currentUser?.role === 'organiser' && <button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button></div></div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixtures..." /> : <><ErrorNotice>{fixturesError}</ErrorNotice><div className="fixture-filters filter-row">
@@ -853,9 +853,9 @@ function App() {
     </table>
   </div>
   <div className="pagination-row">
-    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.max(1, value - 1))} disabled={fixturePage <= 1}>â† Previous</button>
+    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.max(1, value - 1))} disabled={fixturePage <= 1}>← Previous</button>
     <span className="helper-text">Page {fixturePage} of {fixturePageCount}</span>
-    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.min(fixturePageCount, value + 1))} disabled={fixturePage >= fixturePageCount}>Next â†’</button>
+    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.min(fixturePageCount, value + 1))} disabled={fixturePage >= fixturePageCount}>Next →</button>
   </div>
 </> : !fixturesError ? <EmptyState title="No matching fixtures" text="Try changing or clearing the fixture filters." /> : null}</>}<div className="section-title"><div><h2>Standings</h2><p className="muted">Calculated rankings returned by the standings endpoint.</p></div></div>{standings.length ? <div className="table-wrap"><table><thead><tr><th>Rank</th><th>Team</th><th>Played</th><th>W</th><th>D</th><th>L</th><th>Score diff.</th><th>Points</th></tr></thead><tbody>{standings.map((row) => <tr key={row.team_id}><td><span className="rank">#{row.rank}</span></td><td><strong>{row.team_name}</strong></td><td>{row.played}</td><td>{row.wins}</td><td>{row.draws}</td><td>{row.losses}</td><td>{row.score_difference}</td><td><strong>{row.points}</strong></td></tr>)}</tbody></table></div> : <EmptyState title="No standings available" text="The API returned no standings for this tournament yet." />}</>}
             {!detailsLoading && !selectedTournament && !detailsError && <IdLookup onSubmit={openTournament} />}
@@ -972,7 +972,7 @@ function App() {
             />
           </>}
 
-          <footer className="footer"><span>Ãƒâ€š(c) MatchGrid 2026</span><span>Sports management, made clearer.</span><span className="footer-api">{API_BASE_URL || 'API URL missing'}</span></footer>
+          <footer className="footer"><span>© MatchGrid 2026</span><span>Sports management, made clearer.</span><span className="footer-api">{API_BASE_URL || 'API URL missing'}</span></footer>
         </section>
       </div>
     </main>
