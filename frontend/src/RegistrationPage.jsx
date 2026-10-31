@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { apiRequest } from './services/api'
 
 const STATUS_OPTIONS = ['pending', 'approved', 'rejected', 'cancelled']
@@ -34,7 +34,11 @@ export default function RegistrationPage({ initialTournamentId = null }) {
   }, [])
 
   useEffect(() => {
-    loadRegistrations()
+    const timer = window.setTimeout(() => {
+      loadRegistrations()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [loadRegistrations])
 
   async function checkTournament(event) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { API_BASE_URL, apiRequest } from './services/api'
 import ScorerPage from './ScorerPage.jsx'
 import NotificationsPage from './NotificationsPage.jsx'
@@ -213,6 +213,7 @@ const [page, setPage] = useState('home')
   const [editingId, setEditingId] = useState(null)
   const [tournamentImage, setTournamentImage] = useState(null)
   const [imagePreview, setImagePreview] = useState('')
+  const openTournamentRef = useRef(null)
   const [teamId, setTeamId] = useState('')
   const [teamMode, setTeamMode] = useState('choose')
   const [team, setTeam] = useState(null)
@@ -367,7 +368,7 @@ const [page, setPage] = useState('home')
   }
 }, [page, listStatus])
 
-  const openTournament = async (id) => {
+  const openTournament = useCallback(async (id) => {
     if (!Number.isInteger(Number(id)) || Number(id) <= 0) {
       setDetailsError('Enter a valid tournament ID.')
       return
@@ -403,18 +404,32 @@ const [page, setPage] = useState('home')
       setDetailsLoading(false)
       setFixturesLoading(false)
     }
-  }
+  }, [])
+
+  const selectedTournamentId = selectedTournament?.id
 
   useEffect(() => {
-    if (!tournamentImage) return
+    openTournamentRef.current = openTournament
+  }, [openTournament])
 
-    const previewUrl = URL.createObjectURL(tournamentImage)
-    setImagePreview(previewUrl)
+  useEffect(() => {
+    if (page !== 'details' || !selectedTournamentId) return undefined
 
+    const timer = window.setInterval(() => {
+      openTournamentRef.current?.(selectedTournamentId)
+    }, 10000)
+
+    return () => window.clearInterval(timer)
+  }, [page, selectedTournamentId])
+
+  useEffect(() => {
     return () => {
-      URL.revokeObjectURL(previewUrl)
+      if (imagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview)
+      }
     }
-  }, [tournamentImage])
+  }, [imagePreview])
+
   const resetForm = () => {
     setForm({ category: 'sports', participation_type: 'team', name: '', description: '', format: 'round_robin', start_date: '', end_date: '', registration_open_at: '', registration_close_at: '', number_of_teams: '4' })
     setEditingId(null)
@@ -835,19 +850,7 @@ const [page, setPage] = useState('home')
         {page !== 'home' && <aside className="sidebar">
           <p className="nav-label">WORKSPACE</p>
           {visibleNavItems.map(([id, label]) => (
-            <button key={id} className={`nav-item ${page === id ? 'active' : ''}`} onClick={() => { setPage(id);
-
-  // Keep the open tournament's fixture list synchronized.
-  useEffect(() => {
-    if (!selectedTournament?.id) return undefined;
-
-    const timer = window.setInterval(() => {
-      openTournament(selectedTournament.id);
-    }, 10000);
-
-    return () => window.clearInterval(timer);
-  }, [selectedTournament?.id]);
- if (id === 'create') resetForm() }}>
+            <button key={id} className={`nav-item ${page === id ? 'active' : ''}`} onClick={() => { setPage(id); if (id === 'create') resetForm() }}>
               <span className="nav-dot" />{label}
             </button>
           ))}
@@ -1201,6 +1204,8 @@ const [page, setPage] = useState('home')
                     return
                   }
                   setFormError('')
+                  const previewUrl = URL.createObjectURL(file)
+                  setImagePreview(previewUrl)
                   setTournamentImage(file)
                 }} />
                 <small>JPEG, PNG, or WebP. Maximum size 5 MB.</small>
@@ -1406,6 +1411,7 @@ function IdLookup({ onSubmit }) {
 
 function TeamCreationForm({ onCreated }) {
   const [name, setName] = useState('')
+  const [captainId, setCaptainId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
