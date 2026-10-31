@@ -1,7 +1,15 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    LargeBinary,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,6 +25,22 @@ class Tournament(Base):
         String(150),
         nullable=False,
         unique=True,
+        index=True,
+    )
+
+    category: Mapped[str] = mapped_column(
+    String(20),
+    nullable=False,
+    default="sports",
+    server_default="sports",
+    index=True,
+    )
+
+    participation_type: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="team",
+        server_default="team",
         index=True,
     )
 
@@ -41,6 +65,16 @@ class Tournament(Base):
     )
 
     end_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    registration_open_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    registration_close_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
     )
@@ -77,6 +111,23 @@ class Tournament(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+    # Tournament picture
+    image_data: Mapped[bytes | None] = mapped_column(
+        LargeBinary,
+        nullable=True,
+    )
+
+    image_content_type: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    @property
+    def image_url(self) -> str | None:
+        if self.image_content_type:
+            return f"/tournaments/{self.id}/image"
+        return None
 
     organizer = relationship(
         "User",

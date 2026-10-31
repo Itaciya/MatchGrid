@@ -33,7 +33,9 @@ def create_tournament(db, organizer_id, status):
         end_date=datetime(2099, 1, 10, tzinfo=timezone.utc),
         status=status,
         organizer_id=organizer_id,
-    )
+    
+        registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
+        registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc))
     db.add(tournament)
     db.commit()
     db.refresh(tournament)
@@ -85,3 +87,59 @@ def test_spectator_list_returns_empty_list_for_unmatched_status(db):
 
     assert response.status_code == 200
     assert response.json() == []
+
+def test_spectator_list_hides_archived_tournaments(db, monkeypatch):
+    monkeypatch.setattr(
+        "app.modules.spectator.routes.get_cached_json",
+        lambda key: None,
+    )
+    monkeypatch.setattr(
+        "app.modules.spectator.routes.set_cached_json",
+        lambda *args, **kwargs: None,
+    )
+    organizer = create_organizer(db)
+
+    upcoming = create_tournament(db, organizer.id, "upcoming")
+    archived = create_tournament(db, organizer.id, "archived")
+
+    response = client.get("/spectator/tournaments")
+
+    assert response.status_code == 200
+
+    returned_ids = {item["id"] for item in response.json()}
+    assert upcoming.id in returned_ids
+    assert archived.id not in returned_ids
+
+
+def test_spectator_cannot_filter_archived_tournaments(db, monkeypatch):
+    monkeypatch.setattr(
+        "app.modules.spectator.routes.get_cached_json",
+        lambda key: None,
+    )
+    monkeypatch.setattr(
+        "app.modules.spectator.routes.set_cached_json",
+        lambda *args, **kwargs: None,
+    )
+    organizer = create_organizer(db)
+    archived = create_tournament(db, organizer.id, "archived")
+
+    response = client.get(
+        "/spectator/tournaments",
+        params={"status": "archived"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+    assert all(
+        item["id"] != archived.id
+        for item in response.json()
+    )
+
+
+def test_spectator_cannot_view_archived_tournament_details(db):
+    organizer = create_organizer(db)
+    archived = create_tournament(db, organizer.id, "archived")
+
+    response = client.get(f"/spectator/tournaments/{archived.id}")
+
+    assert response.status_code == 404

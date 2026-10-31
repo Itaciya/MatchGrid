@@ -34,7 +34,9 @@ def create_registration_data(db, registration_type="player"):
         end_date=datetime(2027, 1, 31, tzinfo=timezone.utc),
         status="upcoming",
         organizer_id=user.id,
-    )
+    
+        registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
+        registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc))
     db.add(tournament)
     db.flush()
 

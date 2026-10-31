@@ -216,7 +216,9 @@ def _make_bracket_tournament(db, organizer_id):
         ),
         status="upcoming",
         organizer_id=organizer_id,
-    )
+    
+        registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
+        registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc))
 
     db.add(tournament)
     db.flush()
@@ -350,7 +352,9 @@ def test_create_single_elimination_bracket_rejects_wrong_format(db):
         ),
         status="upcoming",
         organizer_id=user.id,
-    )
+    
+        registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
+        registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc))
 
     db.add(tournament)
     db.flush()
@@ -419,7 +423,9 @@ def test_create_double_elimination_bracket_creates_all_matches(db):
         ),
         status="upcoming",
         organizer_id=user.id,
-    )
+    
+        registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
+        registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc))
 
     db.add(tournament)
     db.flush()

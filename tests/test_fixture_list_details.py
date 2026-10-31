@@ -36,7 +36,9 @@ def create_tournament(db, organizer_id):
         end_date=datetime(2099, 1, 10, 23, 59, tzinfo=timezone.utc),
         status="upcoming",
         organizer_id=organizer_id,
-    )
+    
+        registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
+        registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc))
     db.add(tournament)
     db.commit()
     db.refresh(tournament)

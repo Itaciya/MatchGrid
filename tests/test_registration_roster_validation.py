@@ -67,6 +67,8 @@ def _make_tournament(db, organizer):
         end_date=now + timedelta(days=20),
         status="upcoming",
         organizer_id=organizer.id,
+        registration_open_at=now - timedelta(days=1),
+        registration_close_at=now + timedelta(days=5),
     )
     db.add(tournament)
     db.flush()

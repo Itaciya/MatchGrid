@@ -177,7 +177,7 @@ def get_my_assigned_matches(
         .all()
     )
 
-    return [
+    results = [
         {
             "id": match.id,
             "tournament_id": match.tournament_id,
@@ -191,3 +191,105 @@ def get_my_assigned_matches(
         }
         for assignment, match in assignments
     ]
+
+    if official.role == "scorer":
+        existing_ids = {item["id"] for item in results}
+        for item in get_my_tournament_scorer_matches(db, official):
+            if item["id"] not in existing_ids:
+                results.append(item)
+
+    return sorted(results, key=lambda item: (item["scheduled_at"], item["match_number"]))
+
+
+from app.modules.official_assignment.models.tournament_scorer_assignment import (
+    TournamentScorerAssignment,
+)
+
+
+def assign_tournament_scorer(
+    db: Session,
+    tournament_id: int,
+    scorer_id: int,
+) -> TournamentScorerAssignment:
+    tournament = db.query(Tournament).filter(
+        Tournament.id == tournament_id
+    ).first()
+
+    if tournament is None:
+        raise NotFoundException(detail="Tournament not found")
+
+    scorer = db.query(User).filter(User.id == scorer_id).first()
+
+    if scorer is None:
+        raise NotFoundException(detail="Scorer not found")
+
+    if scorer.role != "scorer" or not scorer.is_active:
+        raise BadRequestException(
+            detail="Only active users with the scorer role can be assigned"
+        )
+
+    existing = db.query(TournamentScorerAssignment).filter(
+        TournamentScorerAssignment.tournament_id == tournament_id,
+        TournamentScorerAssignment.scorer_id == scorer_id,
+    ).first()
+
+    if existing is not None:
+        if existing.status == ASSIGNMENT_STATUS_ACTIVE:
+            raise ConflictException(detail="Scorer is already assigned")
+        existing.status = ASSIGNMENT_STATUS_ACTIVE
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    assignment = TournamentScorerAssignment(
+        tournament_id=tournament_id,
+        scorer_id=scorer_id,
+        status=ASSIGNMENT_STATUS_ACTIVE,
+    )
+    db.add(assignment)
+    db.commit()
+    db.refresh(assignment)
+    return assignment
+
+
+def get_my_tournament_scorer_matches(
+    db: Session,
+    scorer: User,
+) -> list[dict]:
+    assignments = (
+        db.query(TournamentScorerAssignment)
+        .filter(
+            TournamentScorerAssignment.scorer_id == scorer.id,
+            TournamentScorerAssignment.status == ASSIGNMENT_STATUS_ACTIVE,
+        )
+        .all()
+    )
+
+    results = []
+    seen_match_ids = set()
+
+    for assignment in assignments:
+        matches = (
+            db.query(Match)
+            .filter(Match.tournament_id == assignment.tournament_id)
+            .order_by(Match.scheduled_at, Match.match_number)
+            .all()
+        )
+
+        for match in matches:
+            if match.id in seen_match_ids:
+                continue
+            seen_match_ids.add(match.id)
+            results.append({
+                "id": match.id,
+                "tournament_id": match.tournament_id,
+                "match_number": match.match_number,
+                "team_a_id": match.team_a_id,
+                "team_b_id": match.team_b_id,
+                "venue_id": match.venue_id,
+                "scheduled_at": match.scheduled_at,
+                "status": match.status,
+                "assignment_type": "scorer",
+            })
+
+    return results

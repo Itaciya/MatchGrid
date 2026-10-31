@@ -11,10 +11,14 @@ from app.modules.official_assignment.schemas.official_assignment import (
     AssignedMatchResponse,
     OfficialAssignmentCreate,
     OfficialAssignmentResponse,
+    TournamentScorerAssignmentCreate,
+    TournamentScorerAssignmentResponse,
+    ScorerOption,
 )
 from app.modules.official_assignment.services.official_assignment_service import (
     assign_official,
     get_my_assigned_matches,
+    assign_tournament_scorer,
 )
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
@@ -64,4 +68,38 @@ def get_my_assigned_matches_endpoint(
     return get_my_assigned_matches(
         db=db,
         official=current_user,
+    )
+
+@router.post(
+    "/tournaments/{tournament_id}/scorers",
+    response_model=TournamentScorerAssignmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def assign_tournament_scorer_endpoint(
+    data: TournamentScorerAssignmentCreate,
+    tournament: Tournament = Depends(verify_tournament_owner),
+    db: Session = Depends(get_db),
+):
+    """Assign a scorer to all matches in an organizer-owned tournament."""
+    return assign_tournament_scorer(
+        db=db,
+        tournament_id=tournament.id,
+        scorer_id=data.scorer_id,
+    )
+
+
+@router.get(
+    "/tournaments/{tournament_id}/available-scorers",
+    response_model=list[ScorerOption],
+)
+def list_available_scorers_endpoint(
+    tournament: Tournament = Depends(verify_tournament_owner),
+    db: Session = Depends(get_db),
+):
+    """List active scorer accounts for the tournament owner."""
+    return (
+        db.query(User)
+        .filter(User.role == "scorer", User.is_active.is_(True))
+        .order_by(User.email)
+        .all()
     )

@@ -11,7 +11,6 @@ class TeamCreate(BaseModel):
     """Schema for creating a team."""
 
     name: str = Field(min_length=1, max_length=100)
-    captain_id: int = Field(gt=0)
 
     @field_validator("name")
     @classmethod

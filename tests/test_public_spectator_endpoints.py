@@ -29,16 +29,18 @@ def make_user(db):
     return user
 
 
-def make_tournament(db, organizer_id, published=False):
+def make_tournament(db, organizer_id, published=False, tournament_status="upcoming"):
     tournament = Tournament(
         name=f"Public API Test {uuid.uuid4()}",
         format="round_robin",
         start_date=datetime(2099, 1, 1, tzinfo=timezone.utc),
         end_date=datetime(2099, 1, 10, tzinfo=timezone.utc),
-        status="upcoming",
+        status=tournament_status,
         fixtures_published=published,
         organizer_id=organizer_id,
-    )
+    
+        registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
+        registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc))
     db.add(tournament)
     db.commit()
     db.refresh(tournament)
@@ -446,3 +448,135 @@ def test_unverified_score_result_is_not_public(db):
     response = client.get(f"/spectator/matches/{match.id}/result")
 
     assert response.status_code == 404
+
+def test_archived_tournament_details_return_404(db):
+    organizer = make_user(db)
+    tournament = make_tournament(
+        db, organizer.id, published=True, tournament_status="archived"
+    )
+
+    response = client.get(f"/spectator/tournaments/{tournament.id}")
+
+    assert response.status_code == 404
+
+
+def test_archived_tournament_fixtures_return_404(db):
+    organizer = make_user(db)
+    tournament = make_tournament(
+        db, organizer.id, published=True, tournament_status="archived"
+    )
+
+    response = client.get(
+        f"/spectator/tournaments/{tournament.id}/fixtures"
+    )
+
+    assert response.status_code == 404
+
+
+def test_archived_tournament_history_returns_404(db):
+    organizer = make_user(db)
+    tournament = make_tournament(
+        db, organizer.id, published=True, tournament_status="archived"
+    )
+
+    response = client.get(
+        f"/spectator/tournaments/{tournament.id}/history"
+    )
+
+    assert response.status_code == 404
+
+
+def test_archived_tournament_match_result_is_not_public(db):
+    organizer = make_user(db)
+    tournament = make_tournament(
+        db, organizer.id, published=True, tournament_status="archived"
+    )
+    team_a = make_team(db, organizer.id)
+    team_b = make_team(db, organizer.id)
+    match = make_match(db, tournament.id, team_a.id, team_b.id)
+
+    score = Score(
+        match_id=match.id,
+        team_a_score=3,
+        team_b_score=1,
+        is_verified=True,
+        verification_status=ScoreVerificationStatus.VERIFIED.value,
+    )
+    result = MatchResult(
+        match_id=match.id,
+        outcome="team_a_win",
+        winner_team_id=team_a.id,
+        loser_team_id=team_b.id,
+        team_a_score=3,
+        team_b_score=1,
+        finalized_by_id=organizer.id,
+        finalized_at=datetime.now(timezone.utc),
+    )
+    db.add_all([score, result])
+    db.commit()
+
+    response = client.get(f"/spectator/matches/{match.id}/result")
+
+    assert response.status_code == 404
+
+
+def test_archived_tournament_is_excluded_from_public_search(db):
+    organizer = make_user(db)
+    tournament = make_tournament(
+        db, organizer.id, published=True, tournament_status="archived"
+    )
+
+    response = client.get(
+        "/spectator/search",
+        params={"q": tournament.name, "category": "tournaments"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["results"]["tournaments"]["total"] == 0
+
+
+def test_team_and_player_profiles_hide_archived_tournament_history(db):
+    organizer = make_user(db)
+
+    archived = make_tournament(
+        db, organizer.id, published=True, tournament_status="archived"
+    )
+    active = make_tournament(
+        db, organizer.id, published=True, tournament_status="upcoming"
+    )
+
+    team = make_team(db, organizer.id)
+
+    db.add_all([
+        TournamentTeam(tournament_id=archived.id, team_id=team.id),
+        TournamentTeam(tournament_id=active.id, team_id=team.id),
+    ])
+
+    player_user = make_user(db)
+    player = Player(
+        user_id=player_user.id,
+        team_id=team.id,
+        first_name="Archived",
+        last_name="Player",
+        status="active",
+    )
+    db.add(player)
+    db.commit()
+    db.refresh(player)
+
+    team_response = client.get(f"/spectator/teams/{team.id}")
+    player_response = client.get(f"/spectator/players/{player.id}")
+
+    assert team_response.status_code == 200
+    team_tournament_ids = {
+        item["id"] for item in team_response.json()["tournaments"]
+    }
+    assert active.id in team_tournament_ids
+    assert archived.id not in team_tournament_ids
+
+    assert player_response.status_code == 200
+    player_tournament_ids = {
+        item["id"] for item in player_response.json()["tournaments"]
+    }
+    assert active.id in player_tournament_ids
+    assert archived.id not in player_tournament_ids

@@ -16,6 +16,7 @@ from app.modules.tournament.models.tournament import Tournament
 def validate_tournament_for_registration(
     db: Session,
     tournament_id: int,
+    expected_participation_type: str | None = None,
 ) -> Tournament:
     """Validate whether a tournament is currently accepting registrations."""
 
@@ -32,7 +33,12 @@ def validate_tournament_for_registration(
 
     now = datetime.now(timezone.utc)
 
-    if tournament.start_date <= now:
+    if now < tournament.registration_open_at:
+        raise BadRequestException(
+            detail="Registration has not opened yet"
+        )
+
+    if now > tournament.registration_close_at:
         raise BadRequestException(
             detail="Registration deadline has passed"
         )
@@ -40,6 +46,14 @@ def validate_tournament_for_registration(
     if tournament.status != "upcoming":
         raise BadRequestException(
             detail="Registration is not available for this tournament"
+        )
+
+    if (
+        expected_participation_type is not None
+        and tournament.participation_type != expected_participation_type
+    ):
+        raise BadRequestException(
+            detail=f"This tournament only accepts {tournament.participation_type} registrations"
         )
 
     return tournament
@@ -102,6 +116,7 @@ def validate_player_registration(
     validate_tournament_for_registration(
         db,
         tournament_id,
+        expected_participation_type="individual",
     )
 
     player = validate_player_eligibility(

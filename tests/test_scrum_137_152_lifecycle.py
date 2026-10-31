@@ -1,5 +1,6 @@
 from app.modules.match.services.standings_service import get_tournament_standings
 from app.modules.official_assignment.models.official_assignment import OfficialAssignment
+from app.modules.official_assignment.models.tournament_scorer_assignment import TournamentScorerAssignment
 from test_match_result_finalization import (
     _auth_header,
     _make_match,
@@ -24,10 +25,9 @@ def test_match_goes_from_scheduled_to_corrected_result(db):
     official = _make_user(db, "scorer")
     stranger = _make_user(db, "scorer")
     db.add(
-        OfficialAssignment(
-            match_id=match.id,
-            official_id=official.id,
-            assignment_type="referee",
+        TournamentScorerAssignment(
+            tournament_id=match.tournament_id,
+            scorer_id=official.id,
             status="active",
         )
     )

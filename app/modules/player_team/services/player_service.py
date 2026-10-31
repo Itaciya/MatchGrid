@@ -34,7 +34,7 @@ def create_player(
 
     player = Player(
         user_id=user_id,
-        team_id=data.team_id,
+        team_id=None,
         first_name=data.first_name,
         last_name=data.last_name,
     )

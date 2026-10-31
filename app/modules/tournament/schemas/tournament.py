@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-
+from typing import Literal
 
 class TournamentFormatConfig(BaseModel):
     """Base configuration for tournament format and ranking rules."""
@@ -113,6 +113,8 @@ class TournamentCreate(BaseModel):
     """Schema for creating a tournament."""
 
     name: str = Field(min_length=3, max_length=150)
+    category: Literal["sports", "esports"] = "sports"
+    participation_type: Literal["individual", "team"] = "team"
     description: str | None = None
     format: str = Field(min_length=1, max_length=50)
 
@@ -125,11 +127,17 @@ class TournamentCreate(BaseModel):
 
     start_date: datetime
     end_date: datetime
+    registration_open_at: datetime
+    registration_close_at: datetime
 
     @model_validator(mode="after")
     def check_dates(self):
         if self.end_date <= self.start_date:
             raise ValueError("end_date must be after start_date")
+        if self.registration_close_at <= self.registration_open_at:
+            raise ValueError("registration_close_at must be after registration_open_at")
+        if self.registration_close_at > self.start_date:
+            raise ValueError("Registration must close before the tournament starts")
         return self
 
 
@@ -137,6 +145,8 @@ class TournamentUpdate(BaseModel):
     """Schema for updating a tournament."""
 
     name: str | None = Field(default=None, min_length=3, max_length=150)
+    category: Literal["sports", "esports"] = "sports"
+    participation_type: Literal["individual", "team"] | None = None
     description: str | None = None
     format: str | None = Field(default=None, min_length=1, max_length=50)
 
@@ -149,6 +159,8 @@ class TournamentUpdate(BaseModel):
 
     start_date: datetime | None = None
     end_date: datetime | None = None
+    registration_open_at: datetime | None = None
+    registration_close_at: datetime | None = None
     status: str | None = Field(default=None, min_length=1, max_length=50)
 
     @model_validator(mode="after")
@@ -168,7 +180,10 @@ class TournamentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    image_url: str | None = None
     name: str
+    category: Literal["sports", "esports"]
+    participation_type: Literal["individual", "team"]
     description: str | None
     format: str
 
@@ -181,6 +196,8 @@ class TournamentResponse(BaseModel):
 
     start_date: datetime
     end_date: datetime
+    registration_open_at: datetime
+    registration_close_at: datetime
     status: str
     organizer_id: int
     created_at: datetime

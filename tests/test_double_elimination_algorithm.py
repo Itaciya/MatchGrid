@@ -198,6 +198,8 @@ def _make_tournament(db, organizer_id, fmt="double_elimination"):
         end_date=datetime(2026, 1, 10, tzinfo=timezone.utc),
         status="upcoming",
         organizer_id=organizer_id,
+        registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
+        registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc),
     )
     db.add(tournament)
     db.flush()

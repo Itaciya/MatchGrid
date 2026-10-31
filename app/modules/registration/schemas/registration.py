@@ -37,9 +37,6 @@ class RegistrationCreate(BaseModel):
                 )
 
         elif self.registration_type == RegistrationType.PLAYER:
-            if self.player_id is None:
-                raise ValueError("player_id is required for player registration")
-
             if self.team_id is not None:
                 raise ValueError(
                     "team_id must not be provided for player registration"

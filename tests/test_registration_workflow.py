@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -48,6 +48,8 @@ def _make_tournament(db, organizer, **overrides):
         end_date=datetime(2099, 6, 10, tzinfo=timezone.utc),
         status="upcoming",
         organizer_id=organizer.id,
+        registration_open_at=datetime.now(timezone.utc) - timedelta(days=1),
+        registration_close_at=datetime(2099, 5, 31, 23, 59, tzinfo=timezone.utc),
     )
     defaults.update(overrides)
     tournament = Tournament(**defaults)
@@ -219,6 +221,7 @@ def test_registration_is_closed_once_the_tournament_has_started(db):
     started = _make_tournament(
         db, organiser, start_date=datetime(2020, 1, 1, tzinfo=timezone.utc),
         end_date=datetime(2099, 1, 1, tzinfo=timezone.utc),
+        registration_close_at=datetime(2019, 12, 31, 23, 59, tzinfo=timezone.utc),
     )
 
     response = client.post(

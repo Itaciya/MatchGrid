@@ -36,6 +36,8 @@ def _create_tournament(organiser):
             "format": "knockout",
             "start_date": start.isoformat(),
             "end_date": (start + timedelta(days=5)).isoformat(),
+            "registration_open_at": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(),
+            "registration_close_at": (start - timedelta(days=1)).isoformat(),
         },
         headers=_bearer(organiser),
     )
@@ -46,8 +48,8 @@ def _create_tournament(organiser):
 def _create_team(organiser, captain):
     response = client.post(
         "/player-team/team",
-        json={"name": f"Captain Flow Team {uuid4()}", "captain_id": captain.id},
-        headers=_bearer(organiser),
+        json={"name": f"Captain Flow Team {uuid4()}"},
+        headers=_bearer(captain),
     )
     assert response.status_code == 201, response.text
     return response.json()

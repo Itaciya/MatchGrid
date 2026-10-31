@@ -10,7 +10,7 @@ from app.modules.user.models import User
 
 client = TestClient(app)
 
-NON_ORGANISER_ROLES = ["player", "scorer", "spectator", "official", "captain"]
+NON_PLAYER_ROLES = ["organiser", "scorer", "spectator", "official", "captain"]
 NON_CAPTAIN_ROLES = ["organiser", "player", "scorer", "spectator", "official"]
 
 INVALID_FIELDS = [
@@ -57,7 +57,7 @@ def _make_team(db, captain):
 
 
 def _payload(captain, **overrides):
-    payload = {"name": f"Team Management {uuid4()}", "captain_id": captain.id}
+    payload = {"name": f"Team Management {uuid4()}"}
     payload.update(overrides)
     return payload
 
@@ -74,12 +74,11 @@ def _team_count(db):
 # SCRUM-243: creation stores the right values
 
 def test_created_team_is_stored_with_the_right_values(db):
-    organiser = _make_user(db, "organiser")
     captain = _make_user(db, "player")
     before = _team_count(db)
     payload = _payload(captain)
 
-    response = _post(organiser, payload)
+    response = _post(captain, payload)
 
     assert response.status_code == 201
     body = response.json()
@@ -92,11 +91,10 @@ def test_created_team_is_stored_with_the_right_values(db):
 
 
 def test_team_name_is_trimmed_before_saving(db):
-    organiser = _make_user(db, "organiser")
     captain = _make_user(db, "player")
     name = f"Padded Team {uuid4()}"
 
-    response = _post(organiser, _payload(captain, name=f"   {name}   "))
+    response = _post(captain, _payload(captain, name=f"   {name}   "))
 
     assert response.status_code == 201
     assert response.json()["name"] == name
@@ -104,12 +102,11 @@ def test_team_name_is_trimmed_before_saving(db):
 
 
 def test_team_name_of_exactly_100_characters_is_accepted(db):
-    organiser = _make_user(db, "organiser")
     captain = _make_user(db, "player")
     name = ("x" * 68) + uuid4().hex
     assert len(name) == 100
 
-    response = _post(organiser, _payload(captain, name=name))
+    response = _post(captain, _payload(captain, name=name))
 
     assert response.status_code == 201
     assert response.json()["name"] == name
@@ -117,37 +114,36 @@ def test_team_name_of_exactly_100_characters_is_accepted(db):
 
 # SCRUM-243: invalid data is rejected and nothing is saved
 
-@pytest.mark.parametrize("overrides", INVALID_FIELDS)
+@pytest.mark.parametrize("overrides", [item for item in INVALID_FIELDS if "captain_id" not in item])
 def test_invalid_team_fields_are_rejected_and_nothing_is_saved(db, overrides):
-    organiser = _make_user(db, "organiser")
     captain = _make_user(db, "player")
     before = _team_count(db)
 
-    response = _post(organiser, _payload(captain, **overrides))
+    response = _post(captain, _payload(captain, **overrides))
 
     assert response.status_code == 422
     assert _team_count(db) == before
 
 
-@pytest.mark.parametrize("missing", ["name", "captain_id"])
+@pytest.mark.parametrize("missing", ["name"])
 def test_missing_required_team_field_is_rejected(db, missing):
-    organiser = _make_user(db, "organiser")
     captain = _make_user(db, "player")
     payload = _payload(captain)
     del payload[missing]
     before = _team_count(db)
 
-    response = _post(organiser, payload)
+    response = _post(captain, payload)
 
     assert response.status_code == 422
     assert _team_count(db) == before
 
 
 def test_empty_team_body_is_rejected(db):
-    organiser = _make_user(db, "organiser")
+    captain = _make_user(db, "player")
+    player = _make_user(db, "player")
     before = _team_count(db)
 
-    response = _post(organiser, {})
+    response = _post(captain, {})
 
     assert response.status_code == 422
     assert _team_count(db) == before
@@ -156,12 +152,11 @@ def test_empty_team_body_is_rejected(db):
 # SCRUM-243: duplicates
 
 def test_duplicate_name_with_extra_spaces_does_not_create_a_second_team(db):
-    organiser = _make_user(db, "organiser")
     captain = _make_user(db, "player")
     name = f"Duplicate Team {uuid4()}"
 
-    first = _post(organiser, _payload(captain, name=name))
-    second = _post(organiser, _payload(captain, name=f"  {name}  "))
+    first = _post(captain, _payload(captain, name=name))
+    second = _post(captain, _payload(captain, name=f"  {name}  "))
 
     assert first.status_code == 201
     assert second.status_code in (403, 409)
@@ -170,8 +165,8 @@ def test_duplicate_name_with_extra_spaces_does_not_create_a_second_team(db):
 
 # SCRUM-243: authorization on creation
 
-@pytest.mark.parametrize("role", NON_ORGANISER_ROLES)
-def test_non_organiser_cannot_create_a_team_and_nothing_is_saved(db, role):
+@pytest.mark.parametrize("role", NON_PLAYER_ROLES)
+def test_non_player_cannot_create_a_team_and_nothing_is_saved(db, role):
     user = _make_user(db, role)
     captain = _make_user(db, "player")
     before = _team_count(db)
@@ -192,12 +187,11 @@ def test_creating_a_team_without_a_token_saves_nothing(db):
     assert _team_count(db) == before
 
 
-def test_inactive_organiser_cannot_create_a_team(db):
-    organiser = _make_user(db, "organiser", is_active=False)
-    captain = _make_user(db, "player")
+def test_inactive_player_cannot_create_a_team(db):
+    captain = _make_user(db, "player", is_active=False)
     before = _team_count(db)
 
-    response = _post(organiser, _payload(captain))
+    response = _post(captain, _payload(captain))
 
     assert response.status_code == 401
     assert _team_count(db) == before
@@ -206,12 +200,11 @@ def test_inactive_organiser_cannot_create_a_team(db):
 # SCRUM-243: retrieval
 
 def test_created_team_can_be_retrieved_with_the_same_data(db):
-    organiser = _make_user(db, "organiser")
     captain = _make_user(db, "player")
-    created = _post(organiser, _payload(captain)).json()
+    created = _post(captain, _payload(captain)).json()
 
     response = client.get(
-        f"/player-team/team/{created['id']}", headers=_bearer(organiser)
+        f"/player-team/team/{created['id']}", headers=_bearer(captain)
     )
 
     assert response.status_code == 200

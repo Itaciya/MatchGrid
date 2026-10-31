@@ -1,4 +1,4 @@
-from types import SimpleNamespace
+﻿from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -21,7 +21,7 @@ ROLE_GATED = [
     ("POST", "/player-team/profile", {"player"}),
     ("PATCH", f"/player-team/profile/{MISSING}", {"player"}),
     ("PATCH", f"/player-team/profile/{MISSING}/status", {"organiser"}),
-    ("POST", "/player-team/team", {"organiser"}),
+    ("POST", "/player-team/team", {"player"}),
     ("POST", "/registrations/", {"captain", "player"}),
     ("POST", "/registrations/player", {"player"}),
     ("GET", f"/registrations/pending/{MISSING}", {"organiser"}),
@@ -59,7 +59,8 @@ def _call(method, path, user=None, token=None):
     if token is None and user is not None:
         token = create_access_token(user.id, user.role)
     headers = _bearer(token) if token else {}
-    return client.request(method, path, json={}, headers=headers)
+    body = {"name": f"Role Authorization Team {uuid4()}"} if method == "POST" and path == "/player-team/team" else {}
+    return client.request(method, path, json=body, headers=headers)
 
 
 # SCRUM-241: every supported role against every role-gated endpoint
@@ -140,3 +141,4 @@ def test_any_authenticated_role_can_reach_open_endpoints(db, role):
 
 def test_open_endpoint_still_requires_a_token():
     assert _call("GET", f"/player-team/team/{MISSING}").status_code == 401
+

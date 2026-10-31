@@ -10,6 +10,7 @@ from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.modules.match.models.match import Match
 from app.modules.official_assignment.models.official_assignment import OfficialAssignment
+from app.modules.official_assignment.models.tournament_scorer_assignment import TournamentScorerAssignment
 from app.modules.player_team.models.team import Team, TeamStatus
 from app.modules.score.models.score import Score
 from app.modules.score.services.score_verification_service import (
@@ -63,7 +64,9 @@ def _make_match(db, status="live", with_teams=True):
         end_date=datetime(2099, 1, 10, 18, 0, tzinfo=timezone.utc),
         status="upcoming",
         organizer_id=organiser.id,
-    )
+    
+        registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
+        registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc))
     db.add(tournament)
     db.commit()
     db.refresh(tournament)
@@ -104,17 +107,24 @@ def _make_score(db, match, verification_status="pending", **overrides):
 
 
 def _assign(db, match, user):
-    db.add(
-        OfficialAssignment(
-            match_id=match.id,
-            official_id=user.id,
-            assignment_type="referee",
-            status="active",
+    if user.role == "scorer":
+        db.add(
+            TournamentScorerAssignment(
+                tournament_id=match.tournament_id,
+                scorer_id=user.id,
+                status="active",
+            )
         )
-    )
+    else:
+        db.add(
+            OfficialAssignment(
+                match_id=match.id,
+                official_id=user.id,
+                assignment_type="referee",
+                status="active",
+            )
+        )
     db.commit()
-
-
 def _review(match, user, status):
     return client.patch(
         f"/matches/{match.id}/score/verification",

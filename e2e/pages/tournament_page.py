@@ -30,7 +30,15 @@ class TournamentPage:
         self.driver.find_element(*self.DESCRIPTION).send_keys(description)
         set_value(self.driver, self.driver.find_element(*self.START), start)
         set_value(self.driver, self.driver.find_element(*self.END), end)
-        self.driver.find_element(*self.SUBMIT).click()
+
+        submit = self.driver.find_element(*self.SUBMIT)
+
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});",
+            submit,
+        )
+
+        self.driver.execute_script("arguments[0].click();", submit)
 
     def detail_heading(self, name):
         return (

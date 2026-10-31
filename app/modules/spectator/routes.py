@@ -32,6 +32,7 @@ def _get_published_tournament(
         .filter(
             Tournament.id == tournament_id,
             Tournament.fixtures_published.is_(True),
+            Tournament.status != "archived",
         )
         .first()
     )
@@ -69,7 +70,9 @@ def list_public_tournaments(
     if cached_data is not None:
         return cached_data
 
-    query = db.query(Tournament)
+    query = db.query(Tournament).filter(
+        Tournament.status != "archived"
+    )
 
     if tournament_status is not None:
         query = query.filter(Tournament.status == tournament_status)
@@ -101,7 +104,10 @@ def get_public_tournament_details(
     """Return public tournament details."""
     tournament = (
         db.query(Tournament)
-        .filter(Tournament.id == tournament_id)
+        .filter(
+            Tournament.id == tournament_id,
+            Tournament.status != "archived",
+        )
         .first()
     )
 
@@ -183,6 +189,7 @@ def get_public_match_result(
         .filter(
             Match.id == match_id,
             Tournament.fixtures_published.is_(True),
+            Tournament.status != "archived",
             Match.status == "completed",
             Score.verification_status
             == ScoreVerificationStatus.VERIFIED.value,
@@ -311,6 +318,7 @@ def get_public_team_information(
         .filter(
             TournamentTeam.team_id == team.id,
             Tournament.fixtures_published.is_(True),
+            Tournament.status != "archived",
         )
         .order_by(Tournament.start_date.desc())
         .all()
@@ -414,6 +422,7 @@ def get_public_player_information(
         .filter(
             TournamentTeam.team_id == team.id,
             Tournament.fixtures_published.is_(True),
+            Tournament.status != "archived",
         )
         .order_by(Tournament.start_date.desc())
         .all()
@@ -441,6 +450,7 @@ def get_public_player_information(
         .filter(
             Match.status == "completed",
             Tournament.fixtures_published.is_(True),
+            Tournament.status != "archived",
             Score.verification_status
             == ScoreVerificationStatus.VERIFIED.value,
             Score.is_verified.is_(True),
@@ -533,6 +543,7 @@ def search_public_information(
             db.query(Tournament)
             .filter(
                 Tournament.fixtures_published.is_(True),
+            Tournament.status != "archived",
                 Tournament.name.ilike(pattern),
             )
             .order_by(Tournament.start_date, Tournament.id)
@@ -567,6 +578,7 @@ def search_public_information(
             .filter(
                 Team.status == "active",
                 Tournament.fixtures_published.is_(True),
+            Tournament.status != "archived",
                 Team.name.ilike(pattern),
             )
             .distinct()
@@ -598,6 +610,7 @@ def search_public_information(
                 Player.status == "active",
                 Team.status == "active",
                 Tournament.fixtures_published.is_(True),
+            Tournament.status != "archived",
                 or_(
                     Player.first_name.ilike(pattern),
                     Player.last_name.ilike(pattern),
@@ -632,6 +645,7 @@ def search_public_information(
             .outerjoin(team_b, Match.team_b_id == team_b.id)
             .filter(
                 Tournament.fixtures_published.is_(True),
+            Tournament.status != "archived",
                 or_(
                     Tournament.name.ilike(pattern),
                     func.cast(Match.match_number, type_=String).ilike(

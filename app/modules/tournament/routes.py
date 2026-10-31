@@ -1,5 +1,4 @@
-
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import require_role
@@ -37,7 +36,11 @@ def _require_published_tournament(
         tournament_id,
     )
 
-    if tournament is None or not tournament.fixtures_published:
+    if (
+        tournament is None
+        or not tournament.fixtures_published
+        or tournament.status == "archived"
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Public tournament not found",
@@ -92,13 +95,45 @@ def get_tournament_details(
         tournament_id,
     )
 
-    if tournament is None:
+    if tournament is None or tournament.status == "archived":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Tournament not found",
         )
 
     return tournament
+
+
+@router.get("/{tournament_id}/image")
+def get_tournament_image(
+    tournament_id: int = Path(gt=0),
+    db: Session = Depends(get_db),
+):
+    """Return the uploaded image of a non-archived tournament."""
+
+    tournament = get_tournament_by_id(
+        db,
+        tournament_id,
+    )
+
+    if (
+        tournament is None
+        or tournament.status == "archived"
+        or tournament.image_data is None
+        or tournament.image_content_type is None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tournament image not found.",
+        )
+
+    return Response(
+        content=tournament.image_data,
+        media_type=tournament.image_content_type,
+        headers={
+            "Cache-Control": "public, max-age=3600",
+        },
+    )
 
 
 @router.get(

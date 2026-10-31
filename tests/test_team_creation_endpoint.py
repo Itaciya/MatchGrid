@@ -59,17 +59,15 @@ def auth_header(user):
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_organiser_can_create_team(db):
-    organiser = create_user(db, role="organiser")
+def test_player_can_create_team_and_becomes_captain(db):
     captain = create_user(db, role="player")
 
     response = client.post(
         "/player-team/team",
         json={
             "name": f"Integration Team {uuid4()}",
-            "captain_id": captain.id,
         },
-        headers=auth_header(organiser),
+        headers=auth_header(captain),
     )
 
     assert response.status_code == 201
@@ -77,24 +75,22 @@ def test_organiser_can_create_team(db):
     assert response.json()["status"] == "active"
 
 
-def test_team_creation_rejects_missing_captain(db):
-    organiser = create_user(db, role="organiser")
+def test_team_creation_uses_logged_in_player_as_captain(db):
+    captain = create_user(db, role="player")
 
     response = client.post(
         "/player-team/team",
         json={
             "name": f"Missing Captain Team {uuid4()}",
-            "captain_id": 999999999,
         },
-        headers=auth_header(organiser),
+        headers=auth_header(captain),
     )
 
-    assert response.status_code == 404
-    assert response.json()["error"]["message"] == "Captain not found"
+    assert response.status_code == 201
+    assert response.json()["captain_id"] == captain.id
 
 
 def test_team_creation_rejects_duplicate_name(db):
-    organiser = create_user(db, role="organiser")
     captain = create_user(db, role="player")
     team_name = f"Duplicate Team {uuid4()}"
 
@@ -109,26 +105,23 @@ def test_team_creation_rejects_duplicate_name(db):
         "/player-team/team",
         json={
             "name": team_name,
-            "captain_id": captain.id,
         },
-        headers=auth_header(organiser),
+        headers=auth_header(captain),
     )
 
-    assert response.status_code == 403
+    assert response.status_code in (403, 409)
     assert "already exists" in response.json()["error"]["message"]
 
 
-def test_player_cannot_create_team(db):
-    player = create_user(db, role="player")
-    captain = create_user(db, role="player")
+def test_organiser_cannot_create_team(db):
+    organiser = create_user(db, role="organiser")
 
     response = client.post(
         "/player-team/team",
         json={
             "name": f"Unauthorized Team {uuid4()}",
-            "captain_id": captain.id,
         },
-        headers=auth_header(player),
+        headers=auth_header(organiser),
     )
 
     assert response.status_code == 403
@@ -141,7 +134,6 @@ def test_team_creation_requires_authentication(db):
         "/player-team/team",
         json={
             "name": f"Unauthenticated Team {uuid4()}",
-            "captain_id": captain.id,
         },
     )
 

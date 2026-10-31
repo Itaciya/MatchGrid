@@ -123,13 +123,13 @@ def get_team_details(
 )
 def create_team_endpoint(
     data: TeamCreate,
-    current_user: User = Depends(require_role("organiser")),
+    current_user: User = Depends(require_role("player")),
     db: Session = Depends(get_db),
 ):
     return create_team(
         db=db,
         name=data.name.strip(),
-        captain_id=data.captain_id,
+        captain_id=current_user.id,
     )
 
 @router.patch(

@@ -1,4 +1,4 @@
-
+﻿
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
@@ -57,6 +57,13 @@ def _create_fixture_publication_notifications(
         for team in teams
         if team.captain_id is not None
     }
+
+    for team in teams:
+        recipient_ids.update(
+            player.user_id
+            for player in team.players
+            if player.user_id is not None
+        )
 
     fixture_details = []
 
@@ -226,3 +233,4 @@ def publish_fixtures(
         "fixtures_published": tournament.fixtures_published,
         "fixture_count": len(scheduled_fixtures),
     }
+
