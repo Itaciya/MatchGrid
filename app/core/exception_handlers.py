@@ -1,3 +1,4 @@
+import logging
 from fastapi import Request, status
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.exceptions import RequestValidationError
@@ -51,6 +52,7 @@ async def database_exception_handler(
     request: Request,
     exc: SQLAlchemyError,
 ):
+    logging.getLogger(__name__).exception("Database error during %s %s", request.method, request.url.path, exc_info=exc)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={

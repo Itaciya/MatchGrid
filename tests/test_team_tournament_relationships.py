@@ -32,7 +32,9 @@ def test_team_tournament_relationship(db):
         end_date=datetime(2026, 1, 10, tzinfo=timezone.utc),
         status="upcoming",
         organizer_id=user.id,
-    )
+    
+        registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
+        registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc))
 
     db.add_all([team, tournament])
     db.flush()
@@ -74,7 +76,9 @@ def test_duplicate_team_tournament_relationship_is_rejected(db):
         end_date=datetime(2026, 2, 10, tzinfo=timezone.utc),
         status="upcoming",
         organizer_id=user.id,
-    )
+    
+        registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
+        registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc))
 
     db.add_all([team, tournament])
     db.flush()

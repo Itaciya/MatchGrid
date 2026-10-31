@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class OfficialAssignmentCreate(BaseModel):
@@ -30,3 +30,21 @@ class AssignedMatchResponse(BaseModel):
     scheduled_at: datetime
     status: str
     assignment_type: str
+
+class TournamentScorerAssignmentCreate(BaseModel):
+    scorer_id: int
+
+
+class TournamentScorerAssignmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    tournament_id: int
+    scorer_id: int
+    status: str
+    created_at: datetime
+
+
+class ScorerOption(BaseModel):
+    id: int
+    email: EmailStr

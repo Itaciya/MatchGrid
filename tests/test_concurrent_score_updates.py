@@ -1,3 +1,6 @@
+from app.modules.official_assignment.models.tournament_scorer_assignment import (
+    TournamentScorerAssignment,
+)
 
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -50,6 +53,12 @@ def _make_live_match(db):
         end_date=datetime(
             2099, 1, 10, 18, 0, tzinfo=timezone.utc
         ),
+                registration_open_at=datetime(
+            2098, 12, 1, 0, 0, tzinfo=timezone.utc
+        ),
+        registration_close_at=datetime(
+            2098, 12, 31, 23, 59, tzinfo=timezone.utc
+        ),
         status="upcoming",
         organizer_id=organiser.id,
     )
@@ -75,10 +84,9 @@ def _make_live_match(db):
 def _assign_scorer(db, match):
     scorer = _make_user(db, "scorer")
 
-    assignment = OfficialAssignment(
-        match_id=match.id,
-        official_id=scorer.id,
-        assignment_type="referee",
+    assignment = TournamentScorerAssignment(
+        tournament_id=match.tournament_id,
+        scorer_id=scorer.id,
         status="active",
     )
     db.add(assignment)

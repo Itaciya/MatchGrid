@@ -43,6 +43,8 @@ def _payload(**overrides):
         "format": "knockout",
         "start_date": start.isoformat(),
         "end_date": (start + timedelta(days=5)).isoformat(),
+        "registration_open_at": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(),
+        "registration_close_at": (start - timedelta(days=1)).isoformat(),
     }
     payload.update(overrides)
     return payload

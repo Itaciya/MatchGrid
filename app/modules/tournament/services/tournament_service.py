@@ -41,6 +41,11 @@ def invalidate_public_tournament_cache() -> None:
             f"spectator:tournaments:status:{status}"
             for status in TOURNAMENT_STATUSES
         ),
+        "spectator:tournaments:v3:status:all",
+        *(
+            f"spectator:tournaments:v3:status:{status}"
+            for status in TOURNAMENT_STATUSES
+        ),
     )
 
 
@@ -157,11 +162,15 @@ def create_tournament(
 
     tournament = Tournament(
         name=data.name,
+        category=data.category,
+        participation_type=data.participation_type,
         description=data.description,
         format=data.format,
         format_config=format_config,
         start_date=data.start_date,
         end_date=data.end_date,
+        registration_open_at=data.registration_open_at,
+        registration_close_at=data.registration_close_at,
         status="upcoming",
         organizer_id=organizer_id,
     )
@@ -205,6 +214,25 @@ def update_tournament(
     if new_end_date <= new_start_date:
         raise BadRequestException(
             detail="end_date must be after start_date"
+        )
+
+    new_registration_open = updates.get(
+        "registration_open_at",
+        tournament.registration_open_at,
+    )
+    new_registration_close = updates.get(
+        "registration_close_at",
+        tournament.registration_close_at,
+    )
+
+    if new_registration_close <= new_registration_open:
+        raise BadRequestException(
+            detail="Registration closing must be after registration opening"
+        )
+
+    if new_registration_close > new_start_date:
+        raise BadRequestException(
+            detail="Registration must close before the tournament starts"
         )
 
     new_format = updates.get(
@@ -294,7 +322,9 @@ def list_tournaments(
     status: str | None = None,
 ) -> list[Tournament]:
     """Return tournaments, optionally filtered by status."""
-    query = db.query(Tournament)
+    query = db.query(Tournament).filter(
+        Tournament.status != "archived"
+    )
 
     if status is not None:
         query = query.filter(

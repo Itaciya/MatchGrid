@@ -26,6 +26,7 @@ from app.modules.registration.schemas.registration import (
 )
 from app.modules.registration.services.registration_validation import (
     validate_player_registration,
+    validate_tournament_for_registration,
 )
 from app.modules.tournament.models.tournament import Tournament
 
@@ -167,26 +168,11 @@ def create_team_registration(
         team_id=team.id,
     )
 
-    tournament = (
-        db.query(Tournament)
-        .filter(Tournament.id == data.tournament_id)
-        .first()
+    validate_tournament_for_registration(
+        db,
+        data.tournament_id,
+        expected_participation_type="team",
     )
-
-    if tournament is None:
-        raise NotFoundException(detail="Tournament not found")
-
-    now = datetime.now(timezone.utc)
-
-    if tournament.start_date <= now:
-        raise BadRequestException(
-            detail="Registration is not available for this tournament"
-        )
-
-    if tournament.status != "upcoming":
-        raise BadRequestException(
-            detail="Registration is not available for this tournament"
-        )
 
     existing_registration = (
         db.query(Registration)
@@ -238,11 +224,6 @@ def create_player_registration(
             detail="Only player registration is allowed"
         )
 
-    if data.player_id is None:
-        raise BadRequestException(
-            detail="player_id is required for player registration"
-        )
-
     player = (
         db.query(Player)
         .filter(Player.user_id == current_user_id)
@@ -252,11 +233,6 @@ def create_player_registration(
     if player is None:
         raise NotFoundException(
             detail="Player profile not found"
-        )
-
-    if data.player_id != player.id:
-        raise ForbiddenException(
-            detail="You can only register your own player profile"
         )
 
     validate_player_registration(

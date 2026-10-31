@@ -12,6 +12,7 @@ from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.modules.match.models.match import Match
 from app.modules.official_assignment.models.official_assignment import OfficialAssignment
+from app.modules.official_assignment.models.tournament_scorer_assignment import TournamentScorerAssignment
 from app.modules.score.models.score import Score
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
@@ -47,7 +48,9 @@ def _make_match(db, status="live"):
         end_date=datetime(2099, 1, 10, 18, 0, tzinfo=timezone.utc),
         status="upcoming",
         organizer_id=organiser.id,
-    )
+    
+        registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
+        registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc))
     db.add(tournament)
     db.commit()
     db.refresh(tournament)
@@ -65,12 +68,20 @@ def _make_match(db, status="live"):
 
 
 def _assign(db, match, user, assignment_type="referee", status="active"):
-    assignment = OfficialAssignment(
-        match_id=match.id,
-        official_id=user.id,
-        assignment_type=assignment_type,
-        status=status,
-    )
+    if user.role == "scorer":
+        assignment = TournamentScorerAssignment(
+            tournament_id=match.tournament_id,
+            scorer_id=user.id,
+            status=status,
+        )
+    else:
+        assignment = OfficialAssignment(
+            match_id=match.id,
+            official_id=user.id,
+            assignment_type=assignment_type,
+            status=status,
+        )
+
     db.add(assignment)
     db.commit()
     return assignment

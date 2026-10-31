@@ -33,6 +33,7 @@ from app.modules.match.services.fixture_update_service import (
 from app.modules.match.services.fixture_broadcast_service import (
     broadcast_fixture_update,
 )
+from app.modules.match.services.single_elimination_service import create_single_elimination_bracket
 from app.modules.match.services.fixture_publication_service import (
     publish_fixtures,
 )
@@ -48,6 +49,9 @@ from app.modules.match.services.match_status_service import (
     MATCH_STATUS_CANCELLED,
 )
 from app.modules.tournament.models.tournament import Tournament
+from app.modules.registration.models.registration import Registration
+from app.modules.registration.schemas.registration import RegistrationStatus, RegistrationType
+from datetime import time
 
 router = APIRouter(
     prefix="/matches",
@@ -171,6 +175,73 @@ def generate_fixtures_endpoint(
     )
 
 
+
+
+@router.post(
+    "/tournaments/{tournament_id}/fixtures/auto-generate",
+    response_model=list[FixtureResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+def auto_generate_fixtures_endpoint(
+    tournament_id: int,
+    tournament: Tournament = Depends(verify_tournament_owner),
+    db: Session = Depends(get_db),
+):
+    """Generate and publish round-robin fixtures from approved team registrations."""
+
+    if tournament.format == "single_elimination":
+        try:
+            return create_single_elimination_bracket(db, tournament)
+        except ValueError as exc:
+            raise BadRequestException(detail=str(exc))
+
+    if tournament.format != "round_robin":
+        raise BadRequestException(
+            detail="Automatic fixture generation supports Round Robin and Single Elimination"
+        )
+
+    existing = (
+        db.query(Match)
+        .filter(Match.tournament_id == tournament_id)
+        .first()
+    )
+    if existing:
+        raise BadRequestException(
+            detail="Fixtures already exist. Regenerate or remove them before creating new fixtures."
+        )
+
+    registrations = (
+        db.query(Registration)
+        .filter(
+            Registration.tournament_id == tournament_id,
+            Registration.status == RegistrationStatus.APPROVED.value,
+            Registration.registration_type == RegistrationType.TEAM.value,
+            Registration.team_id.isnot(None),
+        )
+        .all()
+    )
+
+    team_ids = sorted({item.team_id for item in registrations if item.team_id is not None})
+
+    if len(team_ids) < 2:
+        raise BadRequestException(
+            detail="At least two approved team registrations are required"
+        )
+
+    if tournament.start_date is None:
+        raise BadRequestException(detail="Tournament start date is required")
+
+    fixtures = create_round_robin_fixtures(
+        db=db,
+        tournament_id=tournament.id,
+        team_ids=team_ids,
+        fixture_date=tournament.start_date,
+        fixture_time=time(10, 0),
+        venue_id=None,
+    )
+
+    publish_fixtures(db=db, tournament=tournament)
+    return fixtures
 
 @router.post(
     "/tournaments/{tournament_id}/fixtures/regenerate",
@@ -379,3 +450,4 @@ async def cancel_match_endpoint(
     )
     await broadcast_match_status(match)
     return match
+

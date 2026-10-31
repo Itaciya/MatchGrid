@@ -1,4 +1,4 @@
-﻿from datetime import datetime, timezone
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
@@ -68,6 +68,8 @@ def _make_tournament(db, organizer_id):
         end_date=datetime(2026, 1, 10, tzinfo=timezone.utc),
         status="upcoming",
         organizer_id=organizer_id,
+        registration_open_at=datetime(2025, 12, 1, tzinfo=timezone.utc),
+        registration_close_at=datetime(2025, 12, 31, 23, 59, tzinfo=timezone.utc),
     )
     db.add(tournament)
     db.flush()

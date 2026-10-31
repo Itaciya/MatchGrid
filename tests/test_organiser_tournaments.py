@@ -1,3 +1,4 @@
+import io
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -36,6 +37,8 @@ def _make_tournament(db, organizer_id, **overrides):
         end_date=datetime(2026, 6, 10, tzinfo=timezone.utc),
         status="upcoming",
         organizer_id=organizer_id,
+        registration_open_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
+        registration_close_at=datetime(2026, 5, 31, 23, 59, tzinfo=timezone.utc),
     )
     defaults.update(overrides)
     tournament = Tournament(**defaults)
@@ -57,6 +60,8 @@ def _valid_payload():
         "format": "knockout",
         "start_date": "2026-07-01T00:00:00Z",
         "end_date": "2026-07-10T00:00:00Z",
+        "registration_open_at": "2026-05-01T00:00:00Z",
+        "registration_close_at": "2026-05-31T23:59:00Z",
     }
 
 
@@ -915,3 +920,106 @@ def test_organiser_can_update_double_elimination_format_config(db):
     assert tournament.format_config == {
         "number_of_teams": 8,
     }
+
+
+def test_organiser_can_upload_tournament_image(db):
+    organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(db, organiser.id)
+    image_data = b"\xff\xd8\xff" + b"test-jpeg-data"
+
+    response = client.post(
+        f"/organiser/tournaments/{tournament.id}/image",
+        files={"file": ("cover.jpg", image_data, "image/jpeg")},
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 200
+    db.refresh(tournament)
+    assert tournament.image_data == image_data
+    assert tournament.image_content_type == "image/jpeg"
+
+
+def test_upload_rejects_unsupported_image_type(db):
+    organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(db, organiser.id)
+
+    response = client.post(
+        f"/organiser/tournaments/{tournament.id}/image",
+        files={"file": ("cover.gif", b"GIF89a", "image/gif")},
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 400
+
+
+def test_upload_rejects_invalid_image_signature(db):
+    organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(db, organiser.id)
+
+    response = client.post(
+        f"/organiser/tournaments/{tournament.id}/image",
+        files={"file": ("cover.jpg", b"not-an-image", "image/jpeg")},
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 400
+
+
+def test_upload_rejects_images_over_5mb(db):
+    organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(db, organiser.id)
+    image_data = b"\xff\xd8\xff" + (b"x" * (5 * 1024 * 1024))
+
+    response = client.post(
+        f"/organiser/tournaments/{tournament.id}/image",
+        files={"file": ("cover.jpg", image_data, "image/jpeg")},
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 413
+
+
+def test_organiser_cannot_upload_image_to_others_tournament(db):
+    owner = _make_user(db, role="organiser")
+    other_organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(db, owner.id)
+
+    response = client.post(
+        f"/organiser/tournaments/{tournament.id}/image",
+        files={"file": ("cover.jpg", b"\xff\xd8\xffdata", "image/jpeg")},
+        headers=_auth_header(other_organiser),
+    )
+
+    assert response.status_code == 403
+
+
+def test_public_image_endpoint_returns_uploaded_image(db):
+    organiser = _make_user(db, role="organiser")
+    image_data = b"\xff\xd8\xff" + b"test-jpeg-data"
+    tournament = _make_tournament(
+        db,
+        organiser.id,
+        image_data=image_data,
+        image_content_type="image/jpeg",
+    )
+
+    response = client.get(f"/tournaments/{tournament.id}/image")
+
+    assert response.status_code == 200
+    assert response.content == image_data
+    assert response.headers["content-type"] == "image/jpeg"
+
+
+def test_archived_tournament_image_returns_404(db):
+    organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(
+        db,
+        organiser.id,
+        status="archived",
+        image_data=b"\xff\xd8\xff" + b"test-jpeg-data",
+        image_content_type="image/jpeg",
+    )
+
+    response = client.get(f"/tournaments/{tournament.id}/image")
+
+    assert response.status_code == 404

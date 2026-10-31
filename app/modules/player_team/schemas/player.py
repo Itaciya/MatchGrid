@@ -27,8 +27,6 @@ def validate_player_name(value: str) -> str:
 class PlayerCreate(BaseModel):
     """Schema for creating a player profile."""
 
-    team_id: int | None = Field(default=None, gt=0)
-
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
 
@@ -40,8 +38,6 @@ class PlayerCreate(BaseModel):
 
 class PlayerUpdate(BaseModel):
     """Schema for updating a player profile. All fields are optional."""
-
-    team_id: int | None = Field(default=None, gt=0)
 
     first_name: str | None = Field(
         default=None,

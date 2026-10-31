@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { API_BASE_URL, apiRequest } from './services/api'
 import ScorerPage from './ScorerPage.jsx'
 import NotificationsPage from './NotificationsPage.jsx'
@@ -31,6 +31,7 @@ const NAV_ITEMS = [
 
 
 const PUBLIC_PAGES = new Set([
+  'home',
   'login',
   'register',
   'tournaments',
@@ -52,8 +53,8 @@ const PAGE_ROLES = {
   create: ['organiser'],
   'registration-approvals': ['organiser'],
   resolve: ['organiser'],
-  registrations: ['captain'],
-  team: ['organiser', 'player'],
+  registrations: ['player', 'captain'],
+  team: ['player'],
   scoring: ['scorer', 'official'],
   verify: ['organiser'],
   dispute: ['player'],
@@ -91,8 +92,84 @@ function Loading({ label = 'Loading...' }) {
   return <div className="loading-state"><span className="spinner" />{label}</div>
 }
 
+
+function TournamentScorerAssignment({ tournamentId }) {
+  const [scorers, setScorers] = useState([])
+  const [scorerId, setScorerId] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  useEffect(() => {
+    let active = true
+    apiRequest(`/official-assignments/tournaments/${tournamentId}/available-scorers`)
+      .then((data) => {
+        if (active) setScorers(data || [])
+      })
+      .catch((err) => {
+        if (active) setError(err.message)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+return () => { active = false }
+  }, [tournamentId])
+
+  async function assignScorer(event) {
+    event.preventDefault()
+    if (!scorerId) return
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      await apiRequest(`/official-assignments/tournaments/${tournamentId}/scorers`, {
+        method: 'POST',
+        body: JSON.stringify({ scorer_id: Number(scorerId) }),
+      })
+      setSuccess('Scorer assigned successfully.')
+      setScorerId('')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="form-card">
+      <div className="section-title">
+        <div>
+          <h2>Assign Tournament Scorer</h2>
+          <p className="muted">The assigned scorer can access this tournament's matches.</p>
+        </div>
+      </div>
+      {loading ? <Loading label="Loading available scorers..." /> : (
+        scorers.length ? (
+          <form className="filter-row" onSubmit={assignScorer}>
+            <label>
+              Select scorer
+              <select value={scorerId} onChange={(event) => setScorerId(event.target.value)} required>
+                <option value="">Choose an active scorer</option>
+                {scorers.map((scorer) => (
+                  <option key={scorer.id} value={scorer.id}>{scorer.email}</option>
+                ))}
+              </select>
+            </label>
+            <button className="button button-primary" type="submit" disabled={!scorerId || saving}>
+              {saving ? 'Assigning...' : 'Assign Scorer'}
+            </button>
+          </form>
+        ) : <p className="muted">No active scorer accounts are available.</p>
+      )}
+      <ErrorNotice>{error}</ErrorNotice>
+      <SuccessNotice>{success}</SuccessNotice>
+    </section>
+  )
+}
+
 function App() {
-  const [page, setPage] = useState('overview')
+const [page, setPage] = useState('home')
   const [currentUser, setCurrentUser] = useState(null)
   const [authReady, setAuthReady] = useState(false)
   const [authLoading, setAuthLoading] = useState(false)
@@ -101,6 +178,8 @@ function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('matchgrid-theme') || 'system')
   const [tournaments, setTournaments] = useState([])
   const [listStatus, setListStatus] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [tournamentView, setTournamentView] = useState('grid')
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [listLoading, setListLoading] = useState(false)
@@ -132,7 +211,11 @@ function App() {
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState('')
   const [editingId, setEditingId] = useState(null)
+  const [tournamentImage, setTournamentImage] = useState(null)
+  const [imagePreview, setImagePreview] = useState('')
+  const openTournamentRef = useRef(null)
   const [teamId, setTeamId] = useState('')
+  const [teamMode, setTeamMode] = useState('choose')
   const [team, setTeam] = useState(null)
   const [teamLoading, setTeamLoading] = useState(false)
   const [teamError, setTeamError] = useState('')
@@ -146,11 +229,15 @@ function App() {
   const [rosterSuccess, setRosterSuccess] = useState('')
 
   const [form, setForm] = useState({
+    category: 'sports',
+    participation_type: 'team',
     name: '',
     description: '',
     format: 'round_robin',
     start_date: '',
     end_date: '',
+    registration_open_at: '',
+    registration_close_at: '',
     number_of_teams: '4',
   })
 
@@ -235,7 +322,7 @@ function App() {
     try {
       const query = listStatus ? `?status=${encodeURIComponent(listStatus)}` : ''
       const result = await apiRequest(`/tournaments/${query}`)
-      setTournaments(Array.isArray(result) ? result : [])
+      setTournaments(Array.isArray(result) ? result : (Array.isArray(result?.value) ? result.value : []))
     } catch (error) {
       setListError(error.message || 'Could not load tournaments.')
     } finally {
@@ -244,7 +331,7 @@ function App() {
   }, [listStatus])
 
   useEffect(() => {
-  if (page !== 'tournaments' && page !== 'overview') return
+  if (page !== 'home' && page !== 'tournaments' && page !== 'overview') return
 
   let cancelled = false
 
@@ -260,7 +347,7 @@ function App() {
       const result = await apiRequest(`/tournaments/${query}`)
 
       if (!cancelled) {
-        setTournaments(Array.isArray(result) ? result : [])
+        setTournaments(Array.isArray(result) ? result : (Array.isArray(result?.value) ? result.value : []))
         setCurrentPage(1)
       }
     } catch (error) {
@@ -281,7 +368,7 @@ function App() {
   }
 }, [page, listStatus])
 
-  const openTournament = async (id) => {
+  const openTournament = useCallback(async (id) => {
     if (!Number.isInteger(Number(id)) || Number(id) <= 0) {
       setDetailsError('Enter a valid tournament ID.')
       return
@@ -317,23 +404,55 @@ function App() {
       setDetailsLoading(false)
       setFixturesLoading(false)
     }
-  }
+  }, [])
+
+  const selectedTournamentId = selectedTournament?.id
+
+  useEffect(() => {
+    openTournamentRef.current = openTournament
+  }, [openTournament])
+
+  useEffect(() => {
+    if (page !== 'details' || !selectedTournamentId) return undefined
+
+    const timer = window.setInterval(() => {
+      openTournamentRef.current?.(selectedTournamentId)
+    }, 10000)
+
+    return () => window.clearInterval(timer)
+  }, [page, selectedTournamentId])
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview)
+      }
+    }
+  }, [imagePreview])
 
   const resetForm = () => {
-    setForm({ name: '', description: '', format: 'round_robin', start_date: '', end_date: '', number_of_teams: '4' })
+    setForm({ category: 'sports', participation_type: 'team', name: '', description: '', format: 'round_robin', start_date: '', end_date: '', registration_open_at: '', registration_close_at: '', number_of_teams: '4' })
     setEditingId(null)
+    setTournamentImage(null)
+    setImagePreview('')
     setFormError('')
     setFormSuccess('')
   }
 
   const beginEdit = (tournament) => {
+    setTournamentImage(null)
+    setImagePreview(tournament.image_url ? `${API_BASE_URL}${tournament.image_url}` : '')
     setEditingId(tournament.id)
     setForm({
+      category: tournament.category || 'sports',
+      participation_type: tournament.participation_type || 'team',
       name: tournament.name || '',
       description: tournament.description || '',
       format: tournament.format || 'round_robin',
       start_date: dateInputValue(tournament.start_date),
       end_date: dateInputValue(tournament.end_date),
+      registration_open_at: dateInputValue(tournament.registration_open_at),
+      registration_close_at: dateInputValue(tournament.registration_close_at),
       number_of_teams: String(tournament.format_config?.number_of_teams || 4),
     })
     setFormError('')
@@ -347,14 +466,23 @@ function App() {
     setFormSuccess('')
 
     if (form.name.trim().length < 3) return setFormError('Tournament name must be at least 3 characters.')
-    if (!form.format || !form.start_date || !form.end_date) return setFormError('Format, start date, and end date are required.')
+    if (!form.format || !form.start_date || !form.end_date || !form.registration_open_at || !form.registration_close_at) return setFormError('All tournament and registration dates are required.')
+
     const start = new Date(form.start_date)
     const end = new Date(form.end_date)
+    const registrationOpen = new Date(form.registration_open_at)
+    const registrationClose = new Date(form.registration_close_at)
+
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
       return setFormError('End date must be after the start date.')
     }
 
+    if (Number.isNaN(registrationOpen.getTime()) || Number.isNaN(registrationClose.getTime()) || registrationClose <= registrationOpen) return setFormError('Registration closing must be after registration opening.')
+    if (registrationClose > start) return setFormError('Registration must close before the tournament starts.')
+
     const body = {
+      category: form.category,
+      participation_type: form.participation_type,
       name: form.name.trim(),
       description: form.description.trim() || null,
       format: form.format,
@@ -363,26 +491,45 @@ function App() {
         : null,
       start_date: start.toISOString(),
       end_date: end.toISOString(),
+      registration_open_at: registrationOpen.toISOString(),
+      registration_close_at: registrationClose.toISOString(),
     }
 
     setFormLoading(true)
+
     try {
       const result = editingId
         ? await apiRequest(`/organiser/tournaments/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) })
         : await apiRequest('/organiser/tournaments', { method: 'POST', body: JSON.stringify(body) })
+
+      let savedTournament = result
+
+      if (tournamentImage) {
+        const imageFormData = new FormData()
+        imageFormData.append('file', tournamentImage)
+
+        await apiRequest(`/organiser/tournaments/${result.id}/image`, {
+          method: 'POST',
+          body: imageFormData,
+        })
+
+        savedTournament = await apiRequest(`/tournaments/${result.id}`)
+      }
+
       setFormSuccess(editingId ? 'Tournament updated successfully.' : 'Tournament created successfully.')
-      setSelectedTournament(result)
+      setSelectedTournament(savedTournament)
       await loadTournaments()
       setPage('details')
-      setForm({ name: '', description: '', format: 'round_robin', start_date: '', end_date: '', number_of_teams: '4' })
+      setForm({ category: 'sports', participation_type: 'team', name: '', description: '', format: 'round_robin', start_date: '', end_date: '', registration_open_at: '', registration_close_at: '', number_of_teams: '4' })
       setEditingId(null)
+      setTournamentImage(null)
+      setImagePreview('')
     } catch (error) {
       setFormError(`${error.message || 'Unable to save tournament.'} If this is an authorization error, sign in with an organiser account.`)
     } finally {
       setFormLoading(false)
     }
   }
-
   const loadTeam = async (event) => {
     event.preventDefault()
     setTeam(null)
@@ -595,9 +742,11 @@ function App() {
         !term ||
         String(item.name || '').toLowerCase().includes(term) ||
         String(item.id || '').includes(term)
-      return matchesSearch
+      const matchesCategory =
+        !categoryFilter || String(item.category || 'sports').toLowerCase() === categoryFilter
+      return matchesSearch && matchesCategory
     })
-  }, [tournaments, searchTerm])
+  }, [tournaments, searchTerm, categoryFilter])
 
   const totalPages = Math.max(1, Math.ceil(filteredTournaments.length / 10))
   const filteredFixtures = useMemo(() => {
@@ -647,7 +796,7 @@ function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <button className="brand-button" onClick={() => setPage('overview')} aria-label="MatchGrid home">
+        <button className="brand-button" onClick={() => setPage('home')} aria-label="MatchGrid home">
           <span className="brand-mark">M</span>
           <span className="brand-copy"><strong>MatchGrid</strong><small>Sports management platform</small></span>
         </button>
@@ -697,8 +846,8 @@ function App() {
         </div>
       </header>
 
-      <div className="layout">
-        <aside className="sidebar">
+      <div className={page === 'home' ? 'layout public-home-layout' : 'layout'}>
+        {page !== 'home' && <aside className="sidebar">
           <p className="nav-label">WORKSPACE</p>
           {visibleNavItems.map(([id, label]) => (
             <button key={id} className={`nav-item ${page === id ? 'active' : ''}`} onClick={() => { setPage(id); if (id === 'create') resetForm() }}>
@@ -707,9 +856,112 @@ function App() {
           ))}
           {page === 'details' && <button className="nav-item active" onClick={() => setPage('details')}><span className="nav-dot" />Tournament details</button>}
           <div className="sidebar-note"><span className="note-mark">i</span><p>Protected actions require a valid sign-in token. The backend remains responsible for authorization.</p></div>
-        </aside>
+        </aside>}
 
         <section className="content">
+          {page === 'home' && (
+            <div className="public-home">
+              <section className="home-hero">
+                                <div className="hero-slideshow" aria-hidden="true">
+                  <img className="hero-slide" src="/images/ss1.jpeg" alt="" />
+                  <img className="hero-slide" src="/images/ss2.jpeg" alt="" />
+                  <img className="hero-slide" src="/images/ss3.jpg" alt="" />
+                  <img className="hero-slide" src="/images/ss5.jpg" alt="" />
+                  <img className="hero-slide" src="/images/ss6.jpg" alt="" />
+                </div>
+
+                <p className="eyebrow">WELCOME TO MATCHGRID</p>
+                <h1>Where every competition finds its place.</h1>
+                <p>Create tournaments, discover games, and follow every competition in one place.</p>
+                <div className="home-hero-actions">
+                  <button className="button button-primary" onClick={() => setPage('tournaments')}>Explore tournaments</button>
+                  <button className="button button-secondary" onClick={() => setPage('register')}>Get started</button>
+                  <button className="button button-secondary" onClick={() => setPage('tournaments')}>Continue as Guest</button>
+                </div>
+              </section>
+
+              <section className="home-section" id="games">
+                <div className="section-title">
+                  <div><p className="eyebrow">EXPLORE</p><h2>Discover games</h2><p className="muted">Choose a game and find competitions around it.</p></div>
+                </div>
+                <div className="game-card-grid">
+  <article className="game-placeholder">
+    <img className="game-cover-image" src="/images/AUProBasketball_600x600_General.jpg" alt="Basketball" />
+  </article>
+  <article className="game-placeholder">
+    <img className="game-cover-image" src="/images/cricket-ball-and-bat-on-grass-photo.jpg" alt="Cricket" />
+  </article>
+  <article className="game-placeholder">
+    <img className="game-cover-image" src="/images/EGS_EASPORTSFC26StandardEdition_EACANADA_S2_1200x1600-effee280c00b9890a0c5249d4b0e5c97.jpeg" alt="Football" />
+  </article>
+  <article className="game-placeholder">
+    <img className="game-cover-image" src="/images/fortnite-hero-december.avif" alt="Fortnite" />
+  </article>
+  <article className="game-placeholder">
+    <img className="game-cover-image" src="/images/images.jpeg" alt="Game cover" />
+  </article>
+  <article className="game-placeholder">
+    <img className="game-cover-image" src="/images/MV5BODhlZDk5Y2EtMGFhOS00MTQ5LTgwNjgtYTI2ZmE1Y2ZjMDE2XkEyXkFqcGc@._V1_FMjpg_UX1000_.jpg" alt="Game cover" />
+  </article>
+  <article className="game-placeholder">
+    <img className="game-cover-image" src="/images/ping-pong-lautre-usine-cholet.png" alt="Table tennis" />
+  </article>
+  <article className="game-placeholder">
+    <img className="game-cover-image" src="/images/PlayerUnknown's_Battlegrounds_Mobile.webp" alt="PUBG Mobile" />
+  </article>
+</div>
+              </section>
+
+              <section className="home-section" id="featured-tournaments">
+                <div className="section-title">
+                  <div><p className="eyebrow">WHAT'S HAPPENING</p><h2>Featured tournaments</h2><p className="muted">Explore competitions hosted by the MatchGrid community.</p></div>
+                  <button className="button button-secondary" onClick={() => setPage('tournaments')}>View all</button>
+                </div>
+                <div className="featured-grid">
+                  {tournaments.slice(0, 3).map((item) => (
+                    <article
+                      className="featured-card featured-card-clickable"
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`View ${item.name} tournament details`}
+                      onClick={() => openTournament(item.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          openTournament(item.id)
+                        }
+                      }}
+                    >
+                      {item.image_url ? (
+  <img className="featured-banner-image" src={`${API_BASE_URL}${item.image_url}`} alt={`${item.name} tournament banner`} />
+) : (
+  <div className="featured-banner-placeholder">Tournament banner</div>
+)}
+                      <div className="featured-card-body">
+                        <span className={statusClass(item.status)}>{item.status || 'Upcoming'}</span>
+                        <h3>{item.name}</h3>
+                        <button className="button button-secondary" onClick={(event) => { event.stopPropagation(); openTournament(item.id) }}>View details</button>
+                      </div>
+                    </article>
+                  ))}
+                  {!tournaments.length && <p className="muted">No featured tournaments available yet.</p>}
+                </div>
+              </section>
+
+              <section className="home-about" id="about">
+                <p className="eyebrow">ABOUT MATCHGRID</p>
+                <h2>One platform. Every competition.</h2>
+                <p>MatchGrid helps organisers and participants manage tournaments, fixtures, results, and standings.</p>
+              </section>
+
+              <footer className="public-home-footer">
+                <strong>MatchGrid</strong>
+                <span>Sports and esports tournament management.</span>
+              </footer>
+            </div>
+          )}
+
           {(page === 'login' || page === 'register') && (
             <AuthPanel
               mode={page}
@@ -727,7 +979,7 @@ function App() {
 
           {page === 'overview' && <>
             <div className="page-heading"><div><p className="eyebrow">YOUR SPORTS HUB</p><h1>Manage the game.</h1><p className="muted">Create tournaments, follow standings, and keep your competition organized.</p></div>{currentUser?.role === 'organiser' && <button className="button button-primary" onClick={() => { resetForm(); setPage('create') }}>+ Create tournament</button>}</div>
-            <div className="hero-panel"><div><p className="eyebrow">MATCHGRID WORKSPACE</p><h2>Every competition.<br />One clear view.</h2><p>Keep tournament information and team performance in one place.</p><button className="button button-on-dark" onClick={() => setPage('tournaments')}>← Back to list</button></div><div className="hero-orbit" aria-hidden="true"><span>MG</span><i /><b /></div></div>
+            <div className="hero-panel"><div><p className="eyebrow">MATCHGRID WORKSPACE</p><h2>Every competition.<br />One clear view.</h2><p>Keep tournament information and team performance in one place.</p></div><div className="hero-orbit" aria-hidden="true"><span>MG</span><i /><b /></div></div>
             <div className="stats-grid">
               <article className="stat-card"><span className="stat-icon">#</span><p>Total tournaments</p><strong>{tournaments.length}</strong><small>Returned by the API</small></article>
               <article className="stat-card"><span className="stat-icon green">OK</span><p>Active tournaments</p><strong>{activeCount}</strong><small>Based on current status</small></article>
@@ -740,20 +992,20 @@ function App() {
 
           {page === 'tournaments' && <>
             <div className="page-heading"><div><p className="eyebrow">COMPETITIONS</p><h1>Tournaments</h1><p className="muted">Browse tournament details and current standings.</p></div>{currentUser?.role === 'organiser' && <button className="button button-primary" onClick={() => { resetForm(); setPage('create') }}>+ Create tournament</button>}</div>
+            <div className="tournament-search-simple">
+              <span aria-hidden="true">?</span>
+              <input
+                type="search"
+                value={searchTerm}
+                placeholder="Search tournaments by name or ID..."
+                onChange={(event) => {
+                  setSearchTerm(event.target.value)
+                  setCurrentPage(1)
+                }}
+                aria-label="Search tournaments by name or ID"
+              />
+            </div>
             <div className="filter-row">
-              <label>
-                Search tournaments
-                <input
-                  type="search"
-                  value={searchTerm}
-                  placeholder="Search by name or ID..."
-                  onChange={(event) => {
-                    setSearchTerm(event.target.value)
-                    setCurrentPage(1)
-                  }}
-                  aria-label="Search tournaments by name or ID"
-                />
-              </label>
               <label>
                 Filter by status
                 <select
@@ -771,6 +1023,20 @@ function App() {
                   <option value="archived">Archived</option>
                 </select>
               </label>
+              <label>
+                Filter by category
+                <select
+                  value={categoryFilter}
+                  onChange={(event) => {
+                    setCategoryFilter(event.target.value)
+                    setCurrentPage(1)
+                  }}
+                >
+                  <option value="">All categories</option>
+                  <option value="sports">Sports</option>
+                  <option value="esports">Esports</option>
+                </select>
+              </label>
               <button className="button button-secondary" onClick={loadTournaments}>Refresh</button>
             </div>
             <ErrorNotice>{listError}</ErrorNotice>
@@ -779,7 +1045,37 @@ function App() {
                 <p className="helper-text">
                   Showing {(currentPage - 1) * 10 + 1}-{Math.min(currentPage * 10, filteredTournaments.length)} of {filteredTournaments.length} tournaments
                 </p>
-                <TournamentTable items={paginatedTournaments} onOpen={openTournament} onEdit={beginEdit} canManage={currentUser?.role === 'organiser'} />
+                <div className="view-toggle" role="group" aria-label="Tournament view">
+                  <button className={`button ${tournamentView === 'grid' ? 'button-primary' : 'button-secondary'}`} onClick={() => setTournamentView('grid')}>Grid</button>
+                  <button className={`button ${tournamentView === 'list' ? 'button-primary' : 'button-secondary'}`} onClick={() => setTournamentView('list')}>List</button>
+                </div>
+                {tournamentView === 'list' ? (
+                  <TournamentTable items={paginatedTournaments} onOpen={openTournament} onEdit={beginEdit} canManage={currentUser?.role === 'organiser'} />
+                ) : (
+                  <div className="tournament-grid">
+                    {paginatedTournaments.map((item) => (
+                      <article className="tournament-grid-card" key={item.id}>
+                        {item.image_url ? (
+                          <img
+                            src={`${API_BASE_URL}${item.image_url}`}
+                            alt={item.name}
+                          />
+                        ) : (
+                          <div className="tournament-grid-image-placeholder">No image</div>
+                        )}
+                        <div className="tournament-grid-card-body">
+                          <span className={statusClass(item.status)}>{item.status || 'Upcoming'}</span>
+                          <h3>{item.name}</h3>
+                          <p>{item.category === 'esports' ? 'Esports' : 'Sports'} Ã‚Â· ID: {item.id}</p>
+                          <button className="button button-secondary" onClick={() => openTournament(item.id)}>View details</button>
+                          {currentUser?.role === 'organiser' && (
+                            <button className="button button-secondary" onClick={() => beginEdit(item)}>Edit</button>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
                 <div className="pagination-row">
   <button
     className="button button-secondary"
@@ -805,7 +1101,21 @@ function App() {
             <div className="page-heading"><div><p className="eyebrow">COMPETITION OVERVIEW</p><h1>Tournament details</h1><p className="muted">Tournament information and standings provided by the API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>← Back to list</button></div>
             {detailsLoading && <Loading label="Loading tournament details..." />}
             <ErrorNotice>{detailsError}</ErrorNotice>
-            {selectedTournament && <><div className="detail-card"><div className="detail-heading"><div><span className="eyebrow">TOURNAMENT #{selectedTournament.id}</span><h2>{selectedTournament.name}</h2><p>{selectedTournament.description || 'No description provided.'}</p></div><span className={statusClass(selectedTournament.status)}>{selectedTournament.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Format" value={selectedTournament.format} /><Meta label="Starts" value={dateLabel(selectedTournament.start_date)} /><Meta label="Ends" value={dateLabel(selectedTournament.end_date)} /><Meta label="Organizer ID" value={selectedTournament.organizer_id} /></div><div className="detail-actions">{currentUser?.role === 'organiser' && <button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button></div></div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixtures..." /> : <><ErrorNotice>{fixturesError}</ErrorNotice><div className="fixture-filters filter-row">
+            {selectedTournament && <><div className="detail-top-cards"><div className="detail-card">
+{selectedTournament.image_url ? (
+  <img className="tournament-detail-image" src={`${API_BASE_URL}${selectedTournament.image_url}`} alt={`${selectedTournament.name} banner`} />
+) : (
+  <div className="tournament-detail-image-placeholder">No tournament image available</div>
+)}
+<div className="detail-heading"><div><span className="eyebrow">TOURNAMENT #{selectedTournament.id}</span><h2>{selectedTournament.name}</h2><p>{selectedTournament.description || 'No description provided.'}</p></div><span className={statusClass(selectedTournament.status)}>{selectedTournament.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Format" value={selectedTournament.format} /><Meta label="Starts" value={dateLabel(selectedTournament.start_date)} /><Meta label="Ends" value={dateLabel(selectedTournament.end_date)} /><Meta label="Organizer ID" value={selectedTournament.organizer_id} /></div><div className="detail-actions">{['player', 'captain'].includes(currentUser?.role) && <button className="button button-primary" onClick={() => setPage('registrations')}>Register for this tournament</button>}{currentUser?.role === 'organiser' && <><button className="button button-primary" onClick={async () => {
+  try {
+    setFixturesError('')
+    await apiRequest(`/matches/tournaments/${selectedTournament.id}/fixtures/auto-generate`, { method: 'POST' })
+    await openTournament(selectedTournament.id)
+  } catch (error) {
+    setFixturesError(error.message || 'Could not generate and publish fixtures.')
+  }
+}}>Create & Publish Fixtures</button><button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button></>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button></div></div>{currentUser?.role === 'organiser' && <TournamentScorerAssignment tournamentId={selectedTournament.id} />}</div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixtures..." /> : <><ErrorNotice>{fixturesError}</ErrorNotice><div className="fixture-filters filter-row">
   <label>
     Status
     <select value={fixtureStatusFilter} onChange={(event) => { setFixtureStatusFilter(event.target.value); setFixturePage(1) }}>
@@ -865,13 +1175,47 @@ function App() {
             <div className="page-heading"><div><p className="eyebrow">TOURNAMENT SETUP</p><h1>{editingId ? 'Edit tournament' : 'Create a tournament'}</h1><p className="muted">{editingId ? 'Update tournament details. The backend checks organizer ownership.' : 'Set the essentials before your competition begins.'}</p></div><button className="button button-secondary" onClick={() => { resetForm(); setPage('tournaments') }}>Cancel</button></div>
             <form className="form-card" onSubmit={submitTournament}>
               <div className="form-section-heading"><span className="step-number">01</span><div><h2>Basic information</h2><p>Give your tournament a clear identity.</p></div></div>
-              <div className="field"><label htmlFor="tournament-name">Tournament name <span>*</span></label><input id="tournament-name" value={form.name} minLength={3} maxLength={150} required placeholder="e.g. Spring Championship" onChange={(event) => setForm({ ...form, name: event.target.value })} /><small>3ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“150 characters</small></div>
+              <div className="field"><label htmlFor="tournament-name">Tournament name <span>*</span></label><input id="tournament-name" value={form.name} minLength={3} maxLength={150} required placeholder="e.g. Spring Championship" onChange={(event) => setForm({ ...form, name: event.target.value })} /><small>3-150 characters</small></div>
               <div className="field"><label htmlFor="tournament-description">Description</label><textarea id="tournament-description" rows="3" value={form.description} placeholder="What should participants know?" onChange={(event) => setForm({ ...form, description: event.target.value })} /></div>
-              <div className="form-grid"><div className="field"><label htmlFor="tournament-format">Tournament format <span>*</span></label><select id="tournament-format" value={form.format} required onChange={(event) => setForm({ ...form, format: event.target.value })}><option value="round_robin">Round robin</option><option value="single_elimination">Single elimination</option><option value="double_elimination">Double elimination</option></select></div><div className="field"><label htmlFor="number-teams">Number of teams</label><input id="number-teams" type="number" min="2" max="256" value={form.number_of_teams} required onChange={(event) => setForm({ ...form, number_of_teams: event.target.value })} /><small>At least 2 teams</small></div></div>
+              <div className="field">
+                <label htmlFor="tournament-category">Category <span>*</span></label>
+                <select
+                  id="tournament-category"
+                  value={form.category}
+                  required
+                  onChange={(event) => setForm({ ...form, category: event.target.value })}
+                >
+                  <option value="sports">Sports</option>
+                  <option value="esports">Esports</option>
+                </select>
+              </div>
+
+              <div className="field"><label htmlFor="participation-type">Participation type <span>*</span></label><select id="participation-type" value={form.participation_type} required onChange={(event) => setForm({ ...form, participation_type: event.target.value })}><option value="team">Team</option><option value="individual">Individual</option></select><small>{form.participation_type === "team" ? "Players register through their team captain." : "Each player registers individually."}</small></div>
+
+              <div className="field tournament-image-field">
+                <label htmlFor="tournament-image">Tournament picture</label>
+                {imagePreview && <div className="tournament-image-preview"><img src={imagePreview} alt="Tournament preview" /></div>}
+                <input id="tournament-image" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
+                  const file = event.target.files?.[0] || null
+                  if (!file) return
+                  if (file.size > 5 * 1024 * 1024) {
+                    setFormError('Image size must not exceed 5 MB.')
+                    event.target.value = ''
+                    return
+                  }
+                  setFormError('')
+                  const previewUrl = URL.createObjectURL(file)
+                  setImagePreview(previewUrl)
+                  setTournamentImage(file)
+                }} />
+                <small>JPEG, PNG, or WebP. Maximum size 5 MB.</small>
+              </div>
+              <div className="form-grid"><div className="field"><label htmlFor="tournament-format">Tournament format <span>*</span></label><select id="tournament-format" value={form.format} required onChange={(event) => setForm({ ...form, format: event.target.value })}><option value="round_robin">Round robin</option><option value="single_elimination">Single elimination</option><option value="double_elimination">Double elimination</option></select></div>{form.participation_type === "team" && <div className="field"><label htmlFor="number-teams">Number of teams</label><input id="number-teams" type="number" min="2" max="256" value={form.number_of_teams} required onChange={(event) => setForm({ ...form, number_of_teams: event.target.value })} /><small>At least 2 teams</small></div>}</div>
               <div className="form-section-heading second"><span className="step-number">02</span><div><h2>Schedule</h2><p>Choose the start and end of the competition.</p></div></div>
+              <div className="form-grid"><div className="field"><label htmlFor="registration-open">Registration opens <span>*</span></label><input id="registration-open" type="datetime-local" value={form.registration_open_at} required onChange={(event) => setForm({ ...form, registration_open_at: event.target.value })} /></div><div className="field"><label htmlFor="registration-close">Registration closes <span>*</span></label><input id="registration-close" type="datetime-local" value={form.registration_close_at} min={form.registration_open_at || undefined} max={form.start_date || undefined} required onChange={(event) => setForm({ ...form, registration_close_at: event.target.value })} /></div></div>
               <div className="form-grid"><div className="field"><label htmlFor="start-date">Start date and time <span>*</span></label><input id="start-date" type="datetime-local" value={form.start_date} required onChange={(event) => setForm({ ...form, start_date: event.target.value })} /></div><div className="field"><label htmlFor="end-date">End date and time <span>*</span></label><input id="end-date" type="datetime-local" value={form.end_date} min={form.start_date || undefined} required onChange={(event) => setForm({ ...form, end_date: event.target.value })} /></div></div>
               <ErrorNotice>{formError}</ErrorNotice><SuccessNotice>{formSuccess}</SuccessNotice>
-              <div className="form-footer"><p><span>*</span> Required fields. Sign in as an organiser to submit.</p><button className="button button-primary" type="submit" disabled={formLoading}>{formLoading ? 'Saving...' : editingId ? 'Save changes ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢' : 'Create tournament ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢'}</button></div>
+              <div className="form-footer"><p><span>*</span> Required fields. Sign in as an organiser to submit.</p><button className="button button-primary" type="submit" disabled={formLoading}>{formLoading ? 'Saving...' : editingId ? 'Save changes ?' : 'Create tournament +'}</button></div>
             </form>
           </>}
 
@@ -883,9 +1227,17 @@ function App() {
           {page === 'standings' && <StandingsPage />}
           {page === 'leaderboard' && <LeaderboardPage />}
           {page === 'resolve' && <DisputeResolutionPage />}
-          {page === 'registrations' && currentUser?.role === 'captain' && <RegistrationPage />}
+          {page === 'registrations' && ['player', 'captain'].includes(currentUser?.role) && <RegistrationPage initialTournamentId={selectedTournament?.id} />}
           {page === 'registration-approvals' && currentUser?.role === 'organiser' && <RegistrationApprovalPage />}
       {page === 'team' && <>
+            <div className="page-heading"><div><p className="eyebrow">PLAYER TEAMS</p><h1>Team options</h1><p className="muted">Choose how you want to participate.</p></div></div>
+            <div className="form-footer">
+              <button type="button" className="button button-primary" onClick={() => setTeamMode('create')}>Create a team (Captain)</button>
+              <button type="button" className="button button-secondary" onClick={() => setTeamMode('join')}>Join an existing team</button>
+            </div>
+            {teamMode === 'choose' && <p className="muted">Create a team to become its captain, or find a team and contact its captain to join.</p>}
+            {teamMode === 'join' && <>
+              <p className="muted">Find a team and contact its captain. Only the captain can add players to the roster.</p>
             <div className="page-heading"><div><p className="eyebrow">TEAM DIRECTORY</p><h1>Team lookup</h1><p className="muted">Look up an existing team using its numeric ID.</p></div></div>
             <form className="lookup-card" onSubmit={loadTeam}><div className="field"><label htmlFor="team-id">Team ID</label><input id="team-id" inputMode="numeric" pattern="[1-9][0-9]*" value={teamId} onChange={(event) => setTeamId(event.target.value)} placeholder="e.g. 12" required /></div><button className="button button-primary" type="submit" disabled={teamLoading}>{teamLoading ? 'Searching...' : 'Find team'}</button></form>
             <ErrorNotice>{teamError}</ErrorNotice>
@@ -958,6 +1310,8 @@ function App() {
                 <Meta label="Updated" value={dateLabel(player.updated_at)} />
               </div>
             </div>}
+            </>}
+            {teamMode === 'create' && <>
             <div className="section-title">
               <div>
                 <h2>Create a team</h2>
@@ -970,6 +1324,7 @@ function App() {
                 setTeamId(String(createdTeam.id))
               }}
             />
+            </>}
           </>}
 
           <footer className="footer"><span>© MatchGrid 2026</span><span>Sports management, made clearer.</span><span className="footer-api">{API_BASE_URL || 'API URL missing'}</span></footer>
@@ -996,10 +1351,23 @@ function TournamentTable({ items, onOpen, onEdit, canManage }) {
           {items.map((item) => (
             <tr key={item.id}>
               <td>
-                <button className="table-link" onClick={() => onOpen(item.id)}>
-                  {item.name}
-                </button>
-                <small className="cell-subtitle">ID: {item.id}</small>
+                <div className="tournament-list-info">
+                  {item.image_url ? (
+                    <img
+                      className="tournament-list-thumbnail"
+                      src={`${API_BASE_URL}${item.image_url}`}
+                      alt={item.name}
+                    />
+                  ) : (
+                    <div className="tournament-list-thumbnail tournament-list-image-placeholder">—</div>
+                  )}
+                  <div>
+                    <button className="table-link" onClick={() => onOpen(item.id)}>
+                      {item.name}
+                    </button>
+                    <small className="cell-subtitle">ID: {item.id}</small>
+                  </div>
+                </div>
               </td>
               <td>{item.format || '|'}</td>
               <td>
@@ -1059,28 +1427,19 @@ function TeamCreationForm({ onCreated }) {
       return
     }
 
-    if (!/^[1-9]\d*$/.test(captainId)) {
-      setError('Enter a valid positive captain user ID.')
-      return
-    }
-
     setLoading(true)
     try {
       const createdTeam = await apiRequest('/player-team/team', {
         method: 'POST',
-        body: JSON.stringify({
-          name: cleanName,
-          captain_id: Number(captainId),
-        }),
+        body: JSON.stringify({ name: cleanName }),
       })
 
       setSuccess(`Team "${createdTeam.name}" created successfully. Team ID: ${createdTeam.id}`)
       setName('')
-      setCaptainId('')
       if (onCreated) onCreated(createdTeam)
     } catch (requestError) {
       setError(
-        `${requestError.message || 'Could not create team.'} If access is denied, sign in with an organiser account.`,
+        `${requestError.message || 'Could not create team.'} Sign in with a player account to create your team.`,
       )
     } finally {
       setLoading(false)
@@ -1259,6 +1618,31 @@ function AuthPanel({ mode, loading, error, success, onSubmit, onSwitch }) {
 }
 
 
+function getEmbedStreamUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl)
+    const host = url.hostname.replace(/^www\./, '')
+    let videoId = ''
+
+    if (host === 'youtu.be') {
+      videoId = url.pathname.slice(1).split('/')[0]
+    } else if (host === 'youtube.com' || host === 'm.youtube.com') {
+      const parts = url.pathname.split('/').filter(Boolean)
+
+      if (url.pathname === '/watch') {
+        videoId = url.searchParams.get('v') || ''
+      } else if (['live', 'shorts', 'embed'].includes(parts[0])) {
+        videoId = parts[1] || ''
+      }
+    }
+
+    return videoId
+      ? `https://www.youtube.com/embed/${videoId}?autoplay=0`
+      : rawUrl
+  } catch {
+    return ''
+  }
+}
 function StreamUrlControl({ fixture, tournamentId, canManage, onSaved }) {
   const [url, setUrl] = useState(fixture.stream_url || '')
   const [saving, setSaving] = useState(false)
@@ -1285,9 +1669,32 @@ function StreamUrlControl({ fixture, tournamentId, canManage, onSaved }) {
   }
 
   if (!canManage) {
-    return fixture.stream_url
-      ? <a href={fixture.stream_url} target="_blank" rel="noreferrer">Watch Live</a>
-      : <span className="muted">Not available</span>
+    if (!fixture.stream_url) {
+      return <span className="muted">Stream not available</span>
+    }
+
+    const embedUrl = getEmbedStreamUrl(fixture.stream_url)
+
+    return (
+      <div className="live-stream-player">
+        {embedUrl ? (
+          <iframe
+            src={embedUrl}
+            title={`Live stream for match ${fixture.match_number}`}
+            width="320"
+            height="180"
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+        ) : (
+          <a href={fixture.stream_url} target="_blank" rel="noreferrer">
+            Open live stream
+          </a>
+        )}
+        <p>Match #{fixture.match_number}</p>
+      </div>
+    )
   }
 
   return (
@@ -1309,6 +1716,8 @@ function StreamUrlControl({ fixture, tournamentId, canManage, onSaved }) {
 }
 
 export default App
+
+
 
 
 

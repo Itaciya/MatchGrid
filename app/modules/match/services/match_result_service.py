@@ -121,6 +121,12 @@ def finalize_match_result(
     db.commit()
     db.refresh(result)
 
+    # Advance the winner only after the verified result is finalized.
+    from app.modules.match.services.single_elimination_service import (
+        advance_single_elimination_winner,
+    )
+    advance_single_elimination_winner(db, match_id, result)
+
     return result
 
 

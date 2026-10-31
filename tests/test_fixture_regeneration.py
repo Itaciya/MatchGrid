@@ -59,7 +59,9 @@ def create_tournament(db, user_id):
         ),
         status="upcoming",
         organizer_id=user_id,
-    )
+    
+        registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
+        registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc))
 
     db.add(tournament)
     db.commit()

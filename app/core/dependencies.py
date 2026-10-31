@@ -9,6 +9,7 @@ from app.data_access.database import get_db
 from app.data_access.redis_client import get_redis
 from app.modules.match.models.match import Match
 from app.modules.official_assignment.models.official_assignment import OfficialAssignment
+from app.modules.official_assignment.models.tournament_scorer_assignment import TournamentScorerAssignment
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 
@@ -106,22 +107,33 @@ def verify_assigned_official(
     current_user: User = Depends(require_role(*OFFICIAL_ROLES)),
     db: Session = Depends(get_db),
 ) -> Match:
-    """SCRUM-144: the user must hold an official role AND have an active
-    assignment to this specific match. Holding the role alone is not enough."""
+    """Require a match assignment for referees or tournament assignment for scorers."""
     match = db.query(Match).filter(Match.id == match_id).first()
 
     if match is None:
         raise NotFoundException(detail="Match not found")
 
-    assignment = (
-        db.query(OfficialAssignment)
-        .filter(
-            OfficialAssignment.match_id == match_id,
-            OfficialAssignment.official_id == current_user.id,
-            OfficialAssignment.status == ASSIGNMENT_STATUS_ACTIVE,
+    if current_user.role == "scorer":
+        assignment = (
+            db.query(TournamentScorerAssignment)
+            .filter(
+                TournamentScorerAssignment.tournament_id == match.tournament_id,
+                TournamentScorerAssignment.scorer_id == current_user.id,
+                TournamentScorerAssignment.status == ASSIGNMENT_STATUS_ACTIVE,
+            )
+            .first()
         )
-        .first()
-    )
+    else:
+        assignment = (
+            db.query(OfficialAssignment)
+            .filter(
+                OfficialAssignment.match_id == match_id,
+                OfficialAssignment.official_id == current_user.id,
+                OfficialAssignment.assignment_type == "referee",
+                OfficialAssignment.status == ASSIGNMENT_STATUS_ACTIVE,
+            )
+            .first()
+        )
 
     if assignment is None:
         raise ForbiddenException(detail="You are not assigned to this match")
