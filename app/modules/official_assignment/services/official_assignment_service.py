@@ -15,6 +15,11 @@ from app.modules.official_assignment.models.official_assignment import (
 )
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
+from app.modules.notification.schemas.notification import NotificationCreate
+from app.modules.notification.services.notification_service import create_notification
+from app.modules.notification.services.notification_broadcast_service import (
+    schedule_notification_broadcast,
+)
 
 
 ASSIGNMENT_STATUS_ACTIVE = "active"
@@ -236,19 +241,40 @@ def assign_tournament_scorer(
     if existing is not None:
         if existing.status == ASSIGNMENT_STATUS_ACTIVE:
             raise ConflictException(detail="Scorer is already assigned")
+
         existing.status = ASSIGNMENT_STATUS_ACTIVE
         db.commit()
         db.refresh(existing)
-        return existing
+        assignment = existing
 
-    assignment = TournamentScorerAssignment(
-        tournament_id=tournament_id,
-        scorer_id=scorer_id,
-        status=ASSIGNMENT_STATUS_ACTIVE,
-    )
-    db.add(assignment)
-    db.commit()
-    db.refresh(assignment)
+    else:
+        assignment = TournamentScorerAssignment(
+            tournament_id=tournament_id,
+            scorer_id=scorer_id,
+            status=ASSIGNMENT_STATUS_ACTIVE,
+        )
+        db.add(assignment)
+        db.commit()
+        db.refresh(assignment)
+
+    try:
+        notification = create_notification(
+            db,
+            NotificationCreate(
+                user_id=scorer.id,
+                notification_type="tournament_scorer_assignment",
+                content=f"You have been assigned as a scorer for {tournament.name}.",
+            ),
+        )
+
+        try:
+            schedule_notification_broadcast(notification)
+        except Exception:
+            pass
+
+    except Exception:
+        db.rollback()
+
     return assignment
 
 
