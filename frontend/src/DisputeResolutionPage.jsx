@@ -42,7 +42,7 @@ function DisputeCard({ dispute, onChanged }) {
   const open = dispute.status === 'pending' || dispute.status === 'under_review'
 
   return (
-    <div style={box}>
+    <div className="dispute-card">
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
         <strong>Dispute #{dispute.id} · Match {m ? m.match_number : dispute.match_id}</strong>
         <span className="status-pill">{dispute.status}</span>
@@ -56,18 +56,18 @@ function DisputeCard({ dispute, onChanged }) {
       {dispute.resolution && <p><b>Resolution:</b> {dispute.resolution}</p>}
 
       {dispute.status === 'pending' && (
-        <button type="button" disabled={busy} onClick={begin}>{busy ? 'Working...' : 'Start review'}</button>
+        <button className="button button-primary" type="button" disabled={busy} onClick={begin}>{busy ? 'Working...' : 'Start review'}</button>
       )}
 
       {dispute.status === 'under_review' && (
-        <form onSubmit={submit} style={{ display: 'grid', gap: 8, maxWidth: 480 }}>
-          <label>Decision
+        <form className="dispute-form" onSubmit={submit}>
+          <label className="dispute-field">Decision
             <select value={decision} onChange={(e) => setDecision(e.target.value)}>
               <option value="resolved">Approve dispute (resolved)</option>
               <option value="rejected">Reject dispute</option>
             </select>
           </label>
-          <label>Resolution details
+          <label className="dispute-field">Resolution details
             <textarea rows="3" value={resolution} onChange={(e) => setResolution(e.target.value)} required />
           </label>
           {decision === 'resolved' && (
@@ -77,7 +77,7 @@ function DisputeCard({ dispute, onChanged }) {
               <input type="number" min="0" step="1" value={b} onChange={(e) => setB(e.target.value)} style={{ width: 70 }} aria-label="Corrected team B score" />
             </div>
           )}
-          <button type="submit" disabled={busy}>{busy ? 'Saving...' : 'Save decision'}</button>
+          <button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Saving...' : 'Save decision'}</button>
         </form>
       )}
 
@@ -118,12 +118,12 @@ export default function DisputeResolutionPage() {
   }
 
   return (
-    <section>
+    <section className="dispute-page">
       <h2>Dispute resolution</h2>
       <p style={{ fontSize: 13, opacity: 0.7 }}>
         Organisers review disputes for their own tournaments. Start a review, then approve or reject. The server enforces access and blocks reopening.
       </p>
-      <button type="button" onClick={load} disabled={loading}>{loading ? 'Loading...' : 'Refresh'}</button>
+      <button className="button button-secondary" type="button" onClick={load} disabled={loading}>{loading ? 'Loading...' : 'Refresh'}</button>
       {error && <div className="notice notice-error" role="alert">{error}</div>}
       {!loading && !error && disputes.length === 0 && <p>No open disputes.</p>}
       <div style={{ marginTop: 12 }}>

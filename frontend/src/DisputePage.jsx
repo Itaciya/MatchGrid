@@ -34,24 +34,24 @@ export default function DisputePage() {
   }
 
   return (
-    <section>
+    <section className="dispute-page">
       <h2>Submit a dispute</h2>
       <p style={{ fontSize: 13, opacity: 0.7 }}>
         Players can dispute the result of a match they took part in.
       </p>
-      <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, maxWidth: 480 }}>
-        <label>Match ID
+      <form className="dispute-form" onSubmit={onSubmit}>
+        <label className="dispute-field">Match ID
           <input inputMode="numeric" value={matchId} onChange={(e) => setMatchId(e.target.value)} required />
         </label>
-        <label>Reason
+        <label className="dispute-field">Reason
           <select value={category} onChange={(e) => setCategory(e.target.value)}>
             {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </label>
-        <label>Description
+        <label className="dispute-field">Description
           <textarea rows="5" value={description} onChange={(e) => setDescription(e.target.value)} required />
         </label>
-        <button type="submit" disabled={loading}>{loading ? 'Submitting...' : 'Submit dispute'}</button>
+        <button className="button button-primary" type="submit" disabled={loading}>{loading ? 'Submitting...' : 'Submit dispute'}</button>
       </form>
       {error && <div className="notice notice-error" role="alert">{error}</div>}
       {created && (
