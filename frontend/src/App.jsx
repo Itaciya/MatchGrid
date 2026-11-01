@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { API_BASE_URL, apiRequest } from './services/api'
 import ScorerPage from './ScorerPage.jsx'
 import NotificationsPage from './NotificationsPage.jsx'
@@ -213,11 +213,11 @@ const [page, setPage] = useState('home')
   const [editingId, setEditingId] = useState(null)
   const [tournamentImage, setTournamentImage] = useState(null)
   const [imagePreview, setImagePreview] = useState('')
+  const openTournamentRef = useRef(null)
   const [teamId, setTeamId] = useState('')
   const [teamSearch, setTeamSearch] = useState('')
   const [teamSearchResults, setTeamSearchResults] = useState([])
   const [teamSearchLoading, setTeamSearchLoading] = useState(false)
-
   const [teamMode, setTeamMode] = useState('choose')
   const [team, setTeam] = useState(null)
   const [teamLoading, setTeamLoading] = useState(false)
@@ -414,6 +414,18 @@ const [page, setPage] = useState('home')
   const selectedTournamentId = selectedTournament?.id
 
   useEffect(() => {
+    openTournamentRef.current = openTournament
+  }, [openTournament])
+
+  useEffect(() => {
+    if (page !== 'details' || !selectedTournamentId) return undefined
+
+    const timer = window.setInterval(() => {
+      openTournamentRef.current?.(selectedTournamentId)
+    }, 10000)
+
+    return () => window.clearInterval(timer)
+  }, [page, selectedTournamentId])
     return () => {
       if (imagePreview.startsWith('blob:')) {
         URL.revokeObjectURL(imagePreview)
@@ -576,7 +588,6 @@ const [page, setPage] = useState('home')
       setAvailablePlayers([])
     }
   }
-
   const loadTeam = async (event) => {
     event.preventDefault()
     setTeam(null)
@@ -1282,62 +1293,321 @@ const [page, setPage] = useState('home')
           {page === 'resolve' && <DisputeResolutionPage />}
           {page === 'registrations' && ['player', 'captain'].includes(currentUser?.role) && <RegistrationPage initialTournamentId={selectedTournament?.id} />}
           {page === 'registration-approvals' && currentUser?.role === 'organiser' && <RegistrationApprovalPage />}
-      {page === 'team' && <>
-            <div className="page-heading"><div><p className="eyebrow">PLAYER TEAMS</p><h1>Team options</h1><p className="muted">Choose how you want to participate.</p></div></div>
-            <div className="form-footer">
-              <button type="button" className="button button-primary" onClick={() => setTeamMode('create')}>Create a team (Captain)</button>
-
-            </div>
-            <section className="panel team-search-panel">
-              <h2>Manage an Existing Team</h2>
-              <p className="muted">Search by team name to view and manage your team.</p>
-              <form className="filter-row" onSubmit={findTeamsByName}>
-                <input
-                  type="search"
-                  value={teamSearch}
-                  onChange={(event) => setTeamSearch(event.target.value)}
-                  placeholder="Search team name..."
-                  aria-label="Search team by name"
-                />
-                <button className="button button-primary" type="submit" disabled={teamSearchLoading}>
-                  {teamSearchLoading ? 'Searching...' : 'Search Teams'}
-                </button>
-              </form>
-              {teamSearchResults.map((result) => (
-                <button
-                  type="button"
-                  className="team-search-result"
-                  key={result.id}
-                  onClick={() => selectTeamForManagement(result)}
-                >
-                  <strong>{result.name}</strong>
-                  <span>View team roster</span>
-                </button>
-              ))}
-            </section>
-
-            {teamMode === 'choose' && <p className="muted">Create a team to become its captain. You can add eligible players after creation.</p>}
-            {teamMode === 'create' && <>
-            <div className="section-title">
+               {page === 'team' && <>
+            <div className="page-heading">
               <div>
-                <h2>Create a team</h2>
-                <p className="muted">Enter a team name and the captain's user ID. Organiser access is required.</p>
+                <p className="eyebrow">PLAYER TEAMS</p>
+                <h1>Team options</h1>
+                <p className="muted">Choose how you want to participate.</p>
               </div>
             </div>
-            <TeamCreationForm
-              onCreated={async (createdTeam) => {
-                setTeam(createdTeam)
-                setTeamId(String(createdTeam.id))
-                setTeamMode('join')
-                setRosterPlayerId('')
-                setRosterError('')
-                setRosterSuccess('')
-                setTeamMode('choose')
-                setTeamMode('join')
-                await loadAvailablePlayers(createdTeam.id)
-              }}
-            />
+
+            <div className="form-footer">
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={() => setTeamMode('create')}
+              >
+                Create a team (Captain)
+              </button>
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={() => setTeamMode('join')}
+              >
+                Join an existing team
+              </button>
+            </div>
+
+            {teamMode === 'choose' && (
+              <p className="muted">
+                Create a team to become its captain, or find a team and contact its captain to join.
+              </p>
+            )}
+
+            {teamMode === 'join' && <>
+              <p className="muted">
+                Find a team and contact its captain. Only the captain can add players to the roster.
+              </p>
+
+              <section className="panel team-search-panel">
+                <h2>Manage an Existing Team</h2>
+                <p className="muted">Search by team name to view and manage your team.</p>
+                <form className="filter-row" onSubmit={findTeamsByName}>
+                  <input
+                    type="search"
+                    value={teamSearch}
+                    onChange={(event) => setTeamSearch(event.target.value)}
+                    placeholder="Search team name..."
+                    aria-label="Search team by name"
+                  />
+                  <button
+                    className="button button-primary"
+                    type="submit"
+                    disabled={teamSearchLoading}
+                  >
+                    {teamSearchLoading ? 'Searching...' : 'Search Teams'}
+                  </button>
+                </form>
+
+                {teamSearchResults.map((result) => (
+                  <button
+                    type="button"
+                    className="team-search-result"
+                    key={result.id}
+                    onClick={() => selectTeamForManagement(result)}
+                  >
+                    <strong>{result.name}</strong>
+                    <span>View team roster</span>
+                  </button>
+                ))}
+              </section>
+
+              <div className="page-heading">
+                <div>
+                  <p className="eyebrow">TEAM DIRECTORY</p>
+                  <h1>Team lookup</h1>
+                  <p className="muted">Look up an existing team using its numeric ID.</p>
+                </div>
+              </div>
+
+              <form className="lookup-card" onSubmit={loadTeam}>
+                <div className="field">
+                  <label htmlFor="team-id">Team ID</label>
+                  <input
+                    id="team-id"
+                    inputMode="numeric"
+                    pattern="[1-9][0-9]*"
+                    value={teamId}
+                    onChange={(event) => setTeamId(event.target.value)}
+                    placeholder="e.g. 12"
+                    required
+                  />
+                </div>
+                <button
+                  className="button button-primary"
+                  type="submit"
+                  disabled={teamLoading}
+                >
+                  {teamLoading ? 'Searching...' : 'Find team'}
+                </button>
+              </form>
+
+              <ErrorNotice>{teamError}</ErrorNotice>
+              {teamLoading && <Loading label="Loading team..." />}
+
+              {team && (
+                <div className="detail-card">
+                  <div className="detail-heading">
+                    <div>
+                      <span className="eyebrow">TEAM #{team.id}</span>
+                      <h2>{team.name}</h2>
+                      <p>Captain ID: {team.captain_id ?? team.captain?.id ?? 'Not provided'}</p>
+                    </div>
+                    <span className={statusClass(team.status)}>
+                      {team.status || 'Unknown'}
+                    </span>
+                  </div>
+                  <div className="detail-meta">
+                    <Meta label="Created" value={dateLabel(team.created_at)} />
+                    <Meta label="Updated" value={dateLabel(team.updated_at)} />
+                    <Meta
+                      label="Roster members"
+                      value={Array.isArray(team.players) ? team.players.length : 'Not provided'}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {team && <>
+                <div className="section-title">
+                  <div>
+                    <h2>Team roster</h2>
+                    <p className="muted">
+                      Active, eligible players can be added. The API checks captain permissions.
+                    </p>
+                  </div>
+                </div>
+
+                <form
+                  className="lookup-card"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    changeRoster('add', rosterPlayerId)
+                  }}
+                >
+                  <div className="field">
+                    <label htmlFor="roster-player-id">Player ID to add</label>
+                    <input
+                      id="roster-player-id"
+                      inputMode="numeric"
+                      pattern="[1-9][0-9]*"
+                      value={rosterPlayerId}
+                      onChange={(event) => setRosterPlayerId(event.target.value)}
+                      placeholder="e.g. 7"
+                      required
+                    />
+                  </div>
+                  <button
+                    className="button button-primary"
+                    type="submit"
+                    disabled={rosterLoading}
+                  >
+                    {rosterLoading ? 'Updating...' : 'Add player'}
+                  </button>
+                </form>
+
+                <ErrorNotice>{rosterError}</ErrorNotice>
+                <SuccessNotice>{rosterSuccess}</SuccessNotice>
+
+                {rosterLoading && <Loading label="Updating team roster..." />}
+
+                {Array.isArray(team.players) && team.players.length > 0 ? (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Player</th>
+                          <th>Player ID</th>
+                          <th>User ID</th>
+                          <th>Status</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {team.players.map((rosterPlayer) => (
+                          <tr key={rosterPlayer.id}>
+                            <td>
+                              <strong>
+                                {[rosterPlayer.first_name, rosterPlayer.last_name]
+                                  .filter(Boolean)
+                                  .join(' ') || `Player #${rosterPlayer.id}`}
+                              </strong>
+                            </td>
+                            <td>{rosterPlayer.id}</td>
+                            <td>{rosterPlayer.user_id ?? '-'}</td>
+                            <td>
+                              <span className={statusClass(rosterPlayer.status)}>
+                                {rosterPlayer.status || 'Unknown'}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="table-actions">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPlayerId(String(rosterPlayer.id))
+                                    setPlayer(null)
+                                    setPlayerError('')
+                                  }}
+                                  disabled={rosterLoading}
+                                >
+                                  Use ID
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => changeRoster('remove', rosterPlayer.id)}
+                                  disabled={rosterLoading}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <EmptyState
+                    title="Roster is empty"
+                    text="No players are currently assigned to this team. Add a player using their player ID above."
+                  />
+                )}
+              </>}
+
+              <div className="section-title">
+                <div>
+                  <h2>Player lookup</h2>
+                  <p className="muted">Find a player using their numeric ID.</p>
+                </div>
+              </div>
+
+              <form className="lookup-card" onSubmit={loadPlayer}>
+                <div className="field">
+                  <label htmlFor="player-id">Player ID</label>
+                  <input
+                    id="player-id"
+                    inputMode="numeric"
+                    pattern="[1-9][0-9]*"
+                    value={playerId}
+                    onChange={(event) => setPlayerId(event.target.value)}
+                    placeholder="e.g. 7"
+                    required
+                  />
+                </div>
+                <button
+                  className="button button-primary"
+                  type="submit"
+                  disabled={playerLoading}
+                >
+                  {playerLoading ? 'Searching...' : 'Find player'}
+                </button>
+              </form>
+
+              <ErrorNotice>{playerError}</ErrorNotice>
+              {playerLoading && <Loading label="Loading player profile..." />}
+
+              {player && (
+                <div className="detail-card">
+                  <div className="detail-heading">
+                    <div>
+                      <span className="eyebrow">PLAYER #{player.id}</span>
+                      <h2>
+                        {[player.first_name, player.last_name].filter(Boolean).join(' ') || 'Player profile'}
+                      </h2>
+                      <p>User ID: {player.user_id ?? 'Not provided'}</p>
+                    </div>
+                    <span className={statusClass(player.status)}>
+                      {player.status || 'Unknown'}
+                    </span>
+                  </div>
+                  <div className="detail-meta">
+                    <Meta label="Player ID" value={player.id} />
+                    <Meta
+                      label="Team assignment"
+                      value={player.team_id ? `Team #${player.team_id}` : 'Not assigned'}
+                    />
+                    <Meta label="Created" value={dateLabel(player.created_at)} />
+                    <Meta label="Updated" value={dateLabel(player.updated_at)} />
+                  </div>
+                </div>
+              )}
             </>}
+
+            {teamMode === 'create' && <>
+              <div className="section-title">
+                <div>
+                  <h2>Create a team</h2>
+                  <p className="muted">
+                    Enter a team name and the captain's user ID. Organiser access is required.
+                  </p>
+                </div>
+              </div>
+
+              <TeamCreationForm
+                onCreated={async (createdTeam) => {
+                  setTeam(createdTeam)
+                  setTeamId(String(createdTeam.id))
+                  setTeamMode('join')
+                  setRosterPlayerId('')
+                  setRosterError('')
+                  setRosterSuccess('')
+                  await loadAvailablePlayers(createdTeam.id)
+                }}
+              />
+            </>}
+
             {team && (
               <section className="panel team-roster-panel">
                 <h2>{team.name || `Team #${team.id}`}</h2>
@@ -1345,10 +1615,15 @@ const [page, setPage] = useState('home')
 
                 {team.players?.length ? team.players.map((member) => (
                   <div className="team-member-row" key={member.id}>
-                    <span>{[member.first_name, member.last_name].filter(Boolean).join(' ') || `Player #${member.id}`}</span>
-                    <button type="button" className="button button-secondary"
+                    <span>
+                      {[member.first_name, member.last_name].filter(Boolean).join(' ') || `Player #${member.id}`}
+                    </span>
+                    <button
+                      type="button"
+                      className="button button-secondary"
                       disabled={rosterLoading}
-                      onClick={() => changeRoster('remove', member.id)}>
+                      onClick={() => changeRoster('remove', member.id)}
+                    >
                       Remove
                     </button>
                   </div>
@@ -1368,56 +1643,54 @@ const [page, setPage] = useState('home')
 
                     <div className="available-player-results">
                       {availablePlayers
-                        .filter((player) =>
-                          `${player.first_name || ''} ${player.last_name || ''}`
+                        .filter((availablePlayer) =>
+                          `${availablePlayer.first_name || ''} ${availablePlayer.last_name || ''}`
                             .toLowerCase()
                             .includes(rosterPlayerSearch.trim().toLowerCase())
                         )
-                        .map((player) => (
-                          <div className="team-member-row" key={player.id}>
+                        .map((availablePlayer) => (
+                          <div className="team-member-row" key={availablePlayer.id}>
                             <div>
-                              <strong>{player.first_name} {player.last_name}</strong>
-                              <span className="muted">Active ? Available</span>
+                              <strong>
+                                {availablePlayer.first_name} {availablePlayer.last_name}
+                              </strong>
+                              <span className="muted">Active · Available</span>
                             </div>
                             <button
                               type="button"
                               className="button button-primary"
                               disabled={rosterLoading}
-                              onClick={() => changeRoster('add', player.id)}
+                              onClick={() => changeRoster('add', availablePlayer.id)}
                             >
                               {rosterLoading ? 'Adding...' : 'Add Member'}
                             </button>
                           </div>
                         ))}
-                      {availablePlayers.filter((player) =>
-                        `${player.first_name || ''} ${player.last_name || ''}`
+
+                      {availablePlayers.filter((availablePlayer) =>
+                        `${availablePlayer.first_name || ''} ${availablePlayer.last_name || ''}`
                           .toLowerCase()
                           .includes(rosterPlayerSearch.trim().toLowerCase())
                       ).length === 0 && (
                         <p className="muted">
-                          {rosterPlayerSearch ? 'No matching available players.' : 'No available players found.'}
+                          {rosterPlayerSearch
+                            ? 'No matching available players.'
+                            : 'No available players found.'}
                         </p>
                       )}
                     </div>
                   </>
                 ) : (
-                  <p className="muted">Only this team's captain can add or remove members.</p>
+                  <p className="muted">
+                    Only this team's captain can add or remove members.
+                  </p>
                 )}
 
                 {rosterError && <p className="form-error">{rosterError}</p>}
                 {rosterSuccess && <p className="form-success">{rosterSuccess}</p>}
-                {!availablePlayers.length && <p className="muted">No available players found.</p>}
               </section>
             )}
           </>}
-
-          <footer className="footer"><span>© MatchGrid 2026</span><span>Sports management, made clearer.</span><span className="footer-api">{API_BASE_URL || 'API URL missing'}</span></footer>
-        </section>
-      </div>
-    </main>
-  )
-}
-
 function TournamentTable({ items, onOpen, onEdit, canManage }) {
   return (
     <div className="table-wrap">
