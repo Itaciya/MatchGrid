@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { getNotifications, getUnreadCount, markNotificationRead } from './services/notificationApi'
 
 const PAGE_SIZE = 10
@@ -77,7 +77,7 @@ export default function NotificationsPage({ onOpenPage }) {
       <p style={{ fontSize: 13, opacity: 0.7 }}>
         Only your own notifications are shown. Use Refresh to check for new ones.
       </p>
-      <button type="button" onClick={refresh} disabled={loading}>{loading ? 'Loading...' : 'Refresh'}</button>
+      <button className="button button-secondary" type="button" onClick={refresh} disabled={loading}>{loading ? 'Loading...' : 'Refresh'}</button>
 
       {error && (
         <div className="notice notice-error" role="alert">

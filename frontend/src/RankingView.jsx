@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useState } from 'react'
 import { getTournaments } from './services/rankingApi'
 
 export default function RankingView({ title, intro, loadRanking }) {
@@ -47,7 +47,7 @@ export default function RankingView({ title, intro, loadRanking }) {
             <option key={t.id} value={t.id}>{t.name} (#{t.id})</option>
           ))}
         </select>
-        <button type="button" disabled={!tournamentId || loading} onClick={() => load(tournamentId)}>
+        <button className="button button-secondary" type="button" disabled={!tournamentId || loading} onClick={() => load(tournamentId)}>
           {loading ? 'Loading...' : 'Refresh'}
         </button>
       </div>
