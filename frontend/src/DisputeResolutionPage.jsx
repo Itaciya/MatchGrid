@@ -123,7 +123,7 @@ export default function DisputeResolutionPage() {
       <p style={{ fontSize: 13, opacity: 0.7 }}>
         Organisers review disputes for their own tournaments. Start a review, then approve or reject. The server enforces access and blocks reopening.
       </p>
-      <button type="button" onClick={load} disabled={loading}>{loading ? 'Loading...' : 'Refresh'}</button>
+      <button type="button" className="button button-secondary" onClick={load} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</button>
       {error && <div className="notice notice-error" role="alert">{error}</div>}
       {!loading && !error && disputes.length === 0 && <p>No open disputes.</p>}
       <div style={{ marginTop: 12 }}>

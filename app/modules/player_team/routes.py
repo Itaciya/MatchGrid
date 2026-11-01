@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, require_role
@@ -20,6 +20,7 @@ from app.modules.player_team.schemas.team import (
 from app.modules.player_team.services.player_service import (
     add_player_to_team,
     create_player,
+    get_available_players,
     get_player,
     remove_player_from_team,
     update_player_profile,
@@ -29,6 +30,7 @@ from app.modules.player_team.services.team_service import (
     authorize_team_captain,
     create_team,
     get_team,
+    search_teams,
     update_team_status,
 )
 
@@ -105,6 +107,18 @@ def update_player_profile_status(
 
 
 @router.get(
+    "/team/search",
+    response_model=list[TeamResponse],
+)
+def search_teams_endpoint(
+    name: str = Query(min_length=1, max_length=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return search_teams(db, name)
+
+
+@router.get(
     "/team/{team_id}",
     response_model=TeamResponse,
 )
@@ -114,6 +128,24 @@ def get_team_details(
     db: Session = Depends(get_db),
 ):
     return get_team(db, team_id)
+
+
+@router.get(
+    "/team/{team_id}/available-players",
+    response_model=list[PlayerResponse],
+)
+def get_available_team_players(
+    team_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    authorize_team_captain(
+        db,
+        team_id,
+        current_user.id,
+        detail="Only the team captain can view available players",
+    )
+    return get_available_players(db)
 
 
 @router.post(

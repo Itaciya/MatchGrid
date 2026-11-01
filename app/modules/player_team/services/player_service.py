@@ -46,6 +46,19 @@ def create_player(
     return player
 
 
+def get_available_players(db: Session) -> list[Player]:
+    """Return active players who are not assigned to any team."""
+    return (
+        db.query(Player)
+        .filter(
+            Player.status == PlayerStatus.ACTIVE,
+            Player.team_id.is_(None),
+        )
+        .order_by(Player.first_name, Player.last_name)
+        .all()
+    )
+
+
 def get_player(
     db: Session,
     player_id: int,

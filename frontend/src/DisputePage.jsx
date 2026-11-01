@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { createDispute } from './services/resultsApi'
 
 const CATEGORIES = ['Incorrect score', 'Wrong winner', 'Rule violation', 'Other']
@@ -39,7 +39,7 @@ export default function DisputePage() {
       <p style={{ fontSize: 13, opacity: 0.7 }}>
         Players can dispute the result of a match they took part in.
       </p>
-      <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, maxWidth: 480 }}>
+      <form className="dispute-form" onSubmit={onSubmit} style={{ display: 'grid', gap: 12, maxWidth: 480 }}>
         <label>Match ID
           <input inputMode="numeric" value={matchId} onChange={(e) => setMatchId(e.target.value)} required />
         </label>

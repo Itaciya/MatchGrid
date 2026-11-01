@@ -870,3 +870,449 @@ tr:has(.tournament-list-info):hover .tournament-list-info {
   box-sizing: border-box;
 }
 
+
+/* ===== Search bar visibility and readability ===== */
+.tournament-search-simple,
+.tournament-search-box {
+  background: var(--surface) !important;
+  border: 1.5px solid var(--line) !important;
+  border-radius: 12px !important;
+  min-height: 52px;
+  padding: 0 16px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.tournament-search-simple:focus-within,
+.tournament-search-box:focus-within {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.tournament-search-simple input,
+.tournament-search-box input,
+input[type="search"] {
+  color: var(--text) !important;
+  caret-color: var(--accent);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.tournament-search-simple input::placeholder,
+.tournament-search-box input::placeholder,
+input[type="search"]::placeholder {
+  color: var(--muted) !important;
+  opacity: 1;
+  font-weight: 400;
+}
+
+.tournament-search-simple span::before {
+  border-color: var(--muted) !important;
+}
+
+.tournament-search-simple span::after {
+  background: var(--muted) !important;
+}
+
+/* ===== Dropdown readability in both themes ===== */
+select {
+  color: var(--text);
+  background-color: var(--surface);
+  border-color: var(--line);
+}
+
+select option {
+  color: #182235;
+  background-color: #ffffff;
+}
+
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] .dispute-form select {
+  color: #f3f6fc !important;
+  background-color: #202b3b !important;
+  border: 1px solid #52627a !important;
+}
+
+:root[data-theme="dark"] select option,
+:root[data-theme="dark"] .dispute-form select option {
+  color: #f3f6fc !important;
+  background-color: #202b3b !important;
+}
+
+:root[data-theme="dark"] select:focus,
+:root[data-theme="dark"] .dispute-form select:focus {
+  border-color: #8ab4ff !important;
+  outline: 2px solid rgba(138, 180, 255, .25);
+  outline-offset: 1px;
+}
+
+/* ===== Submit dispute form ===== */
+.dispute-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.dispute-form input,
+.dispute-form select,
+.dispute-form textarea {
+  width: 100%;
+  min-height: 43px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.dispute-form textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.dispute-form input::placeholder,
+.dispute-form textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.dispute-form button {
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dispute-form button:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+
+/* ===== Team & Player Search UI ===== */
+
+.team-search-panel {
+  padding: 28px;
+  border-radius: 16px;
+  margin-bottom: 24px;
+}
+
+.team-search-panel h2 {
+  margin-bottom: 8px;
+}
+
+.team-search-panel .filter-row {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  width: 100%;
+  margin: 22px 0;
+}
+
+.team-search-panel input[type="search"],
+.player-roster-search {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 56px;
+  padding: 15px 20px;
+  border: 1.5px solid #cbd2c0;
+  border-radius: 12px;
+  background: #fff;
+  color: #263124;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+
+.team-search-panel input[type="search"] {
+  flex: 1;
+}
+
+.team-search-panel input[type="search"]::placeholder,
+.player-roster-search::placeholder {
+  color: #899184;
+  font-weight: 400;
+}
+
+.team-search-panel input[type="search"]:focus,
+.player-roster-search:focus {
+  border-color: #879b61;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(135, 155, 97, .15);
+}
+
+.team-search-panel .filter-row button {
+  min-width: 145px;
+  min-height: 56px;
+  border-radius: 12px;
+  padding: 0 24px;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.team-search-result {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-height: 64px;
+  padding: 16px 20px;
+  margin: 10px 0;
+  border: 1px solid #e0e5d9;
+  border-radius: 12px;
+  background: #f9faf6;
+  color: #293323;
+  text-align: left;
+  cursor: pointer;
+  transition: .2s ease;
+}
+
+.team-search-result:hover {
+  border-color: #9aaa78;
+  background: #f1f4e9;
+  transform: translateY(-1px);
+}
+
+.team-search-result strong {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.team-search-result span {
+  color: #77816d;
+  font-size: 13px;
+}
+
+.player-roster-search {
+  margin: 16px 0 18px;
+}
+
+.available-player-results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding: 2px 4px 8px 0;
+}
+
+.available-player-results .team-member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px 18px;
+  border: 1px solid #e5e8df;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.available-player-results .team-member-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.available-player-results .team-member-row strong {
+  color: #293323;
+  font-size: 14px;
+}
+
+.available-player-results .team-member-row .muted {
+  font-size: 12px;
+  color: #7b876e;
+}
+
+.available-player-results .team-member-row button {
+  min-width: 105px;
+  min-height: 40px;
+  border-radius: 9px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .team-search-panel {
+    padding: 18px;
+  }
+
+  .team-search-panel .filter-row {
+    flex-direction: column;
+  }
+
+  .team-search-panel .filter-row button {
+    width: 100%;
+  }
+
+  .team-search-result,
+  .available-player-results .team-member-row {
+    align-items: flex-start;
+  }
+}
+
+/* ===== Search visibility in dark mode ===== */
+
+[data-theme="dark"] .team-search-panel input[type="search"],
+[data-theme="dark"] .player-roster-search,
+.dark .team-search-panel input[type="search"],
+.dark .player-roster-search {
+  background: #252b24;
+  color: #ffffff;
+  border-color: #68765a;
+  caret-color: #ffffff;
+}
+
+[data-theme="dark"] .team-search-panel input[type="search"]::placeholder,
+[data-theme="dark"] .player-roster-search::placeholder,
+.dark .team-search-panel input[type="search"]::placeholder,
+.dark .player-roster-search::placeholder {
+  color: #c0c9b8;
+  opacity: 1;
+}
+
+[data-theme="dark"] .team-search-result,
+.dark .team-search-result {
+  background: #252b24;
+  border-color: #56634b;
+  color: #ffffff;
+}
+
+[data-theme="dark"] .team-search-result strong,
+.dark .team-search-result strong {
+  color: #ffffff;
+}
+
+[data-theme="dark"] .team-search-result span,
+.dark .team-search-result span {
+  color: #c0c9b8;
+}
+
+[data-theme="dark"] .available-player-results .team-member-row,
+.dark .available-player-results .team-member-row {
+  background: #252b24;
+  border-color: #56634b;
+}
+
+[data-theme="dark"] .available-player-results .team-member-row strong,
+.dark .available-player-results .team-member-row strong {
+  color: #ffffff;
+}
+
+[data-theme="dark"] .available-player-results .team-member-row .muted,
+.dark .available-player-results .team-member-row .muted {
+  color: #c0c9b8;
+}
+
+[data-theme="dark"] .team-search-panel input[type="search"]:focus,
+[data-theme="dark"] .player-roster-search:focus,
+.dark .team-search-panel input[type="search"]:focus,
+.dark .player-roster-search:focus {
+  border-color: #a9c17e;
+  box-shadow: 0 0 0 4px rgba(169, 193, 126, .2);
+}
+
+
+/* ===== MatchGrid theme-matched search styling ===== */
+
+.team-search-panel input[type="search"],
+.player-roster-search {
+  background: var(--surface-soft);
+  color: var(--text);
+  border: 1.5px solid var(--line);
+}
+
+.team-search-panel input[type="search"]::placeholder,
+.player-roster-search::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.team-search-panel input[type="search"]:focus,
+.player-roster-search:focus {
+  background: var(--surface);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.team-search-result {
+  background: var(--surface-soft);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.team-search-result:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.team-search-result strong,
+.available-player-results .team-member-row strong {
+  color: var(--text);
+}
+
+.team-search-result span,
+.available-player-results .team-member-row .muted {
+  color: var(--muted);
+}
+
+.available-player-results .team-member-row {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+
+/* Cool neutral search colors - no yellow/olive tones */
+
+:root[data-theme="dark"] .team-search-panel input[type="search"],
+:root[data-theme="dark"] .player-roster-search {
+  background: #171f2d !important;
+  color: #f1f5f9 !important;
+  border: 1px solid #3b4658 !important;
+}
+
+:root[data-theme="dark"] .team-search-panel input[type="search"]::placeholder,
+:root[data-theme="dark"] .player-roster-search::placeholder {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme="dark"] .team-search-panel input[type="search"]:focus,
+:root[data-theme="dark"] .player-roster-search:focus {
+  border-color: #8ab4ff !important;
+  box-shadow: 0 0 0 3px rgba(138, 180, 255, .16) !important;
+}
+
+:root[data-theme="dark"] .team-search-result,
+:root[data-theme="dark"] .available-player-results .team-member-row {
+  background: #171f2d !important;
+  border-color: #303d50 !important;
+  color: #e8edf5 !important;
+}
+
+:root[data-theme="dark"] .team-search-result:hover {
+  background: #263449 !important;
+  border-color: #8ab4ff !important;
+}
+
+:root[data-theme="dark"] .team-search-result strong,
+:root[data-theme="dark"] .available-player-results .team-member-row strong {
+  color: #f1f5f9 !important;
+}
+
+:root[data-theme="dark"] .team-search-result span,
+:root[data-theme="dark"] .available-player-results .team-member-row .muted {
+  color: #aab6c8 !important;
+}
+

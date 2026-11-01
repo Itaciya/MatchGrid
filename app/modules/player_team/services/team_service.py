@@ -29,6 +29,19 @@ def get_team(
     return team
 
 
+
+def search_teams(db: Session, name: str) -> list[Team]:
+    """Search teams by name."""
+    return (
+        db.query(Team)
+        .options(selectinload(Team.players))
+        .filter(Team.name.ilike(f"%{name.strip()}%"))
+        .order_by(Team.name)
+        .limit(25)
+        .all()
+    )
+
+
 def authorize_team_captain(
     db: Session,
     team_id: int,
