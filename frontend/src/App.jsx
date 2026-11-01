@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { API_BASE_URL, apiRequest } from './services/api'
 import ScorerPage from './ScorerPage.jsx'
 import NotificationsPage from './NotificationsPage.jsx'
@@ -213,11 +213,9 @@ const [page, setPage] = useState('home')
   const [editingId, setEditingId] = useState(null)
   const [tournamentImage, setTournamentImage] = useState(null)
   const [imagePreview, setImagePreview] = useState('')
-  const [teamId, setTeamId] = useState('')
+  const [, setTeamId] = useState('')
   const [teamMode, setTeamMode] = useState('choose')
   const [team, setTeam] = useState(null)
-  const [teamLoading, setTeamLoading] = useState(false)
-  const [teamError, setTeamError] = useState('')
   const [playerId, setPlayerId] = useState('')
   const [player, setPlayer] = useState(null)
   const [playerLoading, setPlayerLoading] = useState(false)
@@ -515,21 +513,6 @@ const [page, setPage] = useState('home')
       setFormLoading(false)
     }
   }
-  const loadTeam = async (event) => {
-    event.preventDefault()
-    setTeam(null)
-    setTeamError('')
-    if (!/^[1-9]\d*$/.test(teamId)) return setTeamError('Enter a valid positive team ID.')
-    setTeamLoading(true)
-    try {
-      setTeam(await apiRequest(`/player-team/team/${Number(teamId)}`))
-    } catch (error) {
-      setTeamError(error.message || 'Could not load team.')
-    } finally {
-      setTeamLoading(false)
-    }
-  }
-
   const loadPlayer = async (event) => {
     event.preventDefault()
     setPlayer(null)

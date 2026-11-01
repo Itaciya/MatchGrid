@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getOpenDisputes, resolveDispute, startDisputeReview } from './services/resultsApi'
 
-const box = { border: '1px solid rgba(128,128,128,.4)', borderRadius: 8, padding: 16, marginBottom: 12 }
 const isScore = (v) => /^\d+$/.test(String(v).trim())
 
 function DisputeCard({ dispute, onChanged }) {
