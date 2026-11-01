@@ -870,3 +870,112 @@ tr:has(.tournament-list-info):hover .tournament-list-info {
   box-sizing: border-box;
 }
 
+
+/* MatchGrid dispute pages - consistent light and dark theme */
+.dispute-page {
+  color: var(--text);
+  display: grid;
+  gap: 16px;
+}
+
+.dispute-form {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  max-width: 560px;
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+
+.dispute-field {
+  display: grid;
+  gap: 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dispute-page input,
+.dispute-page textarea,
+.dispute-page select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.dispute-page textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.dispute-page input::placeholder,
+.dispute-page textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.dispute-page input:focus,
+.dispute-page textarea:focus,
+.dispute-page select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.dispute-page select option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.dispute-card {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  overflow-wrap: anywhere;
+}
+
+.dispute-card p {
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.dispute-card .dispute-form {
+  padding: 16px 0 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.dispute-page .button {
+  min-height: 40px;
+  cursor: pointer;
+}
+
+.dispute-page .button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 600px) {
+  .dispute-form,
+  .dispute-card {
+    padding: 15px;
+  }
+}

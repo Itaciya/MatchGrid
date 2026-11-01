@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { API_BASE_URL, apiRequest } from './services/api'
 import ScorerPage from './ScorerPage.jsx'
 import NotificationsPage from './NotificationsPage.jsx'
@@ -213,12 +213,9 @@ const [page, setPage] = useState('home')
   const [editingId, setEditingId] = useState(null)
   const [tournamentImage, setTournamentImage] = useState(null)
   const [imagePreview, setImagePreview] = useState('')
-  const openTournamentRef = useRef(null)
-  const [teamId, setTeamId] = useState('')
+  const [, setTeamId] = useState('')
   const [teamMode, setTeamMode] = useState('choose')
   const [team, setTeam] = useState(null)
-  const [teamLoading, setTeamLoading] = useState(false)
-  const [teamError, setTeamError] = useState('')
   const [playerId, setPlayerId] = useState('')
   const [player, setPlayer] = useState(null)
   const [playerLoading, setPlayerLoading] = useState(false)
@@ -406,21 +403,7 @@ const [page, setPage] = useState('home')
     }
   }, [])
 
-  const selectedTournamentId = selectedTournament?.id
 
-  useEffect(() => {
-    openTournamentRef.current = openTournament
-  }, [openTournament])
-
-  useEffect(() => {
-    if (page !== 'details' || !selectedTournamentId) return undefined
-
-    const timer = window.setInterval(() => {
-      openTournamentRef.current?.(selectedTournamentId)
-    }, 10000)
-
-    return () => window.clearInterval(timer)
-  }, [page, selectedTournamentId])
 
   useEffect(() => {
     return () => {
@@ -530,21 +513,6 @@ const [page, setPage] = useState('home')
       setFormLoading(false)
     }
   }
-  const loadTeam = async (event) => {
-    event.preventDefault()
-    setTeam(null)
-    setTeamError('')
-    if (!/^[1-9]\d*$/.test(teamId)) return setTeamError('Enter a valid positive team ID.')
-    setTeamLoading(true)
-    try {
-      setTeam(await apiRequest(`/player-team/team/${Number(teamId)}`))
-    } catch (error) {
-      setTeamError(error.message || 'Could not load team.')
-    } finally {
-      setTeamLoading(false)
-    }
-  }
-
   const loadPlayer = async (event) => {
     event.preventDefault()
     setPlayer(null)
@@ -1233,15 +1201,10 @@ const [page, setPage] = useState('home')
             <div className="page-heading"><div><p className="eyebrow">PLAYER TEAMS</p><h1>Team options</h1><p className="muted">Choose how you want to participate.</p></div></div>
             <div className="form-footer">
               <button type="button" className="button button-primary" onClick={() => setTeamMode('create')}>Create a team (Captain)</button>
-              <button type="button" className="button button-secondary" onClick={() => setTeamMode('join')}>Join an existing team</button>
             </div>
-            {teamMode === 'choose' && <p className="muted">Create a team to become its captain, or find a team and contact its captain to join.</p>}
-            {teamMode === 'join' && <>
-              <p className="muted">Find a team and contact its captain. Only the captain can add players to the roster.</p>
-            <div className="page-heading"><div><p className="eyebrow">TEAM DIRECTORY</p><h1>Team lookup</h1><p className="muted">Look up an existing team using its numeric ID.</p></div></div>
-            <form className="lookup-card" onSubmit={loadTeam}><div className="field"><label htmlFor="team-id">Team ID</label><input id="team-id" inputMode="numeric" pattern="[1-9][0-9]*" value={teamId} onChange={(event) => setTeamId(event.target.value)} placeholder="e.g. 12" required /></div><button className="button button-primary" type="submit" disabled={teamLoading}>{teamLoading ? 'Searching...' : 'Find team'}</button></form>
-            <ErrorNotice>{teamError}</ErrorNotice>
-            {teamLoading && <Loading label="Loading team..." />}
+            {teamMode === 'join' && team && <>
+              <p className="muted">Manage your team and add eligible players to your roster.</p>
+            <div className="page-heading"><div><p className="eyebrow">TEAM MANAGEMENT</p><h1>Your team</h1><p className="muted">Manage your team members.</p></div></div>
             {team && <div className="detail-card"><div className="detail-heading"><div><span className="eyebrow">TEAM #{team.id}</span><h2>{team.name}</h2><p>Captain ID: {team.captain_id ?? team.captain?.id ?? 'Not provided'}</p></div><span className={statusClass(team.status)}>{team.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Created" value={dateLabel(team.created_at)} /><Meta label="Updated" value={dateLabel(team.updated_at)} /><Meta label="Roster members" value={Array.isArray(team.players) ? team.players.length : 'Not provided'} /></div></div>}
             {team && <>
               <div className="section-title">
@@ -1315,13 +1278,14 @@ const [page, setPage] = useState('home')
             <div className="section-title">
               <div>
                 <h2>Create a team</h2>
-                <p className="muted">Enter a team name and the captain's user ID. Organiser access is required.</p>
+                <p className="muted">Enter a team name. Your player account will automatically become the team captain.</p>
               </div>
             </div>
             <TeamCreationForm
               onCreated={(createdTeam) => {
                 setTeam(createdTeam)
                 setTeamId(String(createdTeam.id))
+                setTeamMode('join')
               }}
             />
             </>}
@@ -1411,7 +1375,6 @@ function IdLookup({ onSubmit }) {
 
 function TeamCreationForm({ onCreated }) {
   const [name, setName] = useState('')
-  const [captainId, setCaptainId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -1459,20 +1422,6 @@ function TeamCreationForm({ onCreated }) {
           required
         />
         <small>Maximum 100 characters. Duplicate team names are rejected by the API.</small>
-      </div>
-
-      <div className="field">
-        <label htmlFor="new-team-captain">Captain user ID *</label>
-        <input
-          id="new-team-captain"
-          type="number"
-          min="1"
-          step="1"
-          value={captainId}
-          onChange={(event) => setCaptainId(event.target.value)}
-          placeholder="e.g. 12"
-          required
-        />
       </div>
 
       {error && <ErrorNotice>{error}</ErrorNotice>}
