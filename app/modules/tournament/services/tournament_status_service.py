@@ -7,7 +7,7 @@ from app.modules.match.models.match_result import MatchResult
 from app.modules.tournament.models.tournament import Tournament
 
 STATUS_UPCOMING = "upcoming"
-STATUS_LIVE = "live"
+STATUS_LIVE = "ongoing"
 STATUS_COMPLETED = "completed"
 
 
@@ -76,7 +76,7 @@ def end_tournament(db: Session, tournament: Tournament) -> Tournament:
     if tournament.status != STATUS_LIVE:
         raise ConflictException(
             detail=(
-                "Only a live tournament can be ended "
+                "Only an ongoing tournament can be ended "
                 f"(current status: '{tournament.status}')"
             )
         )
