@@ -749,7 +749,7 @@ const [page, setPage] = useState('home')
   )
 
   const activeCount = useMemo(
-    () => tournaments.filter((item) => String(item.status).toLowerCase() === 'active').length,
+    () => tournaments.filter((item) => String(item.status).toLowerCase() === 'ongoing').length,
     [tournaments],
   )
 
@@ -984,11 +984,9 @@ const [page, setPage] = useState('home')
                   }}
                 >
                   <option value="">All statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="active">Active</option>
-                  <option value="published">Published</option>
+                  <option value="upcoming">Upcoming</option>
+                  <option value="ongoing">Ongoing</option>
                   <option value="completed">Completed</option>
-                  <option value="archived">Archived</option>
                 </select>
               </label>
               <label>
