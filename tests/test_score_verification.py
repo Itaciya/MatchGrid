@@ -325,17 +325,29 @@ def test_invalid_transitions_are_rejected_and_leave_the_score_unchanged(
     assert score.reviewed_at == reviewed_at
 
 
-@pytest.mark.parametrize("status", ["scheduled", "cancelled", "completed"])
-def test_score_can_only_be_reviewed_while_the_match_is_live(db, status):
+@pytest.mark.parametrize("status", ["scheduled", "cancelled"])
+def test_score_cannot_be_reviewed_before_the_match_starts_or_once_cancelled(db, status):
     match, organiser = _make_match(db, status=status)
     score = _make_score(db, match)
 
     response = _review(match, organiser, "verified")
 
     assert response.status_code == 409
-    assert "live" in response.json()["error"]["message"]
+    assert "started" in response.json()["error"]["message"]
     db.refresh(score)
     assert score.verification_status == "pending"
+
+
+@pytest.mark.parametrize("status", ["live", "completed"])
+def test_score_can_be_reviewed_while_live_or_after_the_match_ends(db, status):
+    match, organiser = _make_match(db, status=status)
+    score = _make_score(db, match)
+
+    response = _review(match, organiser, "verified")
+
+    assert response.status_code == 200, response.text
+    db.refresh(score)
+    assert score.verification_status == "verified"
 
 
 def test_score_cannot_be_reviewed_without_both_teams(db):

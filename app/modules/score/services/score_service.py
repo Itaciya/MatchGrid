@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictException, NotFoundException
 from app.modules.match.models.match import Match
+from app.modules.match.models.match_result import MatchResult
 from app.modules.score.models.score import Score, ScoreVerificationStatus
 from app.modules.score.schemas.score import ScoreCreate, ScoreUpdate
 
@@ -24,15 +25,41 @@ def _lock_match(db: Session, match_id: int) -> Match:
     return match
 
 
-def _ensure_not_finalized(match: Match, score: Score | None) -> None:
-    if match.status == MATCH_STATUS_COMPLETED or (
-        score is not None and score.is_verified
-    ):
+def _ensure_not_finalized(
+    db: Session, match: Match, score: Score | None
+) -> None:
+    """Reject edits once the score is verified or the result is finalized.
+
+    A match the scorer has ended is only "completed", not finalized: the
+    organiser may still reject the score, and then the scorer can fix it.
+    """
+    finalized = (
+        db.query(MatchResult.id)
+        .filter(MatchResult.match_id == match.id)
+        .first()
+        is not None
+    )
+    if finalized or (score is not None and score.is_verified):
         raise ConflictException(detail="Finalized scores cannot be modified")
 
+    if match.status == MATCH_STATUS_COMPLETED and (
+        score is None
+        or score.verification_status
+        != ScoreVerificationStatus.REJECTED.value
+    ):
+        raise ConflictException(
+            detail=(
+                "The match has ended, so the score can no longer be changed "
+                "unless the organiser rejects it for correction"
+            )
+        )
 
-def _ensure_match_is_live(match: Match) -> None:
-    if match.status != MATCH_STATUS_LIVE:
+
+def _ensure_match_is_live(match: Match, allow_ended: bool = False) -> None:
+    # allow_ended lets update_score reach a rejected score on an ended match;
+    # _ensure_not_finalized has already restricted that case.
+    allowed = (MATCH_STATUS_LIVE, MATCH_STATUS_COMPLETED) if allow_ended else (MATCH_STATUS_LIVE,)
+    if match.status not in allowed:
         raise ConflictException(
             detail=(
                 "Scores can only be changed while a match is live "
@@ -51,7 +78,7 @@ def create_score(db: Session, match_id: int, data: ScoreCreate) -> Score:
 
     existing = db.query(Score).filter(Score.match_id == match_id).first()
     if existing is not None:
-        _ensure_not_finalized(match, existing)
+        _ensure_not_finalized(db, match, existing)
         raise ConflictException(
             detail="A score already exists for this match; update it instead"
         )
@@ -85,8 +112,8 @@ def update_score(db: Session, match_id: int, data: ScoreUpdate) -> Score:
             detail="No score has been submitted for this match"
         )
 
-    _ensure_not_finalized(match, score)
-    _ensure_match_is_live(match)
+    _ensure_not_finalized(db, match, score)
+    _ensure_match_is_live(match, allow_ended=True)
 
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(score, field, value)

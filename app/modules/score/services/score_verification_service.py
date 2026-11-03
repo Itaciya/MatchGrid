@@ -11,6 +11,11 @@ from app.modules.match.models.match import Match
 from app.modules.score.models.score import Score, ScoreVerificationStatus
 
 MATCH_STATUS_LIVE = "live"
+MATCH_STATUS_COMPLETED = "completed"
+
+# The organiser may review a score while the match is in progress or after the
+# scorer has ended it (before the result is finalized).
+REVIEWABLE_MATCH_STATUSES = (MATCH_STATUS_LIVE, MATCH_STATUS_COMPLETED)
 
 PENDING = ScoreVerificationStatus.PENDING.value
 VERIFIED = ScoreVerificationStatus.VERIFIED.value
@@ -96,10 +101,10 @@ def review_score(
                 )
             )
 
-    if match.status != MATCH_STATUS_LIVE:
+    if match.status not in REVIEWABLE_MATCH_STATUSES:
         raise ConflictException(
             detail=(
-                "Scores can only be reviewed while a match is live "
+                "Scores can only be reviewed once a match has started "
                 f"(current status: '{match.status}')"
             )
         )

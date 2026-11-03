@@ -64,11 +64,11 @@ def finalize_match_result(
             detail="The result for this match has already been finalized"
         )
 
-    if match.status != MATCH_STATUS_LIVE:
+    if match.status != MATCH_STATUS_COMPLETED:
         raise ConflictException(
             detail=(
-                "Only a live match can be finalized "
-                f"(current status: '{match.status}')"
+                "The scorer must end the match before its result can be "
+                f"finalized (current status: '{match.status}')"
             )
         )
 
