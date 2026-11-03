@@ -15,6 +15,9 @@ from app.modules.tournament.services.tournament_service import (
     invalidate_public_tournament_cache,
     update_tournament,
 )
+from app.modules.tournament.services.tournament_status_service import (
+    end_tournament,
+)
 from app.modules.user.models import User
 
 
@@ -63,6 +66,17 @@ def archive_tournament_route(
     db: Session = Depends(get_db),
 ):
     return archive_tournament(db, tournament)
+
+@router.post(
+    "/tournaments/{tournament_id}/end",
+    response_model=TournamentResponse,
+)
+def end_tournament_route(
+    tournament: Tournament = Depends(verify_tournament_owner),
+    db: Session = Depends(get_db),
+):
+    return end_tournament(db, tournament)
+
 
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
 

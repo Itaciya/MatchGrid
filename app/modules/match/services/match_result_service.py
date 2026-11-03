@@ -127,6 +127,12 @@ def finalize_match_result(
     )
     advance_single_elimination_winner(db, match_id, result)
 
+    from app.modules.tournament.services.tournament_status_service import (
+        complete_tournament_if_done,
+    )
+
+    complete_tournament_if_done(db, match.tournament_id)
+
     return result
 
 
