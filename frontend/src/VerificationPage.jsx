@@ -1,20 +1,35 @@
 import { useEffect, useState } from 'react'
-import { getFixtures, getScoreForReview, reviewScore } from './services/resultsApi'
+import { finalizeResult, getFixtures, getScoreForReview, reviewScore } from './services/resultsApi'
 
 const box = { border: '1px solid rgba(128,128,128,.4)', borderRadius: 8, padding: 16, marginBottom: 12 }
 
+const STATUS_LABELS = {
+  scheduled: 'Scheduled',
+  live: 'Live',
+  paused: 'Paused',
+  completed: 'Ended',
+  cancelled: 'Cancelled',
+}
+
 function MatchRow({ fixture }) {
   const [score, setScore] = useState(null)
+  const [matchStatus, setMatchStatus] = useState(fixture.status)
+  const [published, setPublished] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
+  const [ok, setOk] = useState('')
 
   useEffect(() => {
     let cancelled = false
     getScoreForReview(fixture.id)
       .then((s) => { if (!cancelled) setScore(s) })
-      .catch((err) => { if (cancelled) return; if (/no score/i.test(err.message)) setNote('No score submitted yet.'); else setError(err.message) })
+      .catch((err) => {
+        if (cancelled) return
+        if (err.status === 404) setNote('No score has been submitted yet.')
+        else setError(err.message)
+      })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [fixture.id])
@@ -22,8 +37,10 @@ function MatchRow({ fixture }) {
   async function decide(status) {
     setBusy(true)
     setError('')
+    setOk('')
     try {
       setScore(await reviewScore(fixture.id, status))
+      setOk(status === 'verified' ? 'Score verified. You can now finalize and publish the result.' : 'Score rejected. The scorer needs to correct it.')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -31,27 +48,82 @@ function MatchRow({ fixture }) {
     }
   }
 
-  const reviewable = score && score.verification_status !== 'verified'
+  async function finalize() {
+    if (!window.confirm('Finalize and publish this result? It becomes official and public.')) return
+    setBusy(true)
+    setError('')
+    setOk('')
+    try {
+      await finalizeResult(fixture.id)
+      setMatchStatus('completed')
+      setPublished(true)
+      setOk('Result finalized and published.')
+    } catch (err) {
+      setError(err.message)
+      // Already finalized earlier: reflect that instead of offering the button again.
+      if (err.status === 409 && /already been finalized/i.test(err.serverMessage || '')) setPublished(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const matchStarted = matchStatus === 'live' || matchStatus === 'completed'
+  const verification = score?.verification_status
+  const canReview = Boolean(score) && verification === 'pending' && matchStarted && !published
+  const canFinalize = Boolean(score) && verification === 'verified' && matchStatus === 'completed' && !published
 
   return (
     <div style={box}>
-      <strong>Match {fixture.match_number}</strong>
-      {' '}(Team {fixture.team_a_id ?? 'TBD'} vs Team {fixture.team_b_id ?? 'TBD'})
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <span>
+          <strong>Match {fixture.match_number}</strong>
+          {' '}(Team {fixture.team_a_id ?? 'TBD'} vs Team {fixture.team_b_id ?? 'TBD'})
+        </span>
+        <span className="status-pill">Match: {STATUS_LABELS[matchStatus] || matchStatus}</span>
+      </div>
       {loading && <div>Loading score...</div>}
       {note && <div style={{ opacity: 0.7 }}>{note}</div>}
       {score && (
         <div style={{ margin: '8px 0' }}>
           Submitted score: <b>{score.team_a_score} - {score.team_b_score}</b>
-          {' '}<span className="status-pill">{score.verification_status}</span>
+          {' '}<span className="status-pill">{published ? 'published' : verification}</span>
         </div>
       )}
-      {reviewable && (
+
+      {score && !matchStarted && (
+        <div style={{ fontSize: 13, opacity: 0.7 }}>Scores can be reviewed once the match has started.</div>
+      )}
+      {matchStatus === 'live' && canReview && (
+        <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 6 }}>
+          The match is still live. You can verify now or wait until the scorer ends it.
+        </div>
+      )}
+      {verification === 'verified' && matchStatus === 'live' && !published && (
+        <div style={{ fontSize: 13, opacity: 0.7 }}>
+          Score verified. The result can be finalized once the scorer ends the match.
+        </div>
+      )}
+      {verification === 'rejected' && (
+        <div style={{ fontSize: 13, opacity: 0.7 }}>Rejected. Waiting for the scorer to submit a corrected score.</div>
+      )}
+
+      {canReview && (
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" disabled={busy} onClick={() => decide('verified')}>Approve</button>
+          <button type="button" disabled={busy} onClick={() => decide('verified')}>Verify score</button>
           <button type="button" disabled={busy} onClick={() => decide('rejected')}>Reject</button>
         </div>
       )}
+      {canFinalize && (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" disabled={busy} onClick={finalize}>
+            {busy ? 'Publishing...' : 'Finalize & publish result'}
+          </button>
+        </div>
+      )}
+      {published && <div style={{ fontSize: 13, opacity: 0.7 }}>The official result is published.</div>}
+
       {error && <div className="notice notice-error" role="alert">{error}</div>}
+      {ok && <div className="notice notice-success" role="status">{ok}</div>}
     </div>
   )
 }

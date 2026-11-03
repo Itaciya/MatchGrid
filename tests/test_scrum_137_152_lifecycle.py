@@ -58,6 +58,15 @@ def test_match_goes_from_scheduled_to_corrected_result(db):
     assert verified.status_code == 200, verified.text
     assert _call("PATCH", f"{base}/score", official, {"team_a_score": 9}).status_code == 409
 
+    # A live match cannot be finalized, even with a verified score
+    assert _call("POST", f"{base}/result/finalize", organiser).status_code == 409
+
+    # The scorer ends the match (verification above happened while live)
+    assert _call("POST", f"{base}/complete", stranger).status_code == 403
+    ended = _call("POST", f"{base}/complete", official)
+    assert ended.status_code == 200, ended.text
+    assert ended.json()["status"] == "completed"
+
     # Finalization: exactly once, and standings follow
     finalized = _call("POST", f"{base}/result/finalize", organiser)
     assert finalized.status_code == 201, finalized.text

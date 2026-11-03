@@ -24,7 +24,7 @@ export async function saveScore(matchId, teamA, teamB, alreadySaved = false) {
   try {
     return await submitScore(matchId, teamA, teamB)
   } catch (err) {
-    if (/already|exist|duplicate|conflict/i.test(err.message)) {
+    if (err.status === 409 && /already exists/i.test(err.serverMessage || '')) {
       return updateScore(matchId, teamA, teamB)
     }
     throw err
@@ -34,4 +34,15 @@ export async function saveScore(matchId, teamA, teamB, alreadySaved = false) {
 
 export function getScore(matchId) {
   return apiRequest(`/matches/${matchId}/score`)
+}
+
+// Scorer starts a scheduled match: scheduled -> live.
+export function startMatch(matchId) {
+  return apiRequest(`/matches/${matchId}/start`, { method: 'POST' })
+}
+
+// Scorer ends a live match: live -> completed. The organiser then verifies
+// the score and finalizes (publishes) the result.
+export function endMatch(matchId) {
+  return apiRequest(`/matches/${matchId}/complete`, { method: 'POST' })
 }

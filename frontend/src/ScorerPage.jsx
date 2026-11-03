@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getMyMatches, getScore, saveScore } from './services/scorerApi'
+import { endMatch, getMyMatches, getScore, saveScore, startMatch } from './services/scorerApi'
 import { useLiveScores } from './realtime/useLiveScores'
 import { useMatchStatus } from './realtime/useMatchStatus'
 import { useRealtimeStatus } from './realtime/useRealtime'
@@ -23,13 +23,32 @@ function normalize(m) {
 const toScore = (v) => (/^\d+$/.test(String(v).trim()) ? Number(v) : null)
 const box = { border: '1px solid rgba(128,128,128,.4)', borderRadius: 8, padding: 16, marginBottom: 12 }
 
+const STATUS_LABELS = {
+  scheduled: 'Scheduled',
+  live: 'Live',
+  paused: 'Paused',
+  completed: 'Ended',
+  cancelled: 'Cancelled',
+}
+
 function MatchCard({ match, live, liveStatus }) {
   const [a, setA] = useState(String(match.a))
   const [b, setB] = useState(String(match.b))
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(match.a !== '' && match.b !== '')
+  const [localStatus, setStatus] = useState(match.status || 'scheduled')
+  const [changingStatus, setChangingStatus] = useState(false)
   const [error, setError] = useState('')
   const [ok, setOk] = useState('')
+
+  // Status pushed over the websocket wins; the local value covers the moment
+  // right after a button press and any time the socket is offline.
+  const status = liveStatus || localStatus
+
+  const hasTeams = match.teamA !== 'TBD' && match.teamB !== 'TBD'
+  const isLive = status === 'live'
+  const isScheduled = status === 'scheduled'
+  const isEnded = status === 'completed'
 
   async function onSave() {
     setError(''); setOk('')
@@ -50,24 +69,81 @@ function MatchCard({ match, live, liveStatus }) {
     }
   }
 
+  async function onStart() {
+    setError(''); setOk('')
+    setChangingStatus(true)
+    try {
+      const updated = await startMatch(match.id)
+      setStatus(updated?.status || 'live')
+      setOk('Match started. It is now live and you can enter scores.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setChangingStatus(false)
+    }
+  }
+
+  async function onEnd() {
+    setError(''); setOk('')
+    if (!saved) {
+      setError('Submit the final score before ending the match.')
+      return
+    }
+    if (!window.confirm('End this match? You will not be able to change the score afterwards unless the organiser rejects it.')) return
+    setChangingStatus(true)
+    try {
+      const updated = await endMatch(match.id)
+      setStatus(updated?.status || 'completed')
+      setOk('Match ended. The organiser will now verify the score and publish the result.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setChangingStatus(false)
+    }
+  }
+
   return (
     <div style={box}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
         <strong>Match {match.number}: {match.teamA} vs {match.teamB}</strong>
-        <span className="status-pill">{liveStatus || match.status || 'scheduled'}</span>
+        <span className="status-pill">{STATUS_LABELS[status] || status}</span>
       </div>
       {match.scheduled && <div style={{ fontSize: 13, opacity: 0.7 }}>{new Date(match.scheduled).toLocaleString()}</div>}
       {match.role && <div style={{ fontSize: 13, opacity: 0.7 }}>Your role: {match.role}</div>}
 
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', margin: '12px 0', flexWrap: 'wrap' }}>
-        <label>{match.teamA}{' '}
-          <input type="number" min="0" step="1" value={a} onChange={(e) => setA(e.target.value)} style={{ width: 70 }} />
-        </label>
-        <label>{match.teamB}{' '}
-          <input type="number" min="0" step="1" value={b} onChange={(e) => setB(e.target.value)} style={{ width: 70 }} />
-        </label>
-        <button type="button" onClick={onSave} disabled={saving}>{saving ? 'Saving...' : (saved ? 'Update score' : 'Submit score')}</button>
-      </div>
+      {isScheduled && (
+        <div style={{ margin: '12px 0' }}>
+          <button type="button" onClick={onStart} disabled={changingStatus || !hasTeams}>
+            {changingStatus ? 'Starting...' : 'Start match'}
+          </button>
+          {!hasTeams && (
+            <div style={{ fontSize: 13, opacity: 0.7, marginTop: 6 }}>Both teams must be assigned before the match can start.</div>
+          )}
+        </div>
+      )}
+
+      {isLive && (
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', margin: '12px 0', flexWrap: 'wrap' }}>
+          <label>{match.teamA}{' '}
+            <input type="number" min="0" step="1" value={a} onChange={(e) => setA(e.target.value)} style={{ width: 70 }} />
+          </label>
+          <label>{match.teamB}{' '}
+            <input type="number" min="0" step="1" value={b} onChange={(e) => setB(e.target.value)} style={{ width: 70 }} />
+          </label>
+          <button type="button" onClick={onSave} disabled={saving || changingStatus}>{saving ? 'Saving...' : (saved ? 'Update score' : 'Submit score')}</button>
+          <button type="button" onClick={onEnd} disabled={saving || changingStatus}>{changingStatus ? 'Ending...' : 'End match'}</button>
+        </div>
+      )}
+
+      {isEnded && (
+        <div style={{ margin: '12px 0' }}>
+          {saved && <div>Final score: <b>{a} - {b}</b></div>}
+          <div style={{ fontSize: 13, opacity: 0.7 }}>This match has ended. Waiting for the organiser to verify the score and publish the result.</div>
+        </div>
+      )}
+
+      {status === 'paused' && <div style={{ fontSize: 13, opacity: 0.7, margin: '12px 0' }}>This match is paused.</div>}
+      {status === 'cancelled' && <div style={{ fontSize: 13, opacity: 0.7, margin: '12px 0' }}>This match was cancelled.</div>}
 
       {live && <div>Live score: <b>{live.home} - {live.away}</b></div>}
       {error && <div className="notice notice-error" role="alert">{error}</div>}

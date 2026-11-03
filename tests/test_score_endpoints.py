@@ -440,7 +440,7 @@ def test_verified_score_cannot_be_modified(db):
     assert score.team_a_score == 1
 
 
-def test_score_of_a_completed_match_cannot_be_modified(db):
+def test_score_of_an_ended_match_cannot_be_modified_unless_rejected(db):
     match = _make_match(db, status="completed")
     user = _assigned_official(db, match)
     score = _make_score(db, match, team_a_score=1, team_b_score=0)
@@ -452,9 +452,28 @@ def test_score_of_a_completed_match_cannot_be_modified(db):
     )
 
     assert response.status_code == 409
-    assert "Finalized" in response.json()["error"]["message"]
+    assert "ended" in response.json()["error"]["message"]
     db.refresh(score)
     assert score.team_a_score == 1
+
+
+def test_rejected_score_of_an_ended_match_can_be_corrected(db):
+    match = _make_match(db, status="completed")
+    user = _assigned_official(db, match)
+    score = _make_score(db, match, team_a_score=1, team_b_score=0)
+    score.verification_status = "rejected"
+    db.commit()
+
+    response = client.patch(
+        f"/matches/{match.id}/score",
+        json={"team_a_score": 2},
+        headers=_auth_header(user),
+    )
+
+    assert response.status_code == 200, response.text
+    db.refresh(score)
+    assert score.team_a_score == 2
+    assert score.verification_status == "pending"
 
 
 def test_score_cannot_be_updated_unless_match_is_live(db):

@@ -78,7 +78,7 @@ def _make_match(db, with_teams=True):
         scheduled_at=datetime(
             2099, 1, 2, 10, 0, tzinfo=timezone.utc
         ),
-        status="live",
+        status="completed",
     )
     db.add(match)
     db.commit()
@@ -153,7 +153,7 @@ def test_unverified_score_cannot_be_finalized(db, verification_status):
     assert db.query(MatchResult).filter_by(match_id=match.id).count() == 0
 
     db.refresh(match)
-    assert match.status == "live"
+    assert match.status == "completed"
 
 
 def test_match_cannot_be_finalized_twice(db):
@@ -180,7 +180,7 @@ def test_another_organiser_cannot_finalize_the_result(db):
     assert db.query(MatchResult).filter_by(match_id=match.id).count() == 0
 
     db.refresh(match)
-    assert match.status == "live"
+    assert match.status == "completed"
 
 
 @pytest.mark.parametrize(
@@ -207,7 +207,7 @@ def test_finalization_requires_a_submitted_score(db):
     assert db.query(MatchResult).filter_by(match_id=match.id).count() == 0
 
     db.refresh(match)
-    assert match.status == "live"
+    assert match.status == "completed"
 
 
 def test_finalization_requires_both_teams(db):
@@ -220,7 +220,7 @@ def test_finalization_requires_both_teams(db):
     assert db.query(MatchResult).filter_by(match_id=match.id).count() == 0
 
     db.refresh(match)
-    assert match.status == "live"
+    assert match.status == "completed"
 
 
 def test_draw_finalization_has_no_winner_or_loser(db):
@@ -245,3 +245,57 @@ def test_unauthenticated_user_cannot_finalize(db):
 
     assert response.status_code in (401, 403)
     assert db.query(MatchResult).filter_by(match_id=match.id).count() == 0
+
+
+def test_organiser_can_finalize_after_the_scorer_ended_the_match(db):
+    match, organiser = _make_match(db)
+    match.status = "completed"  # scorer pressed "End match"
+    db.commit()
+    _make_score(db, match, team_a_score=0, team_b_score=2)
+
+    response = _finalize(match, organiser)
+
+    assert response.status_code == 201, response.text
+    assert response.json()["outcome"] == "team_b_win"
+    db.refresh(match)
+    assert match.status == "completed"
+
+
+def test_ended_match_cannot_be_finalized_twice(db):
+    match, organiser = _make_match(db)
+    match.status = "completed"
+    db.commit()
+    _make_score(db, match)
+
+    assert _finalize(match, organiser).status_code == 201
+    second = _finalize(match, organiser)
+
+    assert second.status_code == 409
+    assert "already been finalized" in second.json()["error"]["message"]
+
+
+def test_ended_match_with_unverified_score_cannot_be_finalized(db):
+    match, organiser = _make_match(db)
+    match.status = "completed"
+    db.commit()
+    _make_score(db, match, verification_status="pending")
+
+    response = _finalize(match, organiser)
+
+    assert response.status_code == 409
+    assert db.query(MatchResult).filter_by(match_id=match.id).first() is None
+
+
+def test_live_match_cannot_be_finalized_even_with_a_verified_score(db):
+    match, organiser = _make_match(db)
+    match.status = "live"
+    db.commit()
+    _make_score(db, match)
+
+    response = _finalize(match, organiser)
+
+    assert response.status_code == 409
+    assert "end the match" in response.json()["error"]["message"]
+    assert db.query(MatchResult).filter_by(match_id=match.id).first() is None
+    db.refresh(match)
+    assert match.status == "live"
