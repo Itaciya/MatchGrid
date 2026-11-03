@@ -37,11 +37,24 @@ def start_match(db: Session, match_id: int) -> Match:
     match.status = MATCH_STATUS_LIVE
     match.started_at = datetime.now(timezone.utc)
 
+    from app.modules.tournament.services.tournament_status_service import (
+        mark_tournament_live,
+    )
+
+    tournament_went_live = mark_tournament_live(db, match.tournament_id)
+
     try:
         db.commit()
         db.refresh(match)
     except Exception:
         db.rollback()
         raise
+
+    if tournament_went_live:
+        from app.modules.tournament.services.tournament_service import (
+            invalidate_public_tournament_cache,
+        )
+
+        invalidate_public_tournament_cache()
 
     return match
