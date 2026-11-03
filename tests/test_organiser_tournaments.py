@@ -399,7 +399,7 @@ def test_organiser_can_archive_own_completed_tournament(db):
     assert archived_tournament.organizer_id == organiser.id
 
 
-def test_organiser_cannot_archive_upcoming_tournament(db):
+def test_organiser_can_archive_upcoming_tournament(db):
     organiser = _make_user(db, role="organiser")
 
     tournament = _make_tournament(
@@ -413,15 +413,70 @@ def test_organiser_cannot_archive_upcoming_tournament(db):
         headers=_auth_header(organiser),
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 200
 
-    data = response.json()
+    db.refresh(tournament)
 
-    assert data["success"] is False
-    assert data["error"]["type"] == "application_error"
-    assert data["error"]["message"] == (
-        "Only completed tournaments can be archived"
+    assert tournament.status == "archived"
+
+
+def test_organiser_can_archive_ongoing_tournament(db):
+    organiser = _make_user(db, role="organiser")
+
+    tournament = _make_tournament(
+        db,
+        organiser.id,
+        status="ongoing",
     )
+
+    response = client.patch(
+        f"/organiser/tournaments/{tournament.id}/archive",
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 200
+
+    db.refresh(tournament)
+
+    assert tournament.status == "archived"
+
+
+def test_organiser_can_end_ongoing_tournament(db):
+    organiser = _make_user(db, role="organiser")
+
+    tournament = _make_tournament(
+        db,
+        organiser.id,
+        status="ongoing",
+    )
+
+    response = client.post(
+        f"/organiser/tournaments/{tournament.id}/end",
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 200
+
+    db.refresh(tournament)
+
+    assert tournament.status == "completed"
+
+
+def test_organiser_cannot_end_upcoming_tournament(db):
+    organiser = _make_user(db, role="organiser")
+
+    tournament = _make_tournament(
+        db,
+        organiser.id,
+        status="upcoming",
+    )
+
+    response = client.post(
+        f"/organiser/tournaments/{tournament.id}/end",
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 409
 
     db.refresh(tournament)
 
@@ -519,9 +574,7 @@ def test_archived_tournament_cannot_be_archived_again(db):
 
     assert data["success"] is False
     assert data["error"]["type"] == "application_error"
-    assert data["error"]["message"] == (
-        "Only completed tournaments can be archived"
-    )
+    assert data["error"]["message"] == "Tournament is already archived"
 
     db.refresh(tournament)
 

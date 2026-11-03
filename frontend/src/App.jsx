@@ -749,7 +749,7 @@ const [page, setPage] = useState('home')
   )
 
   const activeCount = useMemo(
-    () => tournaments.filter((item) => String(item.status).toLowerCase() === 'active').length,
+    () => tournaments.filter((item) => String(item.status).toLowerCase() === 'ongoing').length,
     [tournaments],
   )
 
@@ -984,11 +984,9 @@ const [page, setPage] = useState('home')
                   }}
                 >
                   <option value="">All statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="active">Active</option>
-                  <option value="published">Published</option>
+                  <option value="upcoming">Upcoming</option>
+                  <option value="ongoing">Ongoing</option>
                   <option value="completed">Completed</option>
-                  <option value="archived">Archived</option>
                 </select>
               </label>
               <label>
@@ -1083,7 +1081,7 @@ const [page, setPage] = useState('home')
   } catch (error) {
     setFixturesError(error.message || 'Could not generate and publish fixtures.')
   }
-}}>Create & Publish Fixtures</button><button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button>{selectedTournament.status === 'live' && <button className="button button-secondary" onClick={async () => { if (!window.confirm('End this tournament? It will be marked as completed.')) return; try { await apiRequest(`/organiser/tournaments/${selectedTournament.id}/end`, { method: 'POST' }); await openTournament(selectedTournament.id) } catch (error) { window.alert(error.message) } }}>End tournament</button>}{selectedTournament.status !== 'archived' && <button className="button button-secondary" style={{ color: '#c0392b' }} onClick={async () => { if (!window.confirm('Delete this tournament? It will be hidden from everyone.')) return; try { await apiRequest(`/organiser/tournaments/${selectedTournament.id}/archive`, { method: 'PATCH' }); setPage('tournaments') } catch (error) { window.alert(error.message) } }}>Delete tournament</button>}</>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button></div></div>{currentUser?.role === 'organiser' && <TournamentScorerAssignment tournamentId={selectedTournament.id} />}</div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixtures..." /> : <><ErrorNotice>{fixturesError}</ErrorNotice><div className="fixture-filters filter-row">
+}}>Create & Publish Fixtures</button><button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button>{selectedTournament.status === 'ongoing' && <button className="button button-secondary" onClick={async () => { if (!window.confirm('End this tournament? It will be marked as completed.')) return; try { await apiRequest(`/organiser/tournaments/${selectedTournament.id}/end`, { method: 'POST' }); await openTournament(selectedTournament.id) } catch (error) { window.alert(error.message) } }}>End tournament</button>}{selectedTournament.status !== 'archived' && <button className="button button-secondary" style={{ color: '#c0392b' }} onClick={async () => { if (!window.confirm('Delete this tournament? It will be hidden from everyone.')) return; try { await apiRequest(`/organiser/tournaments/${selectedTournament.id}/archive`, { method: 'PATCH' }); setPage('tournaments') } catch (error) { window.alert(error.message) } }}>Delete tournament</button>}</>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button></div></div>{currentUser?.role === 'organiser' && <TournamentScorerAssignment tournamentId={selectedTournament.id} />}</div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixtures..." /> : <><ErrorNotice>{fixturesError}</ErrorNotice><div className="fixture-filters filter-row">
   <label>
     Status
     <select value={fixtureStatusFilter} onChange={(event) => { setFixtureStatusFilter(event.target.value); setFixturePage(1) }}>
