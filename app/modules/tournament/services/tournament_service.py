@@ -26,8 +26,8 @@ TOURNAMENT_STATUSES = {
 }
 
 VALID_STATUS_TRANSITIONS = {
-    "upcoming": {"ongoing"},
-    "ongoing": {"completed"},
+    "upcoming": {"ongoing", "archived"},
+    "ongoing": {"completed", "archived"},
     "completed": {"archived"},
     "archived": set(),
 }
@@ -352,10 +352,10 @@ def archive_tournament(
     db: Session,
     tournament: Tournament,
 ) -> Tournament:
-    """Archive a completed tournament without deleting its history."""
-    if tournament.status != "completed":
+    """Archive (soft delete) a tournament without deleting its history."""
+    if tournament.status == "archived":
         raise BadRequestException(
-            detail="Only completed tournaments can be archived"
+            detail="Tournament is already archived"
         )
 
     return change_tournament_status(
