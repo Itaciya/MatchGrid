@@ -299,3 +299,61 @@ def test_live_match_cannot_be_finalized_even_with_a_verified_score(db):
     assert db.query(MatchResult).filter_by(match_id=match.id).first() is None
     db.refresh(match)
     assert match.status == "live"
+
+
+def test_organiser_can_read_finalized_result(db):
+    match, organiser = _make_match(db)
+    _make_score(db, match, team_a_score=3, team_b_score=1)
+
+    finalized = _finalize(match, organiser)
+    assert finalized.status_code == 201, finalized.text
+
+    response = client.get(
+        f"/matches/{match.id}/result",
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["match_id"] == match.id
+    assert data["id"] == finalized.json()["id"]
+    assert data["outcome"] == "team_a_win"
+    assert data["team_a_score"] == 3
+    assert data["team_b_score"] == 1
+    assert data["finalized_by_id"] == organiser.id
+
+
+def test_result_lookup_returns_404_when_not_finalized(db):
+    match, organiser = _make_match(db)
+
+    response = client.get(
+        f"/matches/{match.id}/result",
+        headers=_auth_header(organiser),
+    )
+
+    assert response.status_code == 404, response.text
+
+
+def test_another_organiser_cannot_read_finalized_result(db):
+    match, organiser = _make_match(db)
+    _make_score(db, match)
+    assert _finalize(match, organiser).status_code == 201
+
+    other_organiser = _make_user(db, "organiser")
+    response = client.get(
+        f"/matches/{match.id}/result",
+        headers=_auth_header(other_organiser),
+    )
+
+    assert response.status_code == 403, response.text
+
+
+def test_unauthenticated_user_cannot_read_finalized_result(db):
+    match, organiser = _make_match(db)
+    _make_score(db, match)
+    assert _finalize(match, organiser).status_code == 201
+
+    response = client.get(f"/matches/{match.id}/result")
+
+    assert response.status_code in (401, 403), response.text
+

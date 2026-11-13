@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { endMatch, getMyMatches, getScore, saveScore, startMatch } from './services/scorerApi'
 import { useLiveScores } from './realtime/useLiveScores'
 import { useMatchStatus } from './realtime/useMatchStatus'
@@ -130,8 +130,8 @@ function MatchCard({ match, live, liveStatus }) {
           <label>{match.teamB}{' '}
             <input type="number" min="0" step="1" value={b} onChange={(e) => setB(e.target.value)} style={{ width: 70 }} />
           </label>
-          <button type="button" onClick={onSave} disabled={saving || changingStatus}>{saving ? 'Saving...' : (saved ? 'Update score' : 'Submit score')}</button>
-          <button type="button" onClick={onEnd} disabled={saving || changingStatus}>{changingStatus ? 'Ending...' : 'End match'}</button>
+          <button type="button" onClick={onSave} disabled={saving || changingStatus || Boolean(match.scoreLoadError)}>{saving ? 'Saving...' : (saved ? 'Update score' : 'Submit score')}</button>
+          <button type="button" onClick={onEnd} disabled={saving || changingStatus || Boolean(match.scoreLoadError)}>{changingStatus ? 'Ending...' : 'End match'}</button>
         </div>
       )}
 
@@ -146,6 +146,7 @@ function MatchCard({ match, live, liveStatus }) {
       {status === 'cancelled' && <div style={{ fontSize: 13, opacity: 0.7, margin: '12px 0' }}>This match was cancelled.</div>}
 
       {live && <div>Live score: <b>{live.home} - {live.away}</b></div>}
+      {match.scoreLoadError && <div className="notice notice-error" role="alert">{match.scoreLoadError}</div>}
       {error && <div className="notice notice-error" role="alert">{error}</div>}
       {ok && <div className="notice notice-success" role="status">{ok}</div>}
     </div>
@@ -163,7 +164,22 @@ export default function ScorerPage() {
   useEffect(() => {
     let cancelled = false
     getMyMatches()
-      .then(async (rows) => { const list = (rows || []).map(normalize); const withScores = await Promise.all(list.map(async (m) => { try { const s = await getScore(m.id); return { ...m, a: String(s.team_a_score), b: String(s.team_b_score) } } catch { return m } })); if (!cancelled) setMatches(withScores) })
+      .then(async (rows) => {
+        const list = (rows || []).map(normalize)
+        const withScores = await Promise.all(list.map(async (m) => {
+          try {
+            const score = await getScore(m.id)
+            return { ...m, a: String(score.team_a_score), b: String(score.team_b_score) }
+          } catch (err) {
+            if (err.status === 404) return m
+            return {
+              ...m,
+              scoreLoadError: 'Could not load the saved score. Refresh this page before editing or ending this match.',
+            }
+          }
+        }))
+        if (!cancelled) setMatches(withScores)
+      })
       .catch((err) => { if (!cancelled) setError(err.message) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }

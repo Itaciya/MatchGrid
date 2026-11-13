@@ -1,4 +1,4 @@
-﻿from logging.config import fileConfig
+from logging.config import fileConfig
 import os
 
 from dotenv import load_dotenv
@@ -25,6 +25,7 @@ from app.modules.match.models.match_result_correction import MatchResultCorrecti
 from app.modules.match.models.match_result_correction import MatchResultCorrection
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.tournament_team.models.tournament_team import TournamentTeam
+from app.modules.tournament_team.models.tournament_team_player import TournamentTeamPlayer
 from app.modules.venue.models.venue import Venue
 from app.modules.audit.models.audit_log import AuditLog
 
@@ -51,6 +52,8 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # SQLAlchemy metadata for Alembic autogenerate
+from app.modules.official_assignment.models.tournament_scorer_assignment import TournamentScorerAssignment
+
 target_metadata = Base.metadata
 
 
@@ -93,5 +96,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-
-from app.modules.official_assignment.models.tournament_scorer_assignment import TournamentScorerAssignment

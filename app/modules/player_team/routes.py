@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+﻿from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, require_role
@@ -33,6 +33,9 @@ from app.modules.player_team.services.team_service import (
 )
 
 from app.modules.user.models import User
+from app.modules.player_team.models.player import Player
+from app.modules.player_team.models.team import Team
+from fastapi import HTTPException
 
 
 router = APIRouter(
@@ -58,6 +61,21 @@ def create_player_profile(
 ):
     return create_player(db, current_user.id, data)
 
+
+@router.get(
+    "/profile/me",
+    response_model=PlayerResponse | None,
+)
+def get_my_player_profile(
+    current_user: User = Depends(require_role("player")),
+    db: Session = Depends(get_db),
+):
+    """Return the authenticated player's own profile, if it exists."""
+    return (
+        db.query(Player)
+        .filter(Player.user_id == current_user.id)
+        .first()
+    )
 
 @router.get(
     "/profile/{player_id}",
@@ -103,6 +121,22 @@ def update_player_profile_status(
 ):
     return update_player_status(db, player_id, data)
 
+
+@router.get(
+    "/teams/me",
+    response_model=list[TeamResponse],
+)
+def get_my_teams(
+    current_user: User = Depends(require_role("player")),
+    db: Session = Depends(get_db),
+):
+    """Return teams captained by the authenticated player."""
+    return (
+        db.query(Team)
+        .filter(Team.captain_id == current_user.id)
+        .order_by(Team.id.asc())
+        .all()
+    )
 
 @router.get(
     "/team/{team_id}",

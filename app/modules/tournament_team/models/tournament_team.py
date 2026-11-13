@@ -10,10 +10,15 @@ class TournamentTeam(Base):
     __tablename__ = "tournament_teams"
     __table_args__ = (
         UniqueConstraint(
-        "tournament_id",
-        "team_id",
-        name="uq_tournament_team",
-    ),
+            "tournament_id",
+            "team_id",
+            name="uq_tournament_team",
+        ),
+        UniqueConstraint(
+            "tournament_id",
+            "id",
+            name="uq_tournament_team_id_pair",
+        ),
     )
 
     id: Mapped[int] = mapped_column(

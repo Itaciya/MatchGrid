@@ -5,6 +5,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Integer,
     LargeBinary,
     String,
     Text,
@@ -42,6 +43,16 @@ class Tournament(Base):
         default="team",
         server_default="team",
         index=True,
+    )
+
+    min_roster_size: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    max_roster_size: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
     )
 
     description: Mapped[str | None] = mapped_column(

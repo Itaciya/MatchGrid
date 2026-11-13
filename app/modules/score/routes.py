@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import verify_assigned_official, verify_match_organiser
-from app.core.exceptions import BadRequestException
+from app.core.exceptions import BadRequestException, NotFoundException
 from app.data_access.database import get_db
 from app.modules.score.schemas.score import ScoreVerificationDecision
 from app.modules.score.services.score_verification_service import review_score
@@ -20,6 +20,7 @@ from app.modules.match.services.match_result_service import (
 from app.modules.score.schemas.match_result import MatchResultResponse
 from app.modules.score.schemas.match_result_correction import MatchResultCorrectionRequest
 from app.modules.match.models.match import Match
+from app.modules.match.models.match_result import MatchResult
 from app.realtime.connection_manager import manager
 from app.realtime.redis_pubsub import pubsub_manager
 router = APIRouter(
@@ -149,6 +150,28 @@ async def finalize_result_endpoint(
 )
 
     return result
+
+@router.get(
+    "/{match_id}/result",
+    response_model=MatchResultResponse,
+)
+def get_finalized_result_endpoint(
+    match_id: int,
+    organiser: User = Depends(verify_match_organiser),
+    db: Session = Depends(get_db),
+):
+    """Get the finalized result for a match owned by this organiser."""
+    result = (
+        db.query(MatchResult)
+        .filter(MatchResult.match_id == match_id)
+        .first()
+    )
+    if result is None:
+        raise NotFoundException(
+            detail="No finalized result exists for this match"
+        )
+    return result
+
 
 @router.patch(
     "/{match_id}/result",

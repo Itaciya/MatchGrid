@@ -1,4 +1,4 @@
-const API_BASE_URL = (
+﻿const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 ).replace(/\/+$/, '')
 
@@ -52,6 +52,15 @@ const SERVER_MESSAGE_REWRITES = [
   [/you are not assigned to this match/i, () => 'You are not assigned to this match, so you cannot manage it.'],
   [/you do not own this tournament/i, () => 'This tournament belongs to another organiser, so you cannot change it.'],
   [/your role does not permit this action/i, () => 'Your account type is not allowed to do this.'],
+  [/player profile not found/i, () => 'Your account does not have a player profile yet. Please complete your player profile first.'],
+  [/only player registration is allowed/i, () => 'This tournament accepts individual registrations only.'],
+  [/only team registration is allowed/i, () => 'This tournament accepts team registrations only.'],
+  [/only the team captain can register the team/i, () => 'Only the team captain can register this team.'],
+  [/already registered for this tournament/i, () => 'You are already registered for this tournament.'],
+  [/registration has not opened yet/i, () => 'Registration has not opened yet. Please check the opening date.'],
+  [/registration deadline has passed/i, () => 'The registration deadline has passed.'],
+  [/only active teams can register/i, () => 'Your team is not active. Please contact the organiser.'],
+  [/only active players can register/i, () => 'Your player profile is not active. Please contact the organiser.'],
 ]
 
 // What to say when the server gave no usable message at all.
@@ -77,6 +86,8 @@ const NOT_FOUND_BY_ENDPOINT = [
   [/\/result(\/|$|\?)/, 'No published result exists for this match yet.'],
   [/\/score(\/review)?(\?|$)/, 'No score has been submitted for this match yet.'],
   [/\/matches\/tournaments\/\d+\/fixtures/, 'No fixtures were found for this tournament.'],
+  [/\/official-assignments\/tournaments\/\d+\/available-scorers/, 'We could not load the available scorers. Please refresh and try again.'],
+  [/\/official-assignments\/tournaments\/\d+\/scorers/, 'We could not assign the scorer. Please check your access and try again.'],
   [/\/tournaments\/\d+/, 'This tournament could not be found.'],
   [/\/matches\/\d+/, 'This match could not be found.'],
   [/\/teams?\//, 'This team could not be found.'],
@@ -126,21 +137,16 @@ function extractServerMessage(payload) {
 }
 
 // Generic messages the backend sends that say nothing useful on their own.
-const GENERIC_SERVER_MESSAGES = /^(not found|resource not found|bad request|invalid request data|an unexpected error occurred|a database error occurred|internal server error|forbidden|unauthorized|not authenticated)\.?$/i
 
 function toFriendlyMessage({ status, serverMessage, endpoint }) {
   const trimmed = (serverMessage || '').trim()
 
+  // Only explicitly reviewed messages are allowed through.
   if (trimmed) {
     for (const [pattern, rewrite] of SERVER_MESSAGE_REWRITES) {
       const match = trimmed.match(pattern)
       if (match) return rewrite(match)
     }
-  }
-
-  // A specific, readable server message is the most helpful thing we have.
-  if (trimmed && !GENERIC_SERVER_MESSAGES.test(trimmed)) {
-    return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`
   }
 
   if (status === 404) {
@@ -213,3 +219,4 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 export { API_BASE_URL, ApiError, apiRequest }
+

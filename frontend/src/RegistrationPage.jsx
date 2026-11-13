@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useState } from 'react'
 import { apiRequest } from './services/api'
 
 const STATUS_OPTIONS = ['pending', 'approved', 'rejected', 'cancelled']
@@ -10,16 +10,43 @@ function showDate(value) {
 }
 
 export default function RegistrationPage({ initialTournamentId = null }) {
-  const [tournamentId, setTournamentId] = useState(initialTournamentId ? String(initialTournamentId) : '')
+  const [tournamentId, setTournamentId] = useState(
+    initialTournamentId ? String(initialTournamentId) : ''
+  )
   const [teamId, setTeamId] = useState('')
   const [note, setNote] = useState('')
   const [tournament, setTournament] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [teams, setTeams] = useState([])
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [registrations, setRegistrations] = useState([])
   const [loading, setLoading] = useState(false)
   const [checking, setChecking] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [profileLoading, setProfileLoading] = useState(true)
+  const [profileSaving, setProfileSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  const loadAccountSetup = useCallback(async () => {
+    setProfileLoading(true)
+    try {
+      const result = await apiRequest('/player-team/profile/me')
+      setProfile(result || null)
+
+      if (result) {
+        const teamResult = await apiRequest('/player-team/teams/me')
+        setTeams(Array.isArray(teamResult) ? teamResult : [])
+      } else {
+        setTeams([])
+      }
+    } catch (err) {
+      setError(err.message || 'Could not load your player profile.')
+    } finally {
+      setProfileLoading(false)
+    }
+  }, [])
 
   const loadRegistrations = useCallback(async () => {
     setLoading(true)
@@ -35,17 +62,44 @@ export default function RegistrationPage({ initialTournamentId = null }) {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      loadAccountSetup()
       loadRegistrations()
     }, 0)
 
     return () => window.clearTimeout(timer)
-  }, [loadRegistrations])
+  }, [loadAccountSetup, loadRegistrations])
+
+  async function createProfile(event) {
+    event.preventDefault()
+    setError('')
+    setSuccess('')
+
+    setProfileSaving(true)
+    try {
+      await apiRequest('/player-team/profile', {
+        method: 'POST',
+        body: JSON.stringify({
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+        }),
+      })
+      setSuccess('Player profile created successfully.')
+      setFirstName('')
+      setLastName('')
+      await loadAccountSetup()
+    } catch (err) {
+      setError(err.message || 'Could not create your player profile.')
+    } finally {
+      setProfileSaving(false)
+    }
+  }
 
   async function checkTournament(event) {
     event.preventDefault()
     setError('')
     setSuccess('')
     setTournament(null)
+    setTeamId('')
 
     if (!/^[1-9]\d*$/.test(tournamentId)) {
       setError('Enter a valid tournament ID.')
@@ -55,10 +109,13 @@ export default function RegistrationPage({ initialTournamentId = null }) {
     setChecking(true)
     try {
       const result = await apiRequest(`/tournaments/${Number(tournamentId)}`)
-      if (!['individual', 'team'].includes(result.participation_type)) {
-        throw new Error('This tournament has an unsupported participation type.')
+      const participationType = String(result?.participation_type ?? '').trim().toLowerCase()
+
+      if (!['individual', 'team'].includes(participationType)) {
+        throw new Error('This tournament has an invalid participation setting. Please contact the organiser.')
       }
-      setTournament(result)
+
+      setTournament({ ...result, participation_type: participationType })
     } catch (err) {
       setError(err.message || 'Could not find this tournament.')
     } finally {
@@ -71,14 +128,19 @@ export default function RegistrationPage({ initialTournamentId = null }) {
     setError('')
     setSuccess('')
 
+    if (!profile) {
+      setError('Create your player profile before registering.')
+      return
+    }
+
     if (!tournament) {
       setError('Check the tournament first.')
       return
     }
 
     const isTeam = tournament.participation_type === 'team'
-    if (isTeam && !/^[1-9]\d*$/.test(teamId)) {
-      setError('Enter a valid team ID.')
+    if (isTeam && !teamId) {
+      setError('Select one of your teams.')
       return
     }
 
@@ -94,6 +156,7 @@ export default function RegistrationPage({ initialTournamentId = null }) {
           note: note.trim() || null,
         }),
       })
+
       setSuccess('Registration submitted. Its initial status is pending.')
       setTeamId('')
       setNote('')
@@ -111,9 +174,49 @@ export default function RegistrationPage({ initialTournamentId = null }) {
         <div>
           <p className="eyebrow">TOURNAMENT PARTICIPATION</p>
           <h1>Tournament registration</h1>
-          <p className="muted">Choose a tournament. Its participation type determines how you register.</p>
+          <p className="muted">Create your player profile, then register for a tournament.</p>
         </div>
       </div>
+
+      <section className="auth-card">
+        <h2>Your player profile</h2>
+        {profileLoading ? (
+          <p className="muted">Loading player profile...</p>
+        ) : profile ? (
+          <div className="detail-meta">
+            <div><strong>{profile.first_name} {profile.last_name}</strong></div>
+            <div className="muted">Player ID: {profile.id}</div>
+            <div className="muted">Status: {profile.status}</div>
+          </div>
+        ) : (
+          <form onSubmit={createProfile}>
+            <p className="muted">You need a player profile before you can register.</p>
+            <div className="field">
+              <label htmlFor="profile-first-name">First name</label>
+              <input
+                id="profile-first-name"
+                value={firstName}
+                maxLength={100}
+                onChange={(event) => setFirstName(event.target.value)}
+                required
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="profile-last-name">Last name</label>
+              <input
+                id="profile-last-name"
+                value={lastName}
+                maxLength={100}
+                onChange={(event) => setLastName(event.target.value)}
+                required
+              />
+            </div>
+            <button className="button button-primary auth-submit" type="submit" disabled={profileSaving}>
+              {profileSaving ? 'Creating profile...' : 'Create player profile'}
+            </button>
+          </form>
+        )}
+      </section>
 
       <form className="auth-card" onSubmit={checkTournament}>
         <h2>Find a tournament</h2>
@@ -132,7 +235,7 @@ export default function RegistrationPage({ initialTournamentId = null }) {
           />
         </div>
         <button className="button button-primary auth-submit" type="submit" disabled={checking}>
-          {checking ? 'Checking…' : 'Check tournament'}
+          {checking ? 'Checking...' : 'Check tournament'}
         </button>
       </form>
 
@@ -143,17 +246,29 @@ export default function RegistrationPage({ initialTournamentId = null }) {
             Participation: <strong>{tournament.participation_type === 'team' ? 'Team' : 'Individual'}</strong>
           </p>
 
-          {tournament.participation_type === 'team' ? (
+          {!profile ? (
+            <p className="muted">Create your player profile above before registering.</p>
+          ) : tournament.participation_type === 'team' ? (
             <div className="field">
-              <label htmlFor="registration-team">Your team ID</label>
-              <input
+              <label htmlFor="registration-team">Select your team</label>
+              <select
                 id="registration-team"
-                type="number"
-                min="1"
                 value={teamId}
                 onChange={(event) => setTeamId(event.target.value)}
                 required
-              />
+              >
+                <option value="">Choose your team</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+              {teams.length === 0 && (
+                <p className="muted">
+                  You have no team as captain yet. Open Team options and create a team first.
+                </p>
+              )}
               <p className="muted">Only the team captain can register the team.</p>
             </div>
           ) : (
@@ -165,14 +280,18 @@ export default function RegistrationPage({ initialTournamentId = null }) {
             <input
               id="registration-note"
               value={note}
-              maxLength="500"
+              maxLength={500}
               onChange={(event) => setNote(event.target.value)}
               placeholder="Additional information"
             />
           </div>
 
-          <button className="button button-primary auth-submit" type="submit" disabled={submitting}>
-            {submitting ? 'Submitting…' : 'Submit registration'}
+          <button
+            className="button button-primary auth-submit"
+            type="submit"
+            disabled={submitting || !profile || (tournament.participation_type === 'team' && teams.length === 0)}
+          >
+            {submitting ? 'Submitting...' : 'Submit registration'}
           </button>
         </form>
       )}
@@ -186,11 +305,11 @@ export default function RegistrationPage({ initialTournamentId = null }) {
           <p className="muted">Review your registration details and status.</p>
         </div>
         <button className="button button-secondary" onClick={loadRegistrations} disabled={loading}>
-          {loading ? 'Refreshing…' : 'Refresh'}
+          {loading ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
-      {loading && <p>Loading registrations…</p>}
+      {loading && <p>Loading registrations...</p>}
       {!loading && registrations.length === 0 && (
         <div className="detail-card"><p>No registrations found for your account.</p></div>
       )}
@@ -200,8 +319,12 @@ export default function RegistrationPage({ initialTournamentId = null }) {
           <table>
             <thead>
               <tr>
-                <th>Registration</th><th>Tournament</th><th>Team / Player</th>
-                <th>Type</th><th>Status</th><th>Registered</th>
+                <th>Registration</th>
+                <th>Tournament</th>
+                <th>Team / Player</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Registered</th>
               </tr>
             </thead>
             <tbody>
@@ -209,7 +332,7 @@ export default function RegistrationPage({ initialTournamentId = null }) {
                 <tr key={item.id}>
                   <td>#{item.id}</td>
                   <td>#{item.tournament_id}</td>
-                  <td>{item.team_id ? `Team #${item.team_id}` : item.player_id ? `Player #${item.player_id}` : '—'}</td>
+                  <td>{item.team_id ? 'Team registration' : item.player_id ? 'Individual registration' : '—'}</td>
                   <td>{item.registration_type || '—'}</td>
                   <td>
                     <span className={STATUS_OPTIONS.includes(String(item.status).toLowerCase()) ? `status status-${String(item.status).toLowerCase()}` : ''}>
@@ -226,3 +349,5 @@ export default function RegistrationPage({ initialTournamentId = null }) {
     </>
   )
 }
+
+
