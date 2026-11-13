@@ -164,6 +164,8 @@ def create_tournament(
         name=data.name,
         category=data.category,
         participation_type=data.participation_type,
+        min_roster_size=data.min_roster_size,
+        max_roster_size=data.max_roster_size,
         description=data.description,
         format=data.format,
         format_config=format_config,
@@ -249,6 +251,51 @@ def update_tournament(
         new_format,
         new_format_config,
     )
+
+    new_participation_type = updates.get(
+        "participation_type",
+        tournament.participation_type,
+    )
+
+    new_min_roster_size = updates.get(
+        "min_roster_size",
+        tournament.min_roster_size,
+    )
+    new_max_roster_size = updates.get(
+        "max_roster_size",
+        tournament.max_roster_size,
+    )
+
+    if new_participation_type == "individual":
+        if (
+            updates.get("min_roster_size") is not None
+            or updates.get("max_roster_size") is not None
+        ):
+            raise BadRequestException(
+                detail="Solo tournaments cannot have roster size limits"
+            )
+
+        new_min_roster_size = None
+        new_max_roster_size = None
+    else:
+        if tournament.participation_type == "individual":
+            if "min_roster_size" not in updates:
+                new_min_roster_size = 1
+            if "max_roster_size" not in updates:
+                new_max_roster_size = 20
+
+        if new_min_roster_size is None:
+            new_min_roster_size = 1
+        if new_max_roster_size is None:
+            new_max_roster_size = 20
+
+        if new_min_roster_size > new_max_roster_size:
+            raise BadRequestException(
+                detail="min_roster_size cannot exceed max_roster_size"
+            )
+
+    updates["min_roster_size"] = new_min_roster_size
+    updates["max_roster_size"] = new_max_roster_size
 
     for field, value in updates.items():
         if field == "format_config":

@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useState } from 'react'
 import { getOpenDisputes, resolveDispute, startDisputeReview } from './services/resultsApi'
 
-const isScore = (v) => /^\d+$/.test(String(v).trim())
+const isScore = (v) => {
+  const n = Number(String(v).trim())
+  return /^\d+$/.test(String(v).trim()) && Number.isSafeInteger(n)
+}
 
 function DisputeCard({ dispute, onChanged }) {
   const [decision, setDecision] = useState('resolved')
@@ -14,7 +17,7 @@ function DisputeCard({ dispute, onChanged }) {
   async function begin() {
     setBusy(true); setError('')
     try { onChanged(await startDisputeReview(dispute.id)) }
-    catch (err) { setError(err.message) }
+    catch (err) { setError(err?.message || 'The action could not be completed. Please try again.') }
     finally { setBusy(false) }
   }
 
@@ -33,7 +36,7 @@ function DisputeCard({ dispute, onChanged }) {
     }
     setBusy(true)
     try { onChanged(await resolveDispute(dispute.id, body)) }
-    catch (err) { setError(err.message) }
+    catch (err) { setError(err?.message || 'The action could not be completed. Please try again.') }
     finally { setBusy(false) }
   }
 
@@ -43,8 +46,8 @@ function DisputeCard({ dispute, onChanged }) {
   return (
     <div className="dispute-card">
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <strong>Dispute #{dispute.id} · Match {m ? m.match_number : dispute.match_id}</strong>
-        <span className="status-pill">{dispute.status}</span>
+        <strong>Dispute #{dispute.id} \u00B7 Match {m ? m.match_number : dispute.match_id}</strong>
+        <span className="status-pill">{dispute.status === "under_review" ? "Under review" : dispute.status === "pending" ? "Pending" : dispute.status === "resolved" ? "Resolved" : dispute.status === "rejected" ? "Rejected" : dispute.status}</span>
       </div>
       {m && <div>{m.team_a_name} vs {m.team_b_name} <span style={{ opacity: 0.7 }}>({m.status})</span></div>}
       {dispute.result
@@ -120,7 +123,7 @@ export default function DisputeResolutionPage() {
     <section className="dispute-page">
       <h2>Dispute resolution</h2>
       <p style={{ fontSize: 13, opacity: 0.7 }}>
-        Organisers review disputes for their own tournaments. Start a review, then approve or reject. The server enforces access and blocks reopening.
+        Review disputes for your tournaments. Start a review, then approve or reject the dispute. Closed disputes cannot be reopened.
       </p>
       <button className="button button-secondary" type="button" onClick={load} disabled={loading}>{loading ? 'Loading...' : 'Refresh'}</button>
       {error && <div className="notice notice-error" role="alert">{error}</div>}

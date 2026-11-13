@@ -21,6 +21,10 @@ export function finalizeResult(matchId) {
   return apiRequest(`/matches/${matchId}/result/finalize`, { method: 'POST' })
 }
 
+export function getFinalizedResult(matchId) {
+  return apiRequest(`/matches/${matchId}/result`)
+}
+
 // SCRUM-227: a player submits a dispute for a match they played in.
 export function createDispute(matchId, reason) {
   return apiRequest('/disputes/', {

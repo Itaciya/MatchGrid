@@ -979,3 +979,52 @@ tr:has(.tournament-list-info):hover .tournament-list-info {
     padding: 15px;
   }
 }
+
+/* Professional dashboard metric icons */
+.stat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-icon svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Team management responsive improvements */
+.table-wrap {
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lookup-card .field {
+  min-width: 0;
+}
+
+#roster-player-help {
+  margin: 0;
+  max-width: 280px;
+}
+
+@media (max-width: 650px) {
+  .table-wrap table {
+    min-width: 620px;
+  }
+
+  .table-actions button {
+    min-height: 38px;
+  }
+
+  .lookup-card #roster-player-help {
+    max-width: none;
+  }
+}

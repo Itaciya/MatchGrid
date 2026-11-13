@@ -115,6 +115,8 @@ class TournamentCreate(BaseModel):
     name: str = Field(min_length=3, max_length=150)
     category: Literal["sports", "esports"] = "sports"
     participation_type: Literal["individual", "team"] = "team"
+    min_roster_size: int | None = Field(default=None, ge=1)
+    max_roster_size: int | None = Field(default=None, ge=1)
     description: str | None = None
     format: str = Field(min_length=1, max_length=50)
 
@@ -138,6 +140,18 @@ class TournamentCreate(BaseModel):
             raise ValueError("registration_close_at must be after registration_open_at")
         if self.registration_close_at > self.start_date:
             raise ValueError("Registration must close before the tournament starts")
+
+        if self.participation_type == "team":
+            if self.min_roster_size is None:
+                self.min_roster_size = 1
+            if self.max_roster_size is None:
+                self.max_roster_size = 20
+
+            if self.min_roster_size > self.max_roster_size:
+                raise ValueError("min_roster_size cannot exceed max_roster_size")
+        elif self.min_roster_size is not None or self.max_roster_size is not None:
+            raise ValueError("Solo tournaments cannot have roster size limits")
+
         return self
 
 
@@ -147,6 +161,8 @@ class TournamentUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=3, max_length=150)
     category: Literal["sports", "esports"] = "sports"
     participation_type: Literal["individual", "team"] | None = None
+    min_roster_size: int | None = Field(default=None, ge=1)
+    max_roster_size: int | None = Field(default=None, ge=1)
     description: str | None = None
     format: str | None = Field(default=None, min_length=1, max_length=50)
 
@@ -171,6 +187,23 @@ class TournamentUpdate(BaseModel):
             and self.end_date <= self.start_date
         ):
             raise ValueError("end_date must be after start_date")
+
+        if (
+            self.min_roster_size is not None
+            and self.max_roster_size is not None
+            and self.min_roster_size > self.max_roster_size
+        ):
+            raise ValueError("min_roster_size cannot exceed max_roster_size")
+
+        if (
+            self.participation_type == "individual"
+            and (
+                self.min_roster_size is not None
+                or self.max_roster_size is not None
+            )
+        ):
+            raise ValueError("Solo tournaments cannot have roster size limits")
+
         return self
 
 
@@ -184,6 +217,8 @@ class TournamentResponse(BaseModel):
     name: str
     category: Literal["sports", "esports"]
     participation_type: Literal["individual", "team"]
+    min_roster_size: int | None = None
+    max_roster_size: int | None = None
     description: str | None
     format: str
 

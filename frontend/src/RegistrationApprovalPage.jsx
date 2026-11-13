@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { apiRequest } from './services/api'
 
 export default function RegistrationApprovalPage() {
@@ -72,18 +72,18 @@ export default function RegistrationApprovalPage() {
           />
         </div>
         <button className="button button-primary" type="submit" disabled={loading}>
-          {loading ? 'Loading…' : 'Load pending registrations'}
+          {loading ? 'Loadingâ€¦' : 'Load pending registrations'}
         </button>
       </form>
 
       {error && <p role="alert" className="notice notice-error">{error}</p>}
       {success && <p role="status" className="notice notice-success">{success}</p>}
 
-      {loading && <p>Loading pending registrations…</p>}
+      {loading && <p>Loading pending registrationsâ€¦</p>}
 
       {!loading && items.length === 0 && tournamentId && !error && (
         <div className="detail-card">
-          <p>No pending registrations found. Load a tournament to refresh this list.</p>
+          <p>There are no pending registrations to review right now.</p>
         </div>
       )}
 
@@ -105,9 +105,9 @@ export default function RegistrationApprovalPage() {
                 <tr key={item.id}>
                   <td>#{item.id}</td>
                   <td>#{item.tournament_id}</td>
-                  <td>{item.team_id ? `Team #${item.team_id}` : item.player_id ? `Player #${item.player_id}` : '—'}</td>
-                  <td>{item.registration_type || '—'}</td>
-                  <td>{item.note || '—'}</td>
+                  <td>{item.team_id ? 'Team registration' : item.player_id ? 'Individual registration' : '—'}</td>
+                  <td>{item.registration_type || 'â€”'}</td>
+                  <td>{item.note || 'â€”'}</td>
                   <td>
                     <div className="table-actions">
                       <button
@@ -115,7 +115,7 @@ export default function RegistrationApprovalPage() {
                         disabled={actionId !== null}
                         onClick={() => reviewRegistration(item.id, 'approve')}
                       >
-                        {actionId === item.id ? 'Saving…' : 'Approve'}
+                        {actionId === item.id ? 'Savingâ€¦' : 'Approve'}
                       </button>
                       <button
                         className="button button-secondary"
@@ -135,3 +135,4 @@ export default function RegistrationApprovalPage() {
     </>
   )
 }
+

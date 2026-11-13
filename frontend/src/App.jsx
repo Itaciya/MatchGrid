@@ -160,7 +160,7 @@ return () => { active = false }
               {saving ? 'Assigning...' : 'Assign Scorer'}
             </button>
           </form>
-        ) : <p className="muted">No active scorer accounts are available.</p>
+        ) : error ? null : <p className="muted">No active scorer accounts are available.</p>
       )}
       <ErrorNotice>{error}</ErrorNotice>
       <SuccessNotice>{success}</SuccessNotice>
@@ -168,8 +168,44 @@ return () => { active = false }
   )
 }
 
+// matchgrid-route-sync-v5
+function readMatchGridRoute() {
+  const raw = window.location.hash.replace(/^#\/?/, "");
+  const parts = raw.split("/");
+  const page = parts[0] || "home";
+
+  const allowed = new Set([
+    "home", "login", "register", "tournaments", "details",
+    "standings", "leaderboard", "overview", "create", "team",
+    "scoring", "notifications", "verify", "dispute", "result",
+    "resolve", "registrations", "registration-approvals"
+  ]);
+
+  if (!allowed.has(page)) return { page: "home", tournamentId: null };
+
+  if (page === "details") {
+    const id = Number(parts[1]);
+    return {
+      page,
+      tournamentId: Number.isInteger(id) && id > 0 ? String(id) : null
+    };
+  }
+
+  return { page, tournamentId: null };
+}
+
+function buildMatchGridHash(page, tournamentId) {
+  if (page === "details" && tournamentId) {
+    return "#/details/" + encodeURIComponent(tournamentId);
+  }
+  return "#/" + (page || "home");
+}
+
 function App() {
-const [page, setPage] = useState('home')
+const [page, setPage] = useState(() => readMatchGridRoute().page)
+  const [routeTournamentId, setRouteTournamentId] = useState(
+    () => readMatchGridRoute().tournamentId
+  )
   const [currentUser, setCurrentUser] = useState(null)
   const [authReady, setAuthReady] = useState(false)
   const [authLoading, setAuthLoading] = useState(false)
@@ -372,6 +408,7 @@ const [page, setPage] = useState('home')
     }
     setPage('details')
     const tournamentId = Number(id)
+    setRouteTournamentId(String(tournamentId))
     setSelectedTournament(null)
     setStandings([])
     setFixtures([])
@@ -404,6 +441,51 @@ const [page, setPage] = useState('home')
   }, [])
 
 
+
+  // matchgrid-route-sync-v5
+  useEffect(() => {
+    const syncFromBrowser = () => {
+      const route = readMatchGridRoute();
+      setPage(route.page);
+      setRouteTournamentId(route.tournamentId);
+    };
+
+    window.addEventListener("popstate", syncFromBrowser);
+    window.addEventListener("hashchange", syncFromBrowser);
+
+    return () => {
+      window.removeEventListener("popstate", syncFromBrowser);
+      window.removeEventListener("hashchange", syncFromBrowser);
+    };
+  }, []);
+
+  useEffect(() => {
+    const nextHash = buildMatchGridHash(
+      page,
+      page === "details" ? routeTournamentId : null
+    );
+
+    if (window.location.hash !== nextHash) {
+      const method = window.location.hash ? "pushState" : "replaceState";
+      window.history[method]({ matchGrid: true }, "", nextHash);
+    }
+  }, [page, routeTournamentId]);
+
+  useEffect(() => {
+    if (
+      page !== "details" ||
+      !routeTournamentId ||
+      selectedTournament?.id === Number(routeTournamentId)
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      openTournament(routeTournamentId);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [page, routeTournamentId, selectedTournament?.id, openTournament]);
 
   useEffect(() => {
     return () => {
@@ -501,6 +583,7 @@ const [page, setPage] = useState('home')
 
       setFormSuccess(editingId ? 'Tournament updated successfully.' : 'Tournament created successfully.')
       setSelectedTournament(savedTournament)
+      setRouteTournamentId(String(savedTournament.id))
       await loadTournaments()
       setPage('details')
       setForm({ category: 'sports', participation_type: 'team', name: '', description: '', format: 'round_robin', start_date: '', end_date: '', registration_open_at: '', registration_close_at: '', number_of_teams: '4' })
@@ -547,17 +630,19 @@ const [page, setPage] = useState('home')
 
     try {
       const endpoint = `/player-team/team/${team.id}/players/${Number(id)}`
-      const updatedPlayer = action === 'add'
-        ? await apiRequest(endpoint, { method: 'POST' })
-        : await apiRequest(endpoint, { method: 'DELETE' })
+      if (action === 'add') {
+        await apiRequest(endpoint, { method: 'POST' })
+      } else {
+        await apiRequest(endpoint, { method: 'DELETE' })
+      }
 
       const refreshedTeam = await apiRequest(`/player-team/team/${team.id}`)
       setTeam(refreshedTeam)
       setRosterPlayerId('')
       setRosterSuccess(
         action === 'add'
-          ? `Player #${updatedPlayer.id} added to the roster.`
-          : `Player #${updatedPlayer.id} removed from the roster.`,
+          ? `Player successfully added to the team roster.`
+          : `Player successfully removed from the team roster.`,
       )
     } catch (error) {
       setRosterError(error.message || 'Could not update the roster.')
@@ -949,11 +1034,11 @@ const [page, setPage] = useState('home')
             <div className="page-heading"><div><p className="eyebrow">YOUR SPORTS HUB</p><h1>Manage the game.</h1><p className="muted">Create tournaments, follow standings, and keep your competition organized.</p></div>{currentUser?.role === 'organiser' && <button className="button button-primary" onClick={() => { resetForm(); setPage('create') }}>+ Create tournament</button>}</div>
             <div className="hero-panel"><div><p className="eyebrow">MATCHGRID WORKSPACE</p><h2>Every competition.<br />One clear view.</h2><p>Keep tournament information and team performance in one place.</p></div><div className="hero-orbit" aria-hidden="true"><span>MG</span><i /><b /></div></div>
             <div className="stats-grid">
-              <article className="stat-card"><span className="stat-icon">#</span><p>Total tournaments</p><strong>{tournaments.length}</strong><small>Returned by the API</small></article>
-              <article className="stat-card"><span className="stat-icon green">OK</span><p>Active tournaments</p><strong>{activeCount}</strong><small>Based on current status</small></article>
-              <article className="stat-card"><span className="stat-icon violet">*</span><p>Competition formats</p><strong>{new Set(tournaments.map((item) => item.format).filter(Boolean)).size}</strong><small>Formats in your list</small></article>
+              <article className="stat-card"><span className="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m8 21 4-7 4 7"/><path d="M12 14 5 3h14l-7 11Z"/><path d="M5 3 3 8h18l-2-5"/></svg></span><p>Total tournaments</p><strong>{tournaments.length}</strong><small>All competitions in MatchGrid</small></article>
+              <article className="stat-card"><span className="stat-icon green" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span><p>Active tournaments</p><strong>{activeCount}</strong><small>Currently in progress</small></article>
+              <article className="stat-card"><span className="stat-icon violet" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><p>Competition formats</p><strong>{new Set(tournaments.map((item) => item.format).filter(Boolean)).size}</strong><small>Different formats available</small></article>
             </div>
-            <div className="section-title"><div><h2>Recent tournaments</h2><p className="muted">Latest items returned by the tournament API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>← Back to list</button></div>
+            <div className="section-title"><div><h2>Recent tournaments</h2><p className="muted">Latest items returned by the tournament API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>ÃƒÂ¢Ã¢â‚¬ Ã‚Â Back to list</button></div>
             {listError && <ErrorNotice>{listError}</ErrorNotice>}
             {listLoading ? <Loading label="Loading tournaments..." /> : tournaments.length ? <TournamentTable items={tournaments.slice(0, 5)} onOpen={openTournament} onEdit={beginEdit} canManage={currentUser?.role === 'organiser'} /> : <EmptyState title="No tournaments to show" text="Create a tournament or check back when the API has data." action={() => { resetForm(); setPage('create') }} />}
           </>}
@@ -1032,7 +1117,7 @@ const [page, setPage] = useState('home')
                         <div className="tournament-grid-card-body">
                           <span className={statusClass(item.status)}>{item.status || 'Upcoming'}</span>
                           <h3>{item.name}</h3>
-                          <p>{item.category === 'esports' ? 'Esports' : 'Sports'} Ã‚Â· ID: {item.id}</p>
+                          <p>{item.category === 'esports' ? 'Esports' : 'Sports'} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ID: {item.id}</p>
                           <button className="button button-secondary" onClick={() => openTournament(item.id)}>View details</button>
                           {currentUser?.role === 'organiser' && (
                             <button className="button button-secondary" onClick={() => beginEdit(item)}>Edit</button>
@@ -1064,7 +1149,7 @@ const [page, setPage] = useState('home')
           </>}
 
           {page === 'details' && <>
-            <div className="page-heading"><div><p className="eyebrow">COMPETITION OVERVIEW</p><h1>Tournament details</h1><p className="muted">Tournament information and standings provided by the API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>← Back to list</button></div>
+            <div className="page-heading"><div><p className="eyebrow">COMPETITION OVERVIEW</p><h1>Tournament details</h1><p className="muted">Tournament information and standings provided by the API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>ÃƒÂ¢Ã¢â‚¬ Ã‚Â Back to list</button></div>
             {detailsLoading && <Loading label="Loading tournament details..." />}
             <ErrorNotice>{detailsError}</ErrorNotice>
             {selectedTournament && <><div className="detail-top-cards"><div className="detail-card">
@@ -1129,9 +1214,9 @@ const [page, setPage] = useState('home')
     </table>
   </div>
   <div className="pagination-row">
-    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.max(1, value - 1))} disabled={fixturePage <= 1}>← Previous</button>
+    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.max(1, value - 1))} disabled={fixturePage <= 1}>ÃƒÂ¢Ã¢â‚¬ Ã‚Â Previous</button>
     <span className="helper-text">Page {fixturePage} of {fixturePageCount}</span>
-    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.min(fixturePageCount, value + 1))} disabled={fixturePage >= fixturePageCount}>Next →</button>
+    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.min(fixturePageCount, value + 1))} disabled={fixturePage >= fixturePageCount}>Next ÃƒÂ¢Ã¢â‚¬ Ã¢â‚¬â„¢</button>
   </div>
 </> : !fixturesError ? <EmptyState title="No matching fixtures" text="Try changing or clearing the fixture filters." /> : null}</>}<div className="section-title"><div><h2>Standings</h2><p className="muted">Calculated rankings returned by the standings endpoint.</p></div></div>{standings.length ? <div className="table-wrap"><table><thead><tr><th>Rank</th><th>Team</th><th>Played</th><th>W</th><th>D</th><th>L</th><th>Score diff.</th><th>Points</th></tr></thead><tbody>{standings.map((row) => <tr key={row.team_id}><td><span className="rank">#{row.rank}</span></td><td><strong>{row.team_name}</strong></td><td>{row.played}</td><td>{row.wins}</td><td>{row.draws}</td><td>{row.losses}</td><td>{row.score_difference}</td><td><strong>{row.points}</strong></td></tr>)}</tbody></table></div> : <EmptyState title="No standings available" text="The API returned no standings for this tournament yet." />}</>}
             {!detailsLoading && !selectedTournament && !detailsError && <IdLookup onSubmit={openTournament} />}
@@ -1203,7 +1288,7 @@ const [page, setPage] = useState('home')
             {teamMode === 'join' && team && <>
               <p className="muted">Manage your team and add eligible players to your roster.</p>
             <div className="page-heading"><div><p className="eyebrow">TEAM MANAGEMENT</p><h1>Your team</h1><p className="muted">Manage your team members.</p></div></div>
-            {team && <div className="detail-card"><div className="detail-heading"><div><span className="eyebrow">TEAM #{team.id}</span><h2>{team.name}</h2><p>Captain ID: {team.captain_id ?? team.captain?.id ?? 'Not provided'}</p></div><span className={statusClass(team.status)}>{team.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Created" value={dateLabel(team.created_at)} /><Meta label="Updated" value={dateLabel(team.updated_at)} /><Meta label="Roster members" value={Array.isArray(team.players) ? team.players.length : 'Not provided'} /></div></div>}
+            {team && <div className="detail-card"><div className="detail-heading"><div><span className="eyebrow">YOUR TEAM</span><h2>{team.name}</h2></div><span className={statusClass(team.status)}>{team.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Created" value={dateLabel(team.created_at)} /><Meta label="Updated" value={dateLabel(team.updated_at)} /><Meta label="Roster members" value={Array.isArray(team.players) ? team.players.length : 'Not provided'} /></div></div>}
             {team && <>
               <div className="section-title">
                 <div>
@@ -1213,9 +1298,10 @@ const [page, setPage] = useState('home')
               </div>
               <form className="lookup-card" onSubmit={(event) => { event.preventDefault(); changeRoster('add', rosterPlayerId) }}>
                 <div className="field">
-                  <label htmlFor="roster-player-id">Player ID to add</label>
-                  <input id="roster-player-id" inputMode="numeric" pattern="[1-9][0-9]*" value={rosterPlayerId} onChange={(event) => setRosterPlayerId(event.target.value)} placeholder="e.g. 7" required />
+                  <label htmlFor="roster-player-id">Player ID</label>
+                  <input id="roster-player-id" aria-describedby="roster-player-help" inputMode="numeric" pattern="[1-9][0-9]*" value={rosterPlayerId} onChange={(event) => setRosterPlayerId(event.target.value)} placeholder="e.g. 7" required />
                 </div>
+                <p id="roster-player-help" className="helper-text">Enter the player ID of an eligible player to add them to your team.</p>
                 <button className="button button-primary" type="submit" disabled={rosterLoading}>{rosterLoading ? 'Updating...' : 'Add player'}</button>
               </form>
               <ErrorNotice>{rosterError}</ErrorNotice>
@@ -1224,16 +1310,16 @@ const [page, setPage] = useState('home')
               {Array.isArray(team.players) && team.players.length > 0 ? (
                 <div className="table-wrap">
                   <table>
-                    <thead><tr><th>Player</th><th>Player ID</th><th>User ID</th><th>Status</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Player</th><th>Player ID</th><th>Status</th><th>Actions</th></tr></thead>
                     <tbody>
                       {team.players.map((rosterPlayer) => (
                         <tr key={rosterPlayer.id}>
-                          <td><strong>{[rosterPlayer.first_name, rosterPlayer.last_name].filter(Boolean).join(' ') || `Player #${rosterPlayer.id}`}</strong></td>
+                          <td><strong>{[rosterPlayer.first_name, rosterPlayer.last_name].filter(Boolean).join(' ') || `Player`}</strong></td>
                           <td>{rosterPlayer.id}</td>
-                          <td>{rosterPlayer.user_id ?? '-'}</td>
+                          
                           <td><span className={statusClass(rosterPlayer.status)}>{rosterPlayer.status || 'Unknown'}</span></td>
                           <td><div className="table-actions">
-                            <button type="button" onClick={() => { setPlayerId(String(rosterPlayer.id)); setPlayer(null); setPlayerError(''); }} disabled={rosterLoading}>Use ID</button>
+                            <button type="button" onClick={() => { setPlayerId(String(rosterPlayer.id)); setPlayer(null); setPlayerError(''); }} disabled={rosterLoading}>View profile</button>
                             <button type="button" onClick={() => changeRoster('remove', rosterPlayer.id)} disabled={rosterLoading}>Remove</button>
                           </div></td>
                         </tr>
@@ -1261,12 +1347,12 @@ const [page, setPage] = useState('home')
             {playerLoading && <Loading label="Loading player profile..." />}
             {player && <div className="detail-card">
               <div className="detail-heading">
-                <div><span className="eyebrow">PLAYER #{player.id}</span><h2>{[player.first_name, player.last_name].filter(Boolean).join(' ') || 'Player profile'}</h2><p>User ID: {player.user_id ?? 'Not provided'}</p></div>
+                <div><span className="eyebrow">PLAYER PROFILE</span><h2>{[player.first_name, player.last_name].filter(Boolean).join(' ') || 'Player profile'}</h2></div>
                 <span className={statusClass(player.status)}>{player.status || 'Unknown'}</span>
               </div>
               <div className="detail-meta">
                 <Meta label="Player ID" value={player.id} />
-                <Meta label="Team assignment" value={player.team_id ? `Team #${player.team_id}` : 'Not assigned'} />
+                <Meta label="Team assignment" value={player.team_id ? `Assigned to a team` : 'Not assigned'} />
                 <Meta label="Created" value={dateLabel(player.created_at)} />
                 <Meta label="Updated" value={dateLabel(player.updated_at)} />
               </div>
@@ -1321,7 +1407,7 @@ function TournamentTable({ items, onOpen, onEdit, canManage }) {
                       alt={item.name}
                     />
                   ) : (
-                    <div className="tournament-list-thumbnail tournament-list-image-placeholder">—</div>
+                    <div className="tournament-list-thumbnail tournament-list-image-placeholder">🏆</div>
                   )}
                   <div>
                     <button className="table-link" onClick={() => onOpen(item.id)}>
@@ -1663,6 +1749,10 @@ function StreamUrlControl({ fixture, tournamentId, canManage, onSaved }) {
 }
 
 export default App
+
+
+
+
 
 
 

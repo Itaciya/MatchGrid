@@ -10,6 +10,12 @@ const TYPE_INFO = {
   fixture_changed: { title: 'Fixture changed', page: 'tournaments', linkLabel: 'View tournaments' },
 }
 
+function formatNotificationDate(value) {
+  if (!value) return 'Date unavailable'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleString()
+}
+
 function describe(type) {
   if (TYPE_INFO[type]) return TYPE_INFO[type]
   const text = String(type || 'notification').replace(/_/g, ' ')
@@ -22,6 +28,7 @@ export default function NotificationsPage({ onOpenPage }) {
   const [items, setItems] = useState([])
   const [hasNext, setHasNext] = useState(false)
   const [unread, setUnread] = useState(null)
+  const [unreadError, setUnreadError] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(null)
@@ -40,18 +47,29 @@ export default function NotificationsPage({ onOpenPage }) {
       .catch((err) => { if (!cancelled) setError(err.message) })
       .finally(() => { if (!cancelled) setLoading(false) })
     getUnreadCount()
-      .then((result) => { if (!cancelled) setUnread(result.unread_count) })
-      .catch(() => {})
+      .then((result) => {
+        if (cancelled) return
+        const count = Number(result?.unread_count)
+        if (Number.isFinite(count) && count >= 0) {
+          setUnread(count)
+          setUnreadError('')
+        } else {
+          setUnreadError('Unread count is temporarily unavailable.')
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setUnreadError('Unread count is temporarily unavailable.')
+      })
     return () => { cancelled = true }
   }, [page, reloadKey])
 
   function goTo(next) {
-    setLoading(true); setError(''); setActionError('')
+    setLoading(true); setError(''); setActionError(''); setUnreadError('')
     setPage(next)
   }
 
   function refresh() {
-    setLoading(true); setError(''); setActionError('')
+    setLoading(true); setError(''); setActionError(''); setUnreadError('')
     setReloadKey((key) => key + 1)
   }
 
@@ -69,7 +87,11 @@ export default function NotificationsPage({ onOpenPage }) {
     }
   }
 
-  const hasToken = Boolean(localStorage.getItem('access_token'))
+  const hasToken = Boolean(
+    localStorage.getItem('access_token') ||
+    localStorage.getItem('accessToken') ||
+    localStorage.getItem('token')
+  )
 
   return (
     <section>
@@ -85,6 +107,7 @@ export default function NotificationsPage({ onOpenPage }) {
         </div>
       )}
       {actionError && <div className="notice notice-error" role="alert">{actionError}</div>}
+      {unreadError && <div role="status" style={{ fontSize: 13, opacity: 0.75 }}>{unreadError}</div>}
 
       {!loading && !error && items.length === 0 && <p style={{ marginTop: 12 }}>You have no notifications.</p>}
 
@@ -98,13 +121,13 @@ export default function NotificationsPage({ onOpenPage }) {
                 <span className="status-pill">{n.is_read ? 'Read' : 'Unread'}</span>
               </div>
               <p style={{ margin: '8px 0', whiteSpace: 'pre-wrap' }}>{n.content}</p>
-              <div style={{ fontSize: 13, opacity: 0.7 }}>{new Date(n.created_at).toLocaleString()}</div>
+              <div style={{ fontSize: 13, opacity: 0.7 }}>{formatNotificationDate(n.created_at)}</div>
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 {info.page && onOpenPage && (
                   <button type="button" onClick={() => onOpenPage(info.page)}>{info.linkLabel}</button>
                 )}
                 {!n.is_read && (
-                  <button type="button" disabled={busyId === n.id} onClick={() => markRead(n)}>
+                  <button type="button" disabled={busyId !== null} onClick={() => markRead(n)}>
                     {busyId === n.id ? 'Saving...' : 'Mark as read'}
                   </button>
                 )}

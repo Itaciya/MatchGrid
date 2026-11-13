@@ -14,9 +14,6 @@ from app.core.exceptions import (
 from app.modules.notification.models.notification import Notification
 from app.modules.player_team.models.player import Player
 from app.modules.player_team.models.team import Team, TeamStatus
-from app.modules.player_team.services.player_service import (
-    validate_team_roster,
-)
 from app.modules.registration.models.registration import Registration
 from app.modules.registration.schemas.registration import (
     RegistrationCreate,
@@ -29,6 +26,7 @@ from app.modules.registration.services.registration_validation import (
     validate_tournament_for_registration,
 )
 from app.modules.tournament.models.tournament import Tournament
+from app.modules.tournament_team.models.tournament_team import TournamentTeam
 
 
 def notify_registration_status(
@@ -160,13 +158,20 @@ def create_team_registration(
             detail="Only active teams can register"
         )
 
-    player_ids = [player.id for player in team.players]
-
-    validate_team_roster(
-        db,
-        player_ids,
-        team_id=team.id,
+    inactive_player = (
+        db.query(Player)
+        .filter(
+            Player.team_id == team.id,
+            Player.status != "active",
+        )
+        .first()
     )
+
+    if inactive_player is not None:
+        raise ConflictException(
+            detail="Only active players can be added to a team"
+        )
+
 
     validate_tournament_for_registration(
         db,
@@ -405,13 +410,6 @@ def approve_registration(
                 detail="Only active teams can be approved"
             )
 
-        player_ids = [player.id for player in team.players]
-
-        validate_team_roster(
-            db,
-            player_ids,
-            team_id=team.id,
-        )
 
     else:
         raise BadRequestException(
@@ -419,8 +417,45 @@ def approve_registration(
         )
 
     try:
+        if registration.registration_type == RegistrationType.TEAM.value:
+            existing_tournament_team = (
+                db.query(TournamentTeam)
+                .filter(
+                    TournamentTeam.tournament_id == registration.tournament_id,
+                    TournamentTeam.team_id == registration.team_id,
+                )
+                .first()
+            )
+
+            if existing_tournament_team is None:
+                db.add(
+                    TournamentTeam(
+                        tournament_id=registration.tournament_id,
+                        team_id=registration.team_id,
+                    )
+                )
+                db.flush()
+
         registration.status = RegistrationStatus.APPROVED.value
         registration.reviewed_at = datetime.now(timezone.utc)
+
+        if registration.registration_type == RegistrationType.TEAM.value:
+            existing_link = (
+                db.query(TournamentTeam)
+                .filter(
+                    TournamentTeam.tournament_id == registration.tournament_id,
+                    TournamentTeam.team_id == registration.team_id,
+                )
+                .first()
+            )
+
+            if existing_link is None:
+                db.add(
+                    TournamentTeam(
+                        tournament_id=registration.tournament_id,
+                        team_id=registration.team_id,
+                    )
+                )
 
         notify_registration_status(db, registration)
 

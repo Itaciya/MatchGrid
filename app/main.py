@@ -39,6 +39,7 @@ from app.modules.registration.routes import router as registration_router
 from app.modules.score.routes import router as score_router
 from app.modules.scorer.routes import router as scorer_router
 from app.modules.spectator.routes import router as spectator_router
+from app.modules.tournament_team.routes import router as tournament_team_router
 from app.modules.tournament.routes import router as tournament_router
 from app.modules.user.routes import router as user_router
 from app.modules.user.models import User  # noqa: F401
@@ -192,6 +193,7 @@ app.include_router(registration_router)
 app.include_router(match_router)
 app.include_router(score_router)
 app.include_router(venue_router)
+app.include_router(tournament_team_router)
 app.include_router(tournament_router)
 app.include_router(dispute_router)
 app.include_router(official_assignment_router)

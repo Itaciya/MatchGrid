@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useRef, useState } from 'react'
 import { getTournaments } from './services/rankingApi'
 
 export default function RankingView({ title, intro, loadRanking }) {
@@ -7,6 +7,11 @@ export default function RankingView({ title, intro, loadRanking }) {
   const [rows, setRows] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const requestId = useRef(0)
+
+  useEffect(() => () => {
+    requestId.current += 1
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -17,17 +22,29 @@ export default function RankingView({ title, intro, loadRanking }) {
   }, [])
 
   const load = useCallback(async (id) => {
+    const currentRequest = ++requestId.current
     setError('')
     setRows(null)
-    if (!id) return
+
+    if (!id) {
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     try {
       const result = await loadRanking(Number(id))
-      setRows(Array.isArray(result) ? result : [])
+      if (currentRequest === requestId.current) {
+        setRows(Array.isArray(result) ? result : [])
+      }
     } catch (err) {
-      setError(err.message)
+      if (currentRequest === requestId.current) {
+        setError(err.message)
+      }
     } finally {
-      setLoading(false)
+      if (currentRequest === requestId.current) {
+        setLoading(false)
+      }
     }
   }, [loadRanking])
 
@@ -84,3 +101,4 @@ export default function RankingView({ title, intro, loadRanking }) {
     </section>
   )
 }
+

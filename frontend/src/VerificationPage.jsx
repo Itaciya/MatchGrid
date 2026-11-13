@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { finalizeResult, getFixtures, getScoreForReview, reviewScore } from './services/resultsApi'
+import { finalizeResult, getFinalizedResult, getFixtures, getScoreForReview, reviewScore } from './services/resultsApi'
 
 const box = { border: '1px solid rgba(128,128,128,.4)', borderRadius: 8, padding: 16, marginBottom: 12 }
 
@@ -23,14 +23,35 @@ function MatchRow({ fixture }) {
 
   useEffect(() => {
     let cancelled = false
-    getScoreForReview(fixture.id)
-      .then((s) => { if (!cancelled) setScore(s) })
-      .catch((err) => {
-        if (cancelled) return
-        if (err.status === 404) setNote('No score has been submitted yet.')
-        else setError(err.message)
-      })
-      .finally(() => { if (!cancelled) setLoading(false) })
+
+    async function loadMatchData() {
+      const [scoreResult, publishedResult] = await Promise.allSettled([
+        getScoreForReview(fixture.id),
+        getFinalizedResult(fixture.id),
+      ])
+
+      if (cancelled) return
+
+      if (scoreResult.status === 'fulfilled') {
+        setScore(scoreResult.value)
+      } else if (scoreResult.reason?.status === 404) {
+        setNote('No score has been submitted yet.')
+      } else {
+        setError(scoreResult.reason?.message || 'Could not load the score.')
+      }
+
+      if (publishedResult.status === 'fulfilled') {
+        setPublished(true)
+      } else if (publishedResult.reason?.status === 404) {
+        setPublished(false)
+      } else {
+        setError((current) => current || publishedResult.reason?.message || 'Could not check the published result.')
+      }
+
+      setLoading(false)
+    }
+
+    loadMatchData()
     return () => { cancelled = true }
   }, [fixture.id])
 
@@ -69,8 +90,8 @@ function MatchRow({ fixture }) {
 
   const matchStarted = matchStatus === 'live' || matchStatus === 'completed'
   const verification = score?.verification_status
-  const canReview = Boolean(score) && verification === 'pending' && matchStarted && !published
-  const canFinalize = Boolean(score) && verification === 'verified' && matchStatus === 'completed' && !published
+  const canReview = Boolean(score) && verification === 'pending' && matchStarted && !published && !error
+  const canFinalize = Boolean(score) && verification === 'verified' && matchStatus === 'completed' && !published && !error
 
   return (
     <div style={box}>
