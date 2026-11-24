@@ -39,6 +39,9 @@ def create_access_token(user_id: int, role: str) -> str:
         "role": role,
         "type": "access",
         "iat": now,
+        # Millisecond issue time: lets logout invalidate earlier tokens
+        # without also rejecting a token issued in the same second.
+        "iat_ms": int(now.timestamp() * 1000),
         "exp": expire,
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
@@ -67,3 +70,21 @@ def create_refresh_token(user_id: int) -> tuple[str, str]:
 def decode_token(token: str) -> dict:
     """Decode and validate a JWT. Raises jwt.PyJWTError on invalid/expired tokens."""
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+
+
+def token_issued_at_ms(payload: dict) -> int:
+    """Return a token's issue time in milliseconds since the epoch."""
+    if isinstance(payload.get("iat_ms"), int):
+        return payload["iat_ms"]
+    return int(payload.get("iat", 0)) * 1000
+
+
+def is_token_revoked(payload: dict, invalidated_after: str | None) -> bool:
+    """True when the token was issued at or before the user's last logout."""
+    if invalidated_after is None:
+        return False
+    try:
+        cutoff_ms = int(invalidated_after)
+    except (TypeError, ValueError):
+        return True
+    return token_issued_at_ms(payload) <= cutoff_ms

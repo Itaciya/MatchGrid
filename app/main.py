@@ -5,6 +5,7 @@ import time
 from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
@@ -215,7 +216,11 @@ def database_health():
 
     if result == "Database connection successful":
         logger.info("Database health check successful")
-    else:
-        logger.error("Database health check failed")
+        return {"database": result}
 
-    return {"database": result}
+    # The raw error can include host or user names: log it, don't return it.
+    logger.error("Database health check failed: %s", result)
+    return JSONResponse(
+        status_code=503,
+        content={"database": "Database connection failed"},
+    )

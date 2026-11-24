@@ -1,4 +1,5 @@
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import (
     BadRequestException,
@@ -252,3 +253,63 @@ def remove_player_from_team(
     db.refresh(player)
 
     return player
+
+
+def escape_like(term: str) -> str:
+    """Escape LIKE wildcards so user input matches literally."""
+    return (
+        term.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+
+
+def search_players_by_name(
+    db: Session,
+    query: str,
+    *,
+    available_only: bool = False,
+    limit: int = 20,
+) -> list[dict]:
+    """Find active players whose full name contains the query.
+
+    available_only limits results to players without a team, which is what a
+    captain needs when adding someone to their roster.
+    """
+    term = query.strip()
+    if len(term) < 2:
+        raise BadRequestException(
+            detail="Search term must be at least 2 characters"
+        )
+
+    full_name = func.concat(Player.first_name, " ", Player.last_name)
+    players_query = (
+        db.query(Player)
+        .options(selectinload(Player.team))
+        .filter(
+            Player.status == PlayerStatus.ACTIVE,
+            full_name.ilike(f"%{escape_like(term)}%", escape="\\"),
+        )
+    )
+
+    if available_only:
+        players_query = players_query.filter(Player.team_id.is_(None))
+
+    players = (
+        players_query
+        .order_by(Player.first_name.asc(), Player.last_name.asc(), Player.id.asc())
+        .limit(max(1, min(limit, 50)))
+        .all()
+    )
+
+    return [
+        {
+            "id": player.id,
+            "first_name": player.first_name,
+            "last_name": player.last_name,
+            "status": player.status,
+            "team_id": player.team_id,
+            "team_name": player.team.name if player.team else None,
+        }
+        for player in players
+    ]

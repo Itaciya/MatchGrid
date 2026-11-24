@@ -4,8 +4,10 @@ import { getLeaderboard } from './services/rankingApi'
 export default function LeaderboardPage() {
   return (
     <RankingView
+      variant="leaderboard"
+      eyebrow="HALL OF FAME"
       title="Leaderboard"
-      intro="Public tournament rankings, filtered by tournament. Only verified results count."
+      intro="The podium, the champions and every result of the tournament."
       loadRanking={getLeaderboard}
     />
   )

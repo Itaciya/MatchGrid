@@ -80,3 +80,17 @@ class Registration(Base):
             name="uq_registration_tournament_participant",
         ),
     )
+
+    @property
+    def team_name(self) -> str | None:
+        return self.team.name if self.team else None
+
+    @property
+    def player_name(self) -> str | None:
+        if self.player is None:
+            return None
+        return f"{self.player.first_name} {self.player.last_name}".strip()
+
+    @property
+    def tournament_name(self) -> str | None:
+        return self.tournament.name if self.tournament else None

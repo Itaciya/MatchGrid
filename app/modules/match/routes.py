@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import (
     verify_assigned_official,
     verify_tournament_owner,
+    can_view_unpublished_fixtures,
+    get_optional_current_user,
 )
 from app.core.exceptions import (
     BadRequestException,
@@ -49,6 +51,7 @@ from app.modules.match.services.match_status_service import (
     MATCH_STATUS_CANCELLED,
 )
 from app.modules.tournament.models.tournament import Tournament
+from app.modules.user.models import User
 from app.modules.registration.models.registration import Registration
 from app.modules.registration.schemas.registration import RegistrationStatus, RegistrationType
 from datetime import time
@@ -73,8 +76,12 @@ def list_fixtures_endpoint(
     start_at: datetime | None = Query(default=None),
     end_at: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_current_user),
 ):
-    """List tournament fixtures with optional filters."""
+    """List tournament fixtures with optional filters.
+
+    Unpublished fixtures are only visible to the organiser and assigned staff.
+    """
 
     tournament = (
         db.query(Tournament)
@@ -82,7 +89,9 @@ def list_fixtures_endpoint(
         .first()
     )
 
-    if tournament is None:
+    if tournament is None or not can_view_unpublished_fixtures(
+        db, tournament, current_user
+    ):
         raise NotFoundException(detail="Tournament not found")
 
     if start_at and end_at and start_at > end_at:
@@ -128,6 +137,7 @@ def get_fixture_details_endpoint(
     tournament_id: int,
     match_id: int,
     db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_current_user),
 ):
     """Retrieve fixture details for a tournament."""
 
@@ -140,7 +150,9 @@ def get_fixture_details_endpoint(
         .first()
     )
 
-    if fixture is None:
+    if fixture is None or not can_view_unpublished_fixtures(
+        db, fixture.tournament, current_user
+    ):
         raise NotFoundException(detail="Fixture not found")
 
     return fixture

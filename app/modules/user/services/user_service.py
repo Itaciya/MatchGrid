@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictException
@@ -7,8 +8,15 @@ from app.modules.user.schemas.user import UserRegister
 
 
 def register_user(db: Session, user_data: UserRegister) -> User:
-    """Register a new user. Raises ConflictException if the email is taken."""
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    """Register a new user.
+
+    Raises ConflictException if the email is taken (case-insensitive).
+    """
+    existing_user = (
+        db.query(User)
+        .filter(func.lower(User.email) == user_data.email)
+        .first()
+    )
 
     if existing_user is not None:
         raise ConflictException(detail="Email is already registered")

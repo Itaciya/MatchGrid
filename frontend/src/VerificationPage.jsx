@@ -1,15 +1,8 @@
 import { useEffect, useState } from 'react'
-import { finalizeResult, getFinalizedResult, getFixtures, getScoreForReview, reviewScore } from './services/resultsApi'
-
-const box = { border: '1px solid rgba(128,128,128,.4)', borderRadius: 8, padding: 16, marginBottom: 12 }
-
-const STATUS_LABELS = {
-  scheduled: 'Scheduled',
-  live: 'Live',
-  paused: 'Paused',
-  completed: 'Ended',
-  cancelled: 'Cancelled',
-}
+import { finalizeResult, getFinalizedResult, getScoreForReview, reviewScore } from './services/resultsApi'
+import { TournamentSelect } from './components/Pickers'
+import { MATCH_STATUS_LABELS as STATUS_LABELS, matchLabel } from './components/pickerUtils'
+import { useTournamentFixtures } from './components/useTournamentFixtures'
 
 function MatchRow({ fixture }) {
   const [score, setScore] = useState(null)
@@ -88,60 +81,49 @@ function MatchRow({ fixture }) {
     }
   }
 
-  const matchStarted = matchStatus === 'live' || matchStatus === 'completed'
+  // Review only after the scorer ends the match: a verified score is locked,
+  // so verifying mid-match would stop the scorer recording later points.
+  const matchEnded = matchStatus === 'completed'
   const verification = score?.verification_status
-  const canReview = Boolean(score) && verification === 'pending' && matchStarted && !published && !error
+  const canReview = Boolean(score) && verification === 'pending' && matchEnded && !published && !error
   const canFinalize = Boolean(score) && verification === 'verified' && matchStatus === 'completed' && !published && !error
 
   return (
-    <div style={box}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <span>
-          <strong>Match {fixture.match_number}</strong>
-          {' '}(Team {fixture.team_a_id ?? 'TBD'} vs Team {fixture.team_b_id ?? 'TBD'})
-        </span>
-        <span className="status-pill">Match: {STATUS_LABELS[matchStatus] || matchStatus}</span>
+    <div className="detail-card match-review-card">
+      <div className="match-review-heading">
+        <strong>{matchLabel(fixture)}</strong>
+        <span className="status-pill">{STATUS_LABELS[matchStatus] || matchStatus}</span>
       </div>
-      {loading && <div>Loading score...</div>}
-      {note && <div style={{ opacity: 0.7 }}>{note}</div>}
+      {loading && <p className="muted">Loading score...</p>}
+      {note && <p className="muted">{note}</p>}
       {score && (
-        <div style={{ margin: '8px 0' }}>
-          Submitted score: <b>{score.team_a_score} - {score.team_b_score}</b>
+        <p>
+          Submitted score: <b>{fixture.team_a_name || 'Team A'} {score.team_a_score} - {score.team_b_score} {fixture.team_b_name || 'Team B'}</b>
           {' '}<span className="status-pill">{published ? 'published' : verification}</span>
-        </div>
+        </p>
       )}
 
-      {score && !matchStarted && (
-        <div style={{ fontSize: 13, opacity: 0.7 }}>Scores can be reviewed once the match has started.</div>
-      )}
-      {matchStatus === 'live' && canReview && (
-        <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 6 }}>
-          The match is still live. You can verify now or wait until the scorer ends it.
-        </div>
-      )}
-      {verification === 'verified' && matchStatus === 'live' && !published && (
-        <div style={{ fontSize: 13, opacity: 0.7 }}>
-          Score verified. The result can be finalized once the scorer ends the match.
-        </div>
+      {score && !matchEnded && verification === 'pending' && (
+        <p className="muted">You can review this score once the scorer ends the match.</p>
       )}
       {verification === 'rejected' && (
-        <div style={{ fontSize: 13, opacity: 0.7 }}>Rejected. Waiting for the scorer to submit a corrected score.</div>
+        <p className="muted">Rejected. Waiting for the scorer to submit a corrected score.</p>
       )}
 
       {canReview && (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" disabled={busy} onClick={() => decide('verified')}>Verify score</button>
-          <button type="button" disabled={busy} onClick={() => decide('rejected')}>Reject</button>
+        <div className="table-actions">
+          <button type="button" className="button button-primary" disabled={busy} onClick={() => decide('verified')}>Verify score</button>
+          <button type="button" className="button button-secondary" disabled={busy} onClick={() => decide('rejected')}>Reject</button>
         </div>
       )}
       {canFinalize && (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" disabled={busy} onClick={finalize}>
+        <div className="table-actions">
+          <button type="button" className="button button-primary" disabled={busy} onClick={finalize}>
             {busy ? 'Publishing...' : 'Finalize & publish result'}
           </button>
         </div>
       )}
-      {published && <div style={{ fontSize: 13, opacity: 0.7 }}>The official result is published.</div>}
+      {published && <p className="muted">The official result is published.</p>}
 
       {error && <div className="notice notice-error" role="alert">{error}</div>}
       {ok && <div className="notice notice-success" role="status">{ok}</div>}
@@ -149,49 +131,36 @@ function MatchRow({ fixture }) {
   )
 }
 
-export default function VerificationPage() {
+export default function VerificationPage({ currentUser }) {
   const [tournamentId, setTournamentId] = useState('')
-  const [fixtures, setFixtures] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  async function load(event) {
-    event.preventDefault()
-    setError('')
-    setFixtures([])
-    if (!/^[1-9]\d*$/.test(tournamentId)) {
-      setError('Enter a valid tournament ID.')
-      return
-    }
-    setLoading(true)
-    try {
-      const rows = await getFixtures(Number(tournamentId))
-      setFixtures(Array.isArray(rows) ? rows : [])
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { fixtures, loading, error } = useTournamentFixtures(tournamentId)
+  const playable = fixtures.filter((fixture) => fixture.status !== 'bye' && fixture.status !== 'cancelled')
 
   return (
-    <section>
-      <h2>Score verification</h2>
-      <p style={{ fontSize: 13, opacity: 0.7 }}>
-        Organisers review submitted scores for their own tournaments. The server enforces access.
-      </p>
-      <form onSubmit={load} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <input
-          inputMode="numeric"
+    <>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">ORGANISER WORKSPACE</p>
+          <h1>Verify scores</h1>
+          <p className="muted">Review the scores your scorers submitted, then finalize and publish official results.</p>
+        </div>
+      </div>
+      <div className="lookup-card">
+        <TournamentSelect
+          id="verify-tournament"
+          label="Your tournament"
           value={tournamentId}
-          onChange={(e) => setTournamentId(e.target.value)}
-          placeholder="Tournament ID"
-          aria-label="Tournament ID"
+          onChange={setTournamentId}
+          ownerId={currentUser?.id ?? null}
+          emptyText="You have not created any tournaments yet."
         />
-        <button type="submit" disabled={loading}>{loading ? 'Loading...' : 'Load matches'}</button>
-      </form>
+      </div>
+      {loading && <p className="muted">Loading matches...</p>}
       {error && <div className="notice notice-error" role="alert">{error}</div>}
-      {fixtures.map((f) => <MatchRow key={f.id} fixture={f} />)}
-    </section>
+      {tournamentId && !loading && !error && playable.length === 0 && (
+        <div className="detail-card"><p>This tournament has no matches yet. Create and publish fixtures first.</p></div>
+      )}
+      {playable.map((f) => <MatchRow key={f.id} fixture={f} />)}
+    </>
   )
 }

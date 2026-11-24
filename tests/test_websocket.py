@@ -96,7 +96,9 @@ def _make_match(db, tournament_id, captain_id):
         scheduled_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
     )
     db.add(match)
-    db.flush()
+    # Commit: the WebSocket endpoint ends its read transaction after each
+    # lookup, which would discard rows that were only flushed.
+    db.commit()
     return match
 
 

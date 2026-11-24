@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { endMatch, getMyMatches, getScore, saveScore, startMatch } from './services/scorerApi'
 import { useLiveScores } from './realtime/useLiveScores'
 import { useMatchStatus } from './realtime/useMatchStatus'
@@ -10,8 +10,10 @@ function normalize(m) {
   return {
     id: m.id,
     number: m.match_number,
-    teamA: m.team_a_id ? 'Team ' + m.team_a_id : 'TBD',
-    teamB: m.team_b_id ? 'Team ' + m.team_b_id : 'TBD',
+    teamA: m.team_a_name || (m.team_a_id ? 'Team to be confirmed' : 'TBD'),
+    teamB: m.team_b_name || (m.team_b_id ? 'Team to be confirmed' : 'TBD'),
+    tournament: m.tournament_name ?? '',
+    venue: m.venue_name ?? '',
     role: m.assignment_type ?? '',
     scheduled: m.scheduled_at ?? null,
     status: m.status ?? '',
@@ -21,7 +23,6 @@ function normalize(m) {
 }
 
 const toScore = (v) => (/^\d+$/.test(String(v).trim()) ? Number(v) : null)
-const box = { border: '1px solid rgba(128,128,128,.4)', borderRadius: 8, padding: 16, marginBottom: 12 }
 
 const STATUS_LABELS = {
   scheduled: 'Scheduled',
@@ -89,7 +90,7 @@ function MatchCard({ match, live, liveStatus }) {
       setError('Submit the final score before ending the match.')
       return
     }
-    if (!window.confirm('End this match? You will not be able to change the score afterwards unless the organiser rejects it.')) return
+    if (!window.confirm(`End ${match.teamA} vs ${match.teamB}? You will not be able to change the score afterwards unless the organiser rejects it.`)) return
     setChangingStatus(true)
     try {
       const updated = await endMatch(match.id)
@@ -103,47 +104,48 @@ function MatchCard({ match, live, liveStatus }) {
   }
 
   return (
-    <div style={box}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+    <div className="detail-card match-review-card">
+      <div className="match-review-heading">
         <strong>Match {match.number}: {match.teamA} vs {match.teamB}</strong>
         <span className="status-pill">{STATUS_LABELS[status] || status}</span>
       </div>
-      {match.scheduled && <div style={{ fontSize: 13, opacity: 0.7 }}>{new Date(match.scheduled).toLocaleString()}</div>}
-      {match.role && <div style={{ fontSize: 13, opacity: 0.7 }}>Your role: {match.role}</div>}
+      {(match.tournament || match.venue) && <div className="muted small">{[match.tournament, match.venue].filter(Boolean).join(' · ')}</div>}
+      {match.scheduled && <div className="muted small">{new Date(match.scheduled).toLocaleString()}</div>}
+      {match.role && <div className="muted small">Your role: {match.role}</div>}
 
       {isScheduled && (
-        <div style={{ margin: '12px 0' }}>
-          <button type="button" onClick={onStart} disabled={changingStatus || !hasTeams}>
+        <div className="stack-gap">
+          <button type="button" className="button button-primary" onClick={onStart} disabled={changingStatus || !hasTeams}>
             {changingStatus ? 'Starting...' : 'Start match'}
           </button>
           {!hasTeams && (
-            <div style={{ fontSize: 13, opacity: 0.7, marginTop: 6 }}>Both teams must be assigned before the match can start.</div>
+            <div className="muted small">Both teams must be assigned before the match can start.</div>
           )}
         </div>
       )}
 
       {isLive && (
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', margin: '12px 0', flexWrap: 'wrap' }}>
+        <div className="score-entry">
           <label>{match.teamA}{' '}
-            <input type="number" min="0" step="1" value={a} onChange={(e) => setA(e.target.value)} style={{ width: 70 }} />
+            <input type="number" min="0" step="1" value={a} onChange={(e) => setA(e.target.value)} />
           </label>
           <label>{match.teamB}{' '}
-            <input type="number" min="0" step="1" value={b} onChange={(e) => setB(e.target.value)} style={{ width: 70 }} />
+            <input type="number" min="0" step="1" value={b} onChange={(e) => setB(e.target.value)} />
           </label>
-          <button type="button" onClick={onSave} disabled={saving || changingStatus || Boolean(match.scoreLoadError)}>{saving ? 'Saving...' : (saved ? 'Update score' : 'Submit score')}</button>
-          <button type="button" onClick={onEnd} disabled={saving || changingStatus || Boolean(match.scoreLoadError)}>{changingStatus ? 'Ending...' : 'End match'}</button>
+          <button type="button" className="button button-primary" onClick={onSave} disabled={saving || changingStatus || Boolean(match.scoreLoadError)}>{saving ? 'Saving...' : (saved ? 'Update score' : 'Submit score')}</button>
+          <button type="button" className="button button-secondary" onClick={onEnd} disabled={saving || changingStatus || Boolean(match.scoreLoadError)}>{changingStatus ? 'Ending...' : 'End match'}</button>
         </div>
       )}
 
       {isEnded && (
-        <div style={{ margin: '12px 0' }}>
+        <div className="stack-gap">
           {saved && <div>Final score: <b>{a} - {b}</b></div>}
-          <div style={{ fontSize: 13, opacity: 0.7 }}>This match has ended. Waiting for the organiser to verify the score and publish the result.</div>
+          <div className="muted small">This match has ended. Waiting for the organiser to verify the score and publish the result.</div>
         </div>
       )}
 
-      {status === 'paused' && <div style={{ fontSize: 13, opacity: 0.7, margin: '12px 0' }}>This match is paused.</div>}
-      {status === 'cancelled' && <div style={{ fontSize: 13, opacity: 0.7, margin: '12px 0' }}>This match was cancelled.</div>}
+      {status === 'paused' && <div className="muted small">This match is paused.</div>}
+      {status === 'cancelled' && <div className="muted small">This match was cancelled.</div>}
 
       {live && <div>Live score: <b>{live.home} - {live.away}</b></div>}
       {match.scoreLoadError && <div className="notice notice-error" role="alert">{match.scoreLoadError}</div>}
@@ -206,8 +208,14 @@ export default function ScorerPage() {
 
   return (
     <section>
-      <h2>Match scoring</h2>
-      <p style={{ fontSize: 13, opacity: 0.7 }}>Live connection: {wsStatus}</p>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">SCORER WORKSPACE</p>
+          <h1>Match scoring</h1>
+          <p className="muted">Start your assigned matches, record the score and end the match when play finishes.</p>
+        </div>
+        <span className={`status-pill status-${wsStatus === 'open' ? 'live' : 'unknown'}`}>{wsStatus === 'open' ? 'Live updates on' : 'Live updates offline'}</span>
+      </div>
       {loading && <div className="loading-state"><span className="spinner" />Loading your matches...</div>}
       {error && (
         <div className="notice notice-error" role="alert">

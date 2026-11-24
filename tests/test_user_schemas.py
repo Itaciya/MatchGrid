@@ -44,7 +44,7 @@ def test_registration_rejects_invalid_role():
 
 
 @pytest.mark.parametrize(
-    "role", ["organiser", "player", "scorer", "spectator", "official"]
+    "role", ["organiser", "player", "scorer", "spectator"]
 )
 def test_registration_accepts_each_valid_role(role):
     user = UserRegister(
@@ -53,6 +53,15 @@ def test_registration_accepts_each_valid_role(role):
         role=role,
     )
     assert user.role == role
+
+
+def test_registration_rejects_the_retired_referee_role():
+    with pytest.raises(ValidationError):
+        UserRegister(
+            email="user@example.com",
+            password="strongpassword123",
+            role="official",
+        )
 
 
 # --- UserLogin ---

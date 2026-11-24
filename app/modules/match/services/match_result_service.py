@@ -15,6 +15,11 @@ from app.modules.match.models.match_result import (
     MatchResult,
 )
 from app.modules.match.models.match_result_correction import MatchResultCorrection
+from app.modules.match.services.single_elimination_service import (
+    advance_single_elimination_winner,
+    is_knockout_format,
+    place_team_in_next_match,
+)
 from app.modules.score.models.score import Score, ScoreVerificationStatus
 
 MATCH_STATUS_LIVE = "live"
@@ -98,6 +103,14 @@ def finalize_match_result(
 
     outcome = determine_outcome(score.team_a_score, score.team_b_score)
 
+    if outcome == OUTCOME_DRAW and is_knockout_format(match.tournament.format):
+        raise ConflictException(
+            detail=(
+                "A knockout match cannot end in a draw. Record the tie-break "
+                "result in the score before finalizing."
+            )
+        )
+
     if outcome == OUTCOME_TEAM_A_WIN:
         winner_team_id, loser_team_id = match.team_a_id, match.team_b_id
     elif outcome == OUTCOME_TEAM_B_WIN:
@@ -118,14 +131,16 @@ def finalize_match_result(
     db.add(result)
     match.status = MATCH_STATUS_COMPLETED
 
-    db.commit()
-    db.refresh(result)
+    # Advance the winner in the same transaction, so the result and the
+    # bracket update are saved together or not at all.
+    try:
+        advance_single_elimination_winner(db, match_id, result)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
-    # Advance the winner only after the verified result is finalized.
-    from app.modules.match.services.single_elimination_service import (
-        advance_single_elimination_winner,
-    )
-    advance_single_elimination_winner(db, match_id, result)
+    db.refresh(result)
 
     from app.modules.tournament.services.tournament_status_service import (
         complete_tournament_if_done,
@@ -186,6 +201,12 @@ def correct_match_result(
         )
 
     new_outcome = determine_outcome(team_a_score, team_b_score)
+    knockout = is_knockout_format(match.tournament.format)
+
+    if new_outcome == OUTCOME_DRAW and knockout:
+        raise ConflictException(
+            detail="A knockout match result cannot be corrected to a draw"
+        )
 
     if new_outcome == OUTCOME_TEAM_A_WIN:
         winner_team_id, loser_team_id = match.team_a_id, match.team_b_id
@@ -193,6 +214,20 @@ def correct_match_result(
         winner_team_id, loser_team_id = match.team_b_id, match.team_a_id
     else:
         winner_team_id, loser_team_id = None, None
+
+    # In a knockout bracket a changed winner must replace the old winner in
+    # the next round, as long as that next match has not started.
+    if (
+        knockout
+        and match.tournament.format == "single_elimination"
+        and winner_team_id != result.winner_team_id
+    ):
+        place_team_in_next_match(
+            db,
+            match,
+            winner_team_id,
+            replace_team_id=result.winner_team_id,
+        )
 
     db.add(
         MatchResultCorrection(

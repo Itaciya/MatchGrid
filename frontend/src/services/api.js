@@ -1,14 +1,44 @@
-﻿const API_BASE_URL = (
+const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 ).replace(/\/+$/, '')
 
 function getAccessToken() {
-  return (
-    localStorage.getItem('access_token') ||
-    localStorage.getItem('accessToken') ||
-    localStorage.getItem('token') ||
-    ''
-  )
+  return localStorage.getItem('access_token') || ''
+}
+
+function clearStoredTokens() {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+}
+
+// One refresh at a time: parallel requests that all hit 401 share it.
+let refreshInFlight = null
+
+async function refreshAccessToken() {
+  const refreshToken = localStorage.getItem('refresh_token')
+  if (!refreshToken) return false
+
+  if (!refreshInFlight) {
+    refreshInFlight = fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          clearStoredTokens()
+          return false
+        }
+        const tokens = await response.json()
+        localStorage.setItem('access_token', tokens.access_token)
+        localStorage.setItem('refresh_token', tokens.refresh_token)
+        return true
+      })
+      .catch(() => false)
+      .finally(() => { refreshInFlight = null })
+  }
+
+  return refreshInFlight
 }
 
 /**
@@ -61,6 +91,12 @@ const SERVER_MESSAGE_REWRITES = [
   [/registration deadline has passed/i, () => 'The registration deadline has passed.'],
   [/only active teams can register/i, () => 'Your team is not active. Please contact the organiser.'],
   [/only active players can register/i, () => 'Your player profile is not active. Please contact the organiser.'],
+  [/suspended team can only be reinstated by an organiser/i, () => 'This team is suspended. Only an organiser can reinstate it.'],
+  [/player belongs to another team/i, () => 'This player already plays for another team.'],
+  [/only the organiser who created this venue/i, () => 'This venue was created by another organiser, so you cannot change it.'],
+  [/knockout match cannot end in a draw|cannot be corrected to a draw/i, () => 'Knockout matches need a winner. Enter the tie-break result before finalizing.'],
+  [/next-round match has already started/i, () => 'The next-round match has already started, so this result can no longer change who advances.'],
+  [/search term must be at least 2 characters/i, () => 'Type at least 2 letters to search.'],
 ]
 
 // What to say when the server gave no usable message at all.
@@ -164,7 +200,7 @@ function toFriendlyMessage({ status, serverMessage, endpoint }) {
   return 'Something unexpected happened. Please try again.'
 }
 
-async function apiRequest(endpoint, options = {}) {
+async function apiRequest(endpoint, options = {}, { retried = false } = {}) {
   if (!API_BASE_URL) {
     throw new ApiError(
       'The app is not configured correctly (missing API address). Please contact support.',
@@ -198,6 +234,18 @@ async function apiRequest(endpoint, options = {}) {
     )
   }
 
+  // An expired access token is renewed once with the refresh token, then the
+  // request is retried. Auth endpoints themselves are never retried.
+  if (
+    response.status === 401 &&
+    token &&
+    !retried &&
+    !endpoint.startsWith('/auth/') &&
+    (await refreshAccessToken())
+  ) {
+    return apiRequest(endpoint, options, { retried: true })
+  }
+
   if (response.status === 204) return null
 
   const contentType = response.headers.get('content-type') || ''
@@ -218,5 +266,5 @@ async function apiRequest(endpoint, options = {}) {
   return payload
 }
 
-export { API_BASE_URL, ApiError, apiRequest }
+export { API_BASE_URL, ApiError, apiRequest, clearStoredTokens, getAccessToken }
 

@@ -48,7 +48,7 @@ def read_tournament_roster(
 def search_players_for_tournament(
     tournament_id: int,
     team_id: int,
-    q: str = Query(..., min_length=1, max_length=100),
+    q: str = Query(..., min_length=2, max_length=100),
     limit: int = Query(20, ge=1, le=50),
     current_user: User = Depends(require_role("player", "captain")),
     db: Session = Depends(get_db),

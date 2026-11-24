@@ -111,3 +111,21 @@ class MatchResult(Base):
     )
 
     match = relationship("Match")
+
+    @property
+    def team_a_name(self) -> str | None:
+        return self.match.team_a_name if self.match else None
+
+    @property
+    def team_b_name(self) -> str | None:
+        return self.match.team_b_name if self.match else None
+
+    @property
+    def winner_team_name(self) -> str | None:
+        if self.match is None or self.winner_team_id is None:
+            return None
+        if self.winner_team_id == self.match.team_a_id:
+            return self.match.team_a_name
+        if self.winner_team_id == self.match.team_b_id:
+            return self.match.team_b_name
+        return None

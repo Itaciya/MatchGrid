@@ -270,13 +270,27 @@ def create_player_registration(
     return registration
 
 
-def update_registration_status(
+def _ensure_tournament_owner(
+    tournament: Tournament | None,
+    organiser_id: int | None,
+) -> None:
+    """Reject organisers acting on a tournament they do not own.
+
+    organiser_id is None only for internal callers that already enforce
+    their own authorisation.
+    """
+    if organiser_id is None:
+        return
+
+    if tournament is None or tournament.organizer_id != organiser_id:
+        raise ForbiddenException(detail="You do not own this tournament")
+
+
+def _get_owned_registration(
     db: Session,
     registration_id: int,
-    new_status: RegistrationStatus,
+    organiser_id: int | None,
 ) -> Registration:
-    """Update registration status and notify the participant if necessary."""
-
     registration = (
         db.query(Registration)
         .filter(Registration.id == registration_id)
@@ -285,6 +299,27 @@ def update_registration_status(
 
     if registration is None:
         raise NotFoundException(detail="Registration not found")
+
+    tournament = (
+        db.query(Tournament)
+        .filter(Tournament.id == registration.tournament_id)
+        .first()
+    )
+    _ensure_tournament_owner(tournament, organiser_id)
+
+    return registration
+
+
+def update_registration_status(
+    db: Session,
+    registration_id: int,
+    new_status: RegistrationStatus,
+    *,
+    organiser_id: int | None = None,
+) -> Registration:
+    """Update registration status and notify the participant if necessary."""
+
+    registration = _get_owned_registration(db, registration_id, organiser_id)
 
     current_status = RegistrationStatus(registration.status)
 
@@ -326,6 +361,8 @@ def update_registration_status(
 def get_pending_registrations(
     db: Session,
     tournament_id: int,
+    *,
+    organiser_id: int | None = None,
 ) -> list[Registration]:
     """Retrieve all pending registrations for a tournament."""
 
@@ -337,6 +374,8 @@ def get_pending_registrations(
 
     if tournament is None:
         raise NotFoundException(detail="Tournament not found")
+
+    _ensure_tournament_owner(tournament, organiser_id)
 
     registrations = (
         db.query(Registration)
@@ -353,17 +392,12 @@ def get_pending_registrations(
 def approve_registration(
     db: Session,
     registration_id: int,
+    *,
+    organiser_id: int | None = None,
 ) -> Registration:
     """Approve a valid pending registration and notify the participant."""
 
-    registration = (
-        db.query(Registration)
-        .filter(Registration.id == registration_id)
-        .first()
-    )
-
-    if registration is None:
-        raise NotFoundException(detail="Registration not found")
+    registration = _get_owned_registration(db, registration_id, organiser_id)
 
     if registration.status != RegistrationStatus.PENDING.value:
         raise BadRequestException(
@@ -548,17 +582,12 @@ def update_registration(
 def reject_registration(
     db: Session,
     registration_id: int,
+    *,
+    organiser_id: int | None = None,
 ) -> Registration:
     """Reject a pending registration and notify the participant."""
 
-    registration = (
-        db.query(Registration)
-        .filter(Registration.id == registration_id)
-        .first()
-    )
-
-    if registration is None:
-        raise NotFoundException(detail="Registration not found")
+    registration = _get_owned_registration(db, registration_id, organiser_id)
 
     if registration.status != RegistrationStatus.PENDING.value:
         raise BadRequestException(

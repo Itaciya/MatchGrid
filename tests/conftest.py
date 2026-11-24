@@ -84,10 +84,15 @@ def fake_redis(monkeypatch):
         "app.modules.user.services.auth_service.get_redis",
         lambda: fake,
     )
-    monkeypatch.setattr(
+    # Every module that talks to Redis gets the same fake, so no test waits
+    # on connection timeouts to a Redis server that is not running.
+    for target in (
         "app.core.dependencies.get_redis",
-        lambda: fake,
-    )
+        "app.core.rate_limiter.get_redis",
+        "app.data_access.cache.get_redis",
+        "app.realtime.routes.get_redis",
+    ):
+        monkeypatch.setattr(target, lambda: fake)
     return fake
 
 

@@ -13,6 +13,9 @@ class MatchResultResponse(BaseModel):
     outcome: str
     winner_team_id: int | None
     loser_team_id: int | None
+    team_a_name: str | None = None
+    team_b_name: str | None = None
+    winner_team_name: str | None = None
     team_a_score: int
     team_b_score: int
     finalized_by_id: int

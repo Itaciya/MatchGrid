@@ -5,12 +5,17 @@ from app.core.dependencies import get_current_user
 from app.data_access.database import get_db
 from app.modules.user.models import User
 from app.modules.user.schemas.user import (
+    RefreshRequest,
     TokenResponse,
     UserLogin,
     UserRegister,
     UserResponse,
 )
-from app.modules.user.services.auth_service import authenticate_user, logout_user
+from app.modules.user.services.auth_service import (
+    authenticate_user,
+    logout_user,
+    refresh_tokens,
+)
 from app.modules.user.services.user_service import register_user
 
 router = APIRouter(
@@ -40,6 +45,18 @@ def login(
     db: Session = Depends(get_db),
 ):
     return authenticate_user(db, credentials)
+
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+)
+def refresh(
+    data: RefreshRequest,
+    db: Session = Depends(get_db),
+):
+    """Exchange a refresh token for a new access/refresh pair."""
+    return refresh_tokens(db, data.refresh_token)
 
 
 @router.post(

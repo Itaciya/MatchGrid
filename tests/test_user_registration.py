@@ -77,7 +77,7 @@ def test_registered_user_password_is_hashed_in_db(db):
     assert user.password_hash.startswith("$2b$")
 
 
-ROLES = ["organiser", "player", "scorer", "spectator", "official"]
+ROLES = ["organiser", "player", "scorer", "spectator"]
 
 
 def _payload(**overrides):
@@ -132,6 +132,26 @@ def test_register_accepts_every_supported_role(role):
 
     assert response.status_code == 201
     assert response.json()["role"] == role
+
+
+def test_register_no_longer_offers_the_referee_role(db):
+    email = _unique_email()
+
+    response = client.post("/auth/register", json=_payload(email=email, role="official"))
+
+    assert response.status_code == 422
+    assert db.query(User).filter(User.email == email).count() == 0
+
+
+def test_register_email_is_case_insensitive(db):
+    email = _unique_email()
+
+    first = client.post("/auth/register", json=_payload(email=email.upper()))
+    second = client.post("/auth/register", json=_payload(email=email))
+
+    assert first.status_code == 201
+    assert first.json()["email"] == email.lower()
+    assert second.status_code == 409
 
 
 @pytest.mark.parametrize(

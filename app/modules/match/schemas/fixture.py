@@ -68,7 +68,13 @@ class FixtureResponse(BaseModel):
     round_id: int | None = None
     team_a_id: int | None
     team_b_id: int | None
+    team_a_name: str | None = None
+    team_b_name: str | None = None
+    team_a_score: int | None = None
+    team_b_score: int | None = None
     venue_id: int | None
+    venue_name: str | None = None
+    round_name: str | None = None
     scheduled_at: datetime
     status: str
     stream_url: str | None = None

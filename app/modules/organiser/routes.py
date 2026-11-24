@@ -91,7 +91,7 @@ ALLOWED_IMAGE_TYPES = {
     "/tournaments/{tournament_id}/image",
     response_model=TournamentResponse,
 )
-async def upload_tournament_image(
+def upload_tournament_image(
     file: UploadFile = File(...),
     tournament: Tournament = Depends(verify_tournament_owner),
     db: Session = Depends(get_db),
@@ -106,7 +106,9 @@ async def upload_tournament_image(
             detail="Only JPEG, PNG, and WebP images are allowed.",
         )
 
-    image_data = await file.read(MAX_IMAGE_SIZE + 1)
+    # Sync route: FastAPI runs it in a worker thread, so the blocking file
+    # read and database writes don't stall the event loop.
+    image_data = file.file.read(MAX_IMAGE_SIZE + 1)
 
     if not image_data:
         raise HTTPException(

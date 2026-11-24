@@ -250,3 +250,38 @@ def test_roster_search_rejects_empty_query(db):
     )
 
     assert response.status_code == 422
+
+
+def test_roster_search_rejects_single_character_query(db):
+    _, captain, team, tournament = _make_roster_context(db)
+
+    response = client.get(
+        f"/tournament-rosters/{tournament.id}/teams/{team.id}/search?q=a",
+        headers=_headers(captain),
+    )
+
+    assert response.status_code == 422
+
+
+def test_player_from_another_team_cannot_be_searched_or_added(db):
+    _, captain, team, tournament = _make_roster_context(db)
+    _, _, other_team, _ = _make_roster_context(db)
+    poached = _make_player(db, "Gamma", "OtherTeamRoster")
+    poached.team_id = other_team.id
+    db.commit()
+
+    base = f"/tournament-rosters/{tournament.id}/teams/{team.id}"
+
+    search = client.get(
+        f"{base}/search?q={quote('Gamma OtherTeamRoster')}",
+        headers=_headers(captain),
+    )
+    assert search.status_code == 200
+    assert all(item["player_id"] != poached.id for item in search.json())
+
+    add = client.post(
+        base,
+        headers=_headers(captain),
+        json={"player_id": poached.id},
+    )
+    assert add.status_code == 409

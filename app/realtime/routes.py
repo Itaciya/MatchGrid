@@ -2,11 +2,12 @@ import asyncio
 import json
 
 import jwt
+from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, WebSocket
 from fastapi.websockets import WebSocketDisconnect
 from sqlalchemy.orm import Session
 
-from app.core.security import decode_token
+from app.core.security import decode_token, is_token_revoked
 from app.data_access.database import get_db
 from app.data_access.redis_client import get_redis
 from app.modules.user.models import User
@@ -40,18 +41,25 @@ def authenticate_websocket_token(token: str, db: Session) -> User | None:
     except Exception:
         return None
 
-    if invalidated_after is not None:
-        try:
-            if int(payload.get("iat", 0)) <= int(invalidated_after):
-                return None
-        except (TypeError, ValueError):
-            return None
+    if is_token_revoked(payload, invalidated_after):
+        return None
 
     user = db.query(User).filter(User.id == user_id).first()
     if user is None or not user.is_active:
         return None
 
     return user
+
+
+def _match_exists(db: Session, match_id: int) -> bool:
+    """Check a match exists, then release the session's connection."""
+    try:
+        return (
+            db.query(Match.id).filter(Match.id == match_id).first()
+            is not None
+        )
+    finally:
+        db.rollback()
 
 
 @router.websocket("/ws")
@@ -96,7 +104,12 @@ async def websocket_endpoint(
             )
             return
 
-        user = authenticate_websocket_token(token, db)
+        user = await run_in_threadpool(authenticate_websocket_token, token, db)
+        user_role = user.role if user is not None else None
+        authenticated_id = user.id if user is not None else None
+        # End the read transaction so the pooled connection is returned: a
+        # socket can stay open for hours and must not hold it meanwhile.
+        db.rollback()
         if user is None:
             await websocket.close(
                 code=1008,
@@ -104,14 +117,14 @@ async def websocket_endpoint(
             )
             return
 
-        user_id = user.id
+        user_id = authenticated_id
         await manager.connect(user_id, websocket)
 
         await websocket.send_json({
             "type": "auth:success",
             "payload": {
-                "user_id": user.id,
-                "role": user.role,
+                "user_id": user_id,
+                "role": user_role,
             },
         })
 
@@ -161,13 +174,9 @@ async def websocket_endpoint(
                 })
                 continue
 
-            match = (
-                db.query(Match)
-                .filter(Match.id == match_id)
-                .first()
-            )
+            match_exists = await run_in_threadpool(_match_exists, db, match_id)
 
-            if match is None:
+            if not match_exists:
                 await websocket.send_json({
                     "type": "error",
                     "payload": {"detail": "Match not found"},

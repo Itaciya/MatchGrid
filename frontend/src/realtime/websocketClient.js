@@ -1,9 +1,10 @@
 const DEFAULTS = {
-  url: import.meta.env.VITE_WS_URL || 'ws://localhost:8080',
-  getToken: () => localStorage.getItem('access_token') || localStorage.getItem('accessToken') || localStorage.getItem('token'),
+  url: import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws',
+  getToken: () => localStorage.getItem('access_token'),
   baseDelay: 1000,
   maxDelay: 30000,
   heartbeatMs: 25000,
+  tokenCheckMs: 5000,
 };
 
 export class WebSocketClient {
@@ -17,6 +18,8 @@ export class WebSocketClient {
     this.statusListeners = new Set();
     this.reconnectTimer = null;
     this.heartbeatTimer = null;
+    this.tokenCheckTimer = null;
+    this.rejectedToken = null;
   }
 
   connect() {
@@ -28,6 +31,17 @@ export class WebSocketClient {
       return;
     }
 
+    // The server only accepts signed-in clients. Without a token (or with
+    // one it already rejected) don't open a socket that would be closed
+    // straight away; check again shortly instead, e.g. after sign-in.
+    const token = this.opts.getToken?.();
+    if (!token || token === this.rejectedToken) {
+      this.manualClose = false;
+      this._setStatus('closed');
+      this._scheduleTokenCheck();
+      return;
+    }
+
     this.manualClose = false;
     this._setStatus('connecting');
     const ws = new WebSocket(this.opts.url);
@@ -36,8 +50,7 @@ export class WebSocketClient {
     ws.onopen = () => {
       if (this.ws !== ws) return;
       this.attempts = 0;
-      const token = this.opts.getToken?.();
-      if (token) this._send({ type: 'auth', token });
+      this._send({ type: 'auth', token });
       this._setStatus('open');
       this._startHeartbeat();
     };
@@ -53,18 +66,26 @@ export class WebSocketClient {
 
     ws.onerror = () => {};
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       if (this.ws !== ws) return;
       this._stopHeartbeat();
       this.ws = null;
       this._setStatus('closed');
-      if (!this.manualClose) this._scheduleReconnect();
+      if (this.manualClose) return;
+      // 1008 = the server refused our token; wait for a new one.
+      if (event.code === 1008) {
+        this.rejectedToken = token;
+        this._scheduleTokenCheck();
+        return;
+      }
+      this._scheduleReconnect();
     };
   }
 
   disconnect() {
     this.manualClose = true;
     clearTimeout(this.reconnectTimer);
+    clearTimeout(this.tokenCheckTimer);
     this._stopHeartbeat();
     this.ws?.close(1000, 'client disconnect');
     this.ws = null;
@@ -102,6 +123,13 @@ export class WebSocketClient {
     const jitter = Math.random() * 300;
     this.attempts += 1;
     this.reconnectTimer = setTimeout(() => this.connect(), delay + jitter);
+  }
+
+  _scheduleTokenCheck() {
+    clearTimeout(this.tokenCheckTimer);
+    this.tokenCheckTimer = setTimeout(() => {
+      if (!this.manualClose && !this.ws) this.connect();
+    }, this.opts.tokenCheckMs);
   }
 
   _startHeartbeat() {

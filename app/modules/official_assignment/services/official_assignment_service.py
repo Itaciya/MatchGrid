@@ -188,6 +188,10 @@ def get_my_assigned_matches(
             "tournament_id": match.tournament_id,
             "match_number": match.match_number,
             "team_a_id": match.team_a_id,
+            "team_a_name": match.team_a_name,
+            "team_b_name": match.team_b_name,
+            "venue_name": match.venue_name,
+            "tournament_name": match.tournament_name,
             "team_b_id": match.team_b_id,
             "venue_id": match.venue_id,
             "scheduled_at": match.scheduled_at,
@@ -311,6 +315,10 @@ def get_my_tournament_scorer_matches(
                 "tournament_id": match.tournament_id,
                 "match_number": match.match_number,
                 "team_a_id": match.team_a_id,
+            "team_a_name": match.team_a_name,
+            "team_b_name": match.team_b_name,
+            "venue_name": match.venue_name,
+            "tournament_name": match.tournament_name,
                 "team_b_id": match.team_b_id,
                 "venue_id": match.venue_id,
                 "scheduled_at": match.scheduled_at,
@@ -319,3 +327,48 @@ def get_my_tournament_scorer_matches(
             })
 
     return results
+
+
+ASSIGNMENT_STATUS_REMOVED = "inactive"
+
+
+def list_tournament_scorers(db: Session, tournament_id: int) -> list[User]:
+    """Scorers currently assigned to a tournament."""
+    return (
+        db.query(User)
+        .join(
+            TournamentScorerAssignment,
+            TournamentScorerAssignment.scorer_id == User.id,
+        )
+        .filter(
+            TournamentScorerAssignment.tournament_id == tournament_id,
+            TournamentScorerAssignment.status == ASSIGNMENT_STATUS_ACTIVE,
+        )
+        .order_by(User.email)
+        .all()
+    )
+
+
+def remove_tournament_scorer(
+    db: Session,
+    tournament_id: int,
+    scorer_id: int,
+) -> None:
+    """Take a scorer off a tournament. The row is kept for history."""
+    assignment = (
+        db.query(TournamentScorerAssignment)
+        .filter(
+            TournamentScorerAssignment.tournament_id == tournament_id,
+            TournamentScorerAssignment.scorer_id == scorer_id,
+            TournamentScorerAssignment.status == ASSIGNMENT_STATUS_ACTIVE,
+        )
+        .first()
+    )
+
+    if assignment is None:
+        raise NotFoundException(
+            detail="This scorer is not assigned to the tournament"
+        )
+
+    assignment.status = ASSIGNMENT_STATUS_REMOVED
+    db.commit()

@@ -234,6 +234,7 @@ class TournamentResponse(BaseModel):
     registration_open_at: datetime
     registration_close_at: datetime
     status: str
+    fixtures_published: bool = False
     organizer_id: int
     created_at: datetime
     updated_at: datetime

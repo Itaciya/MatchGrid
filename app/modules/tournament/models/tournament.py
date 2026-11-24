@@ -124,9 +124,12 @@ class Tournament(Base):
     )
 
     # Tournament picture
+    # Deferred: up to 5 MB per row, loaded only when the image is served,
+    # not on every tournament list or detail query.
     image_data: Mapped[bytes | None] = mapped_column(
         LargeBinary,
         nullable=True,
+        deferred=True,
     )
 
     image_content_type: Mapped[str | None] = mapped_column(

@@ -39,6 +39,7 @@ def create_venue_endpoint(
     return create_venue(
         db,
         data,
+        created_by_id=current_user.id,
     )
 
 
@@ -89,6 +90,7 @@ def update_venue_endpoint(
         db,
         venue_id,
         data,
+        organiser_id=current_user.id,
     )
 
 
@@ -106,6 +108,7 @@ def delete_venue_endpoint(
     delete_venue(
         db,
         venue_id,
+        organiser_id=current_user.id,
     )
 
     return None

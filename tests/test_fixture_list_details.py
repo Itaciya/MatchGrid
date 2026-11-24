@@ -36,6 +36,7 @@ def create_tournament(db, organizer_id):
         end_date=datetime(2099, 1, 10, 23, 59, tzinfo=timezone.utc),
         status="upcoming",
         organizer_id=organizer_id,
+        fixtures_published=True,
     
         registration_open_at=datetime(2098, 12, 1, 0, 0, tzinfo=timezone.utc),
         registration_close_at=datetime(2098, 12, 31, 23, 59, tzinfo=timezone.utc))
@@ -356,3 +357,83 @@ def test_fixture_details_does_not_expose_another_tournaments_fixture(db):
     )
 
     assert response.status_code == 404
+
+def _bearer(user):
+    from app.core.security import create_access_token
+
+    return {"Authorization": f"Bearer {create_access_token(user.id, user.role)}"}
+
+
+def _unpublished_tournament_with_fixture(db):
+    organizer = create_user(db)
+    tournament = create_tournament(db, organizer.id)
+    tournament.fixtures_published = False
+    db.commit()
+
+    fixture = create_match(
+        db,
+        tournament.id,
+        1,
+        create_team(db, organizer.id).id,
+        create_team(db, organizer.id).id,
+        datetime(2099, 1, 2, 10, 0, tzinfo=timezone.utc),
+    )
+    return organizer, tournament, fixture
+
+
+def test_unpublished_fixtures_are_hidden_from_anonymous_callers(db):
+    _, tournament, fixture = _unpublished_tournament_with_fixture(db)
+
+    assert client.get(list_url(tournament.id)).status_code == 404
+    assert client.get(details_url(tournament.id, fixture.id)).status_code == 404
+
+
+def test_unpublished_fixtures_are_hidden_from_other_organisers(db):
+    _, tournament, fixture = _unpublished_tournament_with_fixture(db)
+    other = create_user(db)
+
+    response = client.get(list_url(tournament.id), headers=_bearer(other))
+
+    assert response.status_code == 404
+
+
+def test_owner_can_see_unpublished_fixtures(db):
+    organizer, tournament, fixture = _unpublished_tournament_with_fixture(db)
+
+    listing = client.get(list_url(tournament.id), headers=_bearer(organizer))
+    details = client.get(
+        details_url(tournament.id, fixture.id), headers=_bearer(organizer)
+    )
+
+    assert listing.status_code == 200
+    assert [item["id"] for item in listing.json()] == [fixture.id]
+    assert details.status_code == 200
+
+
+def test_fixture_list_shows_only_verified_scores(db):
+    from app.modules.score.models.score import Score
+
+    organizer = create_user(db)
+    tournament = create_tournament(db, organizer.id)
+    verified = create_match(
+        db, tournament.id, 1,
+        create_team(db, organizer.id).id, create_team(db, organizer.id).id,
+        datetime(2099, 1, 2, 10, 0, tzinfo=timezone.utc),
+    )
+    pending = create_match(
+        db, tournament.id, 2,
+        create_team(db, organizer.id).id, create_team(db, organizer.id).id,
+        datetime(2099, 1, 2, 12, 0, tzinfo=timezone.utc),
+    )
+    db.add_all([
+        Score(match_id=verified.id, team_a_score=3, team_b_score=1,
+              is_verified=True, verification_status="verified"),
+        Score(match_id=pending.id, team_a_score=5, team_b_score=0),
+    ])
+    db.commit()
+
+    rows = {row["id"]: row for row in client.get(list_url(tournament.id)).json()}
+
+    assert (rows[verified.id]["team_a_score"], rows[verified.id]["team_b_score"]) == (3, 1)
+    assert rows[pending.id]["team_a_score"] is None
+    assert rows[pending.id]["team_b_score"] is None

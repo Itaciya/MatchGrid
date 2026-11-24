@@ -94,6 +94,7 @@ def get_pending_registrations_endpoint(
     return get_pending_registrations(
         db,
         tournament_id,
+        organiser_id=current_user.id,
     )
 
 
@@ -131,6 +132,7 @@ def approve_registration_endpoint(
     return approve_registration(
         db,
         registration_id,
+        organiser_id=current_user.id,
     )
 
 
@@ -148,6 +150,7 @@ def reject_registration_endpoint(
     return reject_registration(
         db,
         registration_id,
+        organiser_id=current_user.id,
     )
 
 
@@ -167,4 +170,5 @@ def update_registration_status_endpoint(
         db,
         registration_id,
         new_status,
+        organiser_id=current_user.id,
     )

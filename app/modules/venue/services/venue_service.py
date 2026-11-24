@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import (
+    ForbiddenException,
     BadRequestException,
     ConflictException,
     NotFoundException,
@@ -13,9 +14,22 @@ from app.modules.venue.schemas.venue import (
 )
 
 
+def _ensure_can_manage(venue: Venue, organiser_id: int | None) -> None:
+    """Only the organiser who created a venue may change or delete it."""
+    if organiser_id is None or venue.created_by_id is None:
+        return
+
+    if venue.created_by_id != organiser_id:
+        raise ForbiddenException(
+            detail="Only the organiser who created this venue can change it"
+        )
+
+
 def create_venue(
     db: Session,
     data: VenueCreate,
+    *,
+    created_by_id: int | None = None,
 ) -> Venue:
     """Create a new venue."""
 
@@ -35,6 +49,7 @@ def create_venue(
         location=data.location,
         description=data.description,
         capacity=data.capacity,
+        created_by_id=created_by_id,
     )
 
     db.add(venue)
@@ -80,6 +95,8 @@ def update_venue(
     db: Session,
     venue_id: int,
     data: VenueUpdate,
+    *,
+    organiser_id: int | None = None,
 ) -> Venue:
     """Update an existing venue."""
 
@@ -87,6 +104,7 @@ def update_venue(
         db=db,
         venue_id=venue_id,
     )
+    _ensure_can_manage(venue, organiser_id)
 
     if data.name is not None:
         existing_venue = (
@@ -123,6 +141,8 @@ def update_venue(
 def delete_venue(
     db: Session,
     venue_id: int,
+    *,
+    organiser_id: int | None = None,
 ) -> None:
     """Delete a venue if it has no assigned matches."""
 
@@ -130,6 +150,7 @@ def delete_venue(
         db=db,
         venue_id=venue_id,
     )
+    _ensure_can_manage(venue, organiser_id)
 
     assigned_match = (
         db.query(Match)

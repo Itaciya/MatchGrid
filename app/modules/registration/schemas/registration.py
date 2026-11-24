@@ -58,8 +58,11 @@ class RegistrationResponse(BaseModel):
 
     id: int
     tournament_id: int
+    tournament_name: str | None = None
     team_id: int | None
+    team_name: str | None = None
     player_id: int | None
+    player_name: str | None = None
     registration_type: RegistrationType
     status: RegistrationStatus
     registered_at: datetime
