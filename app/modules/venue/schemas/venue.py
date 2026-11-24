@@ -52,5 +52,6 @@ class VenueResponse(BaseModel):
     location: str
     description: str | None
     capacity: int
+    created_by_id: int | None = None
     created_at: datetime
     updated_at: datetime

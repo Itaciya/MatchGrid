@@ -150,6 +150,11 @@ def search_tournament_players(
     if not search_term:
         raise BadRequestException(detail="Search term cannot be empty")
 
+    if len(search_term) < 2:
+        raise BadRequestException(
+            detail="Search term must be at least 2 characters"
+        )
+
     if len(search_term) > 100:
         raise BadRequestException(detail="Search term is too long")
 
@@ -177,6 +182,9 @@ def search_tournament_players(
         db.query(Player)
         .filter(
             Player.status == PlayerStatus.ACTIVE,
+            # Only this team's members and free agents: players who belong
+            # to another team cannot be poached onto this roster.
+            or_(Player.team_id.is_(None), Player.team_id == team_id),
             search_filter,
             ~Player.id.in_(
                 db.query(existing_player_ids.c.player_id)
@@ -212,6 +220,11 @@ def add_player_to_tournament_roster(
     if player.status != PlayerStatus.ACTIVE:
         raise ConflictException(
             detail="Only active players can be added to a tournament roster"
+        )
+
+    if player.team_id is not None and player.team_id != team_id:
+        raise ConflictException(
+            detail="This player belongs to another team"
         )
 
     existing_player = (

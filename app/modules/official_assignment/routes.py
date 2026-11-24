@@ -19,6 +19,8 @@ from app.modules.official_assignment.services.official_assignment_service import
     assign_official,
     get_my_assigned_matches,
     assign_tournament_scorer,
+    list_tournament_scorers,
+    remove_tournament_scorer,
 )
 from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
@@ -103,3 +105,28 @@ def list_available_scorers_endpoint(
         .order_by(User.email)
         .all()
     )
+
+
+@router.get(
+    "/tournaments/{tournament_id}/scorers",
+    response_model=list[ScorerOption],
+)
+def list_tournament_scorers_endpoint(
+    tournament: Tournament = Depends(verify_tournament_owner),
+    db: Session = Depends(get_db),
+):
+    """Scorers assigned to an organiser-owned tournament."""
+    return list_tournament_scorers(db, tournament.id)
+
+
+@router.delete(
+    "/tournaments/{tournament_id}/scorers/{scorer_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_tournament_scorer_endpoint(
+    scorer_id: int,
+    tournament: Tournament = Depends(verify_tournament_owner),
+    db: Session = Depends(get_db),
+):
+    """Take a scorer off an organiser-owned tournament."""
+    remove_tournament_scorer(db, tournament.id, scorer_id)

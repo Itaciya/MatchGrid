@@ -4,7 +4,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ForbiddenException, NotFoundException, UnauthorizedException
-from app.core.security import decode_token
+from app.core.security import decode_token, is_token_revoked
 from app.data_access.database import get_db
 from app.data_access.redis_client import get_redis
 from app.modules.match.models.match import Match
@@ -14,6 +14,7 @@ from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 
 bearer_scheme = HTTPBearer()
+optional_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def _invalidated_after_key(user_id: str) -> str:
@@ -41,15 +42,18 @@ def get_current_user(
     if payload.get("type") != "access":
         raise UnauthorizedException(detail="Invalid or expired token")
 
-    user_id = payload.get("sub")
+    try:
+        user_id = int(payload.get("sub"))
+    except (TypeError, ValueError):
+        raise UnauthorizedException(detail="Invalid or expired token")
 
     redis_client = get_redis()
     invalidated_after = redis_client.get(_invalidated_after_key(user_id))
 
-    if invalidated_after is not None and payload.get("iat", 0) <= int(invalidated_after):
+    if is_token_revoked(payload, invalidated_after):
         raise UnauthorizedException(detail="Invalid or expired token")
 
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = db.query(User).filter(User.id == user_id).first()
 
     if user is None:
         raise UnauthorizedException(detail="Invalid or expired token")
@@ -157,3 +161,64 @@ def verify_match_organiser(
         raise ForbiddenException(detail="You do not own this tournament")
 
     return current_user
+
+
+def get_optional_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        optional_bearer_scheme
+    ),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """Return the signed-in user, or None for anonymous callers.
+
+    A token that is present but invalid is still rejected, so clients learn
+    that their session has expired instead of silently seeing less data.
+    """
+    if credentials is None:
+        return None
+
+    return get_current_user(credentials, db)
+
+
+def can_view_unpublished_fixtures(
+    db: Session,
+    tournament: Tournament,
+    user: User | None,
+) -> bool:
+    """Draft fixtures are visible to the tournament's organiser and staff
+    assigned to it; everyone else only sees them once published."""
+    if tournament.fixtures_published:
+        return True
+
+    if user is None:
+        return False
+
+    if tournament.organizer_id == user.id:
+        return True
+
+    if user.role == "scorer":
+        return (
+            db.query(TournamentScorerAssignment.id)
+            .filter(
+                TournamentScorerAssignment.tournament_id == tournament.id,
+                TournamentScorerAssignment.scorer_id == user.id,
+                TournamentScorerAssignment.status == ASSIGNMENT_STATUS_ACTIVE,
+            )
+            .first()
+            is not None
+        )
+
+    if user.role == "official":
+        return (
+            db.query(OfficialAssignment.id)
+            .join(Match, Match.id == OfficialAssignment.match_id)
+            .filter(
+                Match.tournament_id == tournament.id,
+                OfficialAssignment.official_id == user.id,
+                OfficialAssignment.status == ASSIGNMENT_STATUS_ACTIVE,
+            )
+            .first()
+            is not None
+        )
+
+    return False

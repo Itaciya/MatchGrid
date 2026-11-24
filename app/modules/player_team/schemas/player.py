@@ -81,3 +81,16 @@ class PlayerResponse(BaseModel):
     status: PlayerStatus
     created_at: datetime
     updated_at: datetime
+
+
+class PlayerSearchResult(BaseModel):
+    """A player found by name, with the team they currently belong to."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    first_name: str
+    last_name: str
+    status: PlayerStatus
+    team_id: int | None
+    team_name: str | None = None

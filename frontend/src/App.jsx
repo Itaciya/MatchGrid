@@ -9,14 +9,16 @@ import StandingsPage from './StandingsPage.jsx'
 import LeaderboardPage from './LeaderboardPage.jsx'
 import DisputeResolutionPage from './DisputeResolutionPage.jsx'
 import './App.css'
+import './theme.css'
 import RegistrationPage from './RegistrationPage.jsx'
 import RegistrationApprovalPage from './RegistrationApprovalPage.jsx'
+import TeamPage from './TeamPage.jsx'
 
 const NAV_ITEMS = [
   ['overview', 'Overview'],
   ['tournaments', 'Tournaments'],
   ['create', 'Create tournament'],
-  ['team', 'Teams'],
+  ['team', 'My teams'],
   ['scoring', 'Scoring'],
   ['notifications', 'Notifications'],
   ['verify', 'Verify scores'],
@@ -38,6 +40,7 @@ const PUBLIC_PAGES = new Set([
   'details',
   'standings',
   'leaderboard',
+  'result',
 ])
 
 const KNOWN_ROLES = new Set([
@@ -48,6 +51,13 @@ const KNOWN_ROLES = new Set([
   'scorer',
   'official',
 ])
+
+const ROLE_HINTS = {
+  player: 'Join or captain a team and register for tournaments.',
+  spectator: 'Follow fixtures, live scores and standings.',
+  organiser: 'Create tournaments, approve teams and choose the scorers for your matches.',
+  scorer: 'Score the matches an organiser assigns to you.',
+}
 
 const PAGE_ROLES = {
   create: ['organiser'],
@@ -76,6 +86,15 @@ function dateInputValue(value) {
   return local.toISOString().slice(0, 16)
 }
 
+const FIXTURE_STATUS_LABELS = {
+  scheduled: 'Scheduled',
+  live: 'Live',
+  paused: 'Paused',
+  completed: 'Ended',
+  cancelled: 'Cancelled',
+  bye: 'Bye',
+}
+
 function statusClass(value) {
   return `status-pill status-${String(value || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
 }
@@ -94,27 +113,33 @@ function Loading({ label = 'Loading...' }) {
 
 
 function TournamentScorerAssignment({ tournamentId }) {
-  const [scorers, setScorers] = useState([])
+  const [available, setAvailable] = useState([])
+  const [assigned, setAssigned] = useState([])
   const [scorerId, setScorerId] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  useEffect(() => {
-    let active = true
-    apiRequest(`/official-assignments/tournaments/${tournamentId}/available-scorers`)
-      .then((data) => {
-        if (active) setScorers(data || [])
-      })
-      .catch((err) => {
-        if (active) setError(err.message)
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-return () => { active = false }
+  const loadScorers = useCallback(async () => {
+    try {
+      const [all, current] = await Promise.all([
+        apiRequest(`/official-assignments/tournaments/${tournamentId}/available-scorers`),
+        apiRequest(`/official-assignments/tournaments/${tournamentId}/scorers`),
+      ])
+      setAvailable(Array.isArray(all) ? all : [])
+      setAssigned(Array.isArray(current) ? current : [])
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }, [tournamentId])
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadScorers, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadScorers])
 
   async function assignScorer(event) {
     event.preventDefault()
@@ -127,8 +152,10 @@ return () => { active = false }
         method: 'POST',
         body: JSON.stringify({ scorer_id: Number(scorerId) }),
       })
-      setSuccess('Scorer assigned successfully.')
+      const added = available.find((item) => String(item.id) === scorerId)
+      setSuccess(`${added?.email || 'Scorer'} can now score this tournament's matches.`)
       setScorerId('')
+      await loadScorers()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -136,31 +163,63 @@ return () => { active = false }
     }
   }
 
+  async function removeScorer(scorer) {
+    if (!window.confirm(`Remove ${scorer.email} as a scorer for this tournament?`)) return
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      await apiRequest(`/official-assignments/tournaments/${tournamentId}/scorers/${scorer.id}`, { method: 'DELETE' })
+      setSuccess(`${scorer.email} was removed.`)
+      await loadScorers()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const assignedIds = new Set(assigned.map((item) => item.id))
+  const choices = available.filter((item) => !assignedIds.has(item.id))
+
   return (
-    <section className="form-card">
+    <section className="form-card scorer-panel">
       <div className="section-title">
         <div>
-          <h2>Assign Tournament Scorer</h2>
-          <p className="muted">The assigned scorer can access this tournament's matches.</p>
+          <h2>Scorers</h2>
+          <p className="muted">Scorers you add here can start matches and record scores for this tournament.</p>
         </div>
       </div>
-      {loading ? <Loading label="Loading available scorers..." /> : (
-        scorers.length ? (
-          <form className="filter-row" onSubmit={assignScorer}>
-            <label>
-              Select scorer
-              <select value={scorerId} onChange={(event) => setScorerId(event.target.value)} required>
-                <option value="">Choose an active scorer</option>
-                {scorers.map((scorer) => (
-                  <option key={scorer.id} value={scorer.id}>{scorer.email}</option>
-                ))}
-              </select>
-            </label>
-            <button className="button button-primary" type="submit" disabled={!scorerId || saving}>
-              {saving ? 'Assigning...' : 'Assign Scorer'}
-            </button>
-          </form>
-        ) : error ? null : <p className="muted">No active scorer accounts are available.</p>
+      {loading ? <Loading label="Loading scorers..." /> : (
+        <>
+          {assigned.length > 0 ? (
+            <ul className="chip-list">
+              {assigned.map((scorer) => (
+                <li key={scorer.id} className="chip">
+                  <span className="chip-avatar">{scorer.email.slice(0, 1).toUpperCase()}</span>
+                  {scorer.email}
+                  <button type="button" className="chip-remove" onClick={() => removeScorer(scorer)} disabled={saving} aria-label={`Remove ${scorer.email}`}>×</button>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="muted">No scorers yet. Add at least one so your matches can be played.</p>}
+          {choices.length ? (
+            <form className="filter-row" onSubmit={assignScorer}>
+              <label>
+                Add a scorer
+                <select value={scorerId} onChange={(event) => setScorerId(event.target.value)} required>
+                  <option value="">Choose a scorer account</option>
+                  {choices.map((scorer) => (
+                    <option key={scorer.id} value={scorer.id}>{scorer.email}</option>
+                  ))}
+                </select>
+              </label>
+              <button className="button button-primary" type="submit" disabled={!scorerId || saving}>
+                {saving ? 'Saving...' : 'Add scorer'}
+              </button>
+            </form>
+          ) : !error && <p className="muted small">{available.length ? 'Every scorer account is already on this tournament.' : 'No scorer accounts exist yet. Ask your scorers to sign up with the Scorer role.'}</p>}
+        </>
       )}
       <ErrorNotice>{error}</ErrorNotice>
       <SuccessNotice>{success}</SuccessNotice>
@@ -249,17 +308,6 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
   const [editingId, setEditingId] = useState(null)
   const [tournamentImage, setTournamentImage] = useState(null)
   const [imagePreview, setImagePreview] = useState('')
-  const [, setTeamId] = useState('')
-  const [teamMode, setTeamMode] = useState('choose')
-  const [team, setTeam] = useState(null)
-  const [playerId, setPlayerId] = useState('')
-  const [player, setPlayer] = useState(null)
-  const [playerLoading, setPlayerLoading] = useState(false)
-  const [playerError, setPlayerError] = useState('')
-  const [rosterPlayerId, setRosterPlayerId] = useState('')
-  const [rosterLoading, setRosterLoading] = useState(false)
-  const [rosterError, setRosterError] = useState('')
-  const [rosterSuccess, setRosterSuccess] = useState('')
 
   const [form, setForm] = useState({
     category: 'sports',
@@ -591,66 +639,15 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
       setTournamentImage(null)
       setImagePreview('')
     } catch (error) {
-      setFormError(`${error.message || 'Unable to save tournament.'} If this is an authorization error, sign in with an organiser account.`)
+      setFormError(
+        error.status === 401 || error.status === 403
+          ? `${error.message} Sign in with an organiser account to create tournaments.`
+          : error.message || 'Unable to save the tournament.',
+      )
     } finally {
       setFormLoading(false)
     }
   }
-  const loadPlayer = async (event) => {
-    event.preventDefault()
-    setPlayer(null)
-    setPlayerError('')
-
-    if (!/^[1-9]\d*$/.test(playerId)) {
-      setPlayerError('Enter a valid positive player ID.')
-      return
-    }
-
-    setPlayerLoading(true)
-    try {
-      const result = await apiRequest(`/player-team/profile/${Number(playerId)}`)
-      setPlayer(result)
-    } catch (error) {
-      setPlayerError(error.message || 'Could not load player profile.')
-    } finally {
-      setPlayerLoading(false)
-    }
-  }
-
-  const changeRoster = async (action, id) => {
-    if (!team?.id) return
-    if (!/^[1-9]\d*$/.test(String(id))) {
-      setRosterError('Enter a valid positive player ID.')
-      return
-    }
-
-    setRosterError('')
-    setRosterSuccess('')
-    setRosterLoading(true)
-
-    try {
-      const endpoint = `/player-team/team/${team.id}/players/${Number(id)}`
-      if (action === 'add') {
-        await apiRequest(endpoint, { method: 'POST' })
-      } else {
-        await apiRequest(endpoint, { method: 'DELETE' })
-      }
-
-      const refreshedTeam = await apiRequest(`/player-team/team/${team.id}`)
-      setTeam(refreshedTeam)
-      setRosterPlayerId('')
-      setRosterSuccess(
-        action === 'add'
-          ? `Player successfully added to the team roster.`
-          : `Player successfully removed from the team roster.`,
-      )
-    } catch (error) {
-      setRosterError(error.message || 'Could not update the roster.')
-    } finally {
-      setRosterLoading(false)
-    }
-  }
-
   const handleAuthSubmit = async (event, mode, values) => {
     event.preventDefault()
     setAuthError('')
@@ -773,8 +770,13 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
     }
   }, [page, currentUser, authReady])
 
+  // Only the organiser who created a tournament may manage it.
+  const isOwner = (tournament) => currentUser?.role === 'organiser'
+    && tournament?.organizer_id === currentUser?.id
+
   const visibleNavItems = NAV_ITEMS.filter(([id]) => {
-    if (id === 'tournaments') return true
+    // Fixtures, standings and results are public: show them to everyone.
+    if (['tournaments', 'standings', 'leaderboard', 'result'].includes(id)) return true
     if (!currentUser) return false
 
     const role =
@@ -819,6 +821,24 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
         return aTime - bTime
       })
   }, [fixtures, fixtureStatusFilter, fixtureTeamFilter, fixtureVenueFilter])
+
+  // Filter choices come from the fixtures themselves, labelled by name.
+  const fixtureTeamOptions = useMemo(() => {
+    const teams = new Map()
+    fixtures.forEach((fixture) => {
+      if (fixture.team_a_id) teams.set(fixture.team_a_id, fixture.team_a_name || 'Unnamed team')
+      if (fixture.team_b_id) teams.set(fixture.team_b_id, fixture.team_b_name || 'Unnamed team')
+    })
+    return [...teams].sort((a, b) => a[1].localeCompare(b[1]))
+  }, [fixtures])
+
+  const fixtureVenueOptions = useMemo(() => {
+    const venues = new Map()
+    fixtures.forEach((fixture) => {
+      if (fixture.venue_id) venues.set(fixture.venue_id, fixture.venue_name || 'Unnamed venue')
+    })
+    return [...venues].sort((a, b) => a[1].localeCompare(b[1]))
+  }, [fixtures])
 
   const fixturePageSize = 10
   const fixturePageCount = Math.max(1, Math.ceil(filteredFixtures.length / fixturePageSize))
@@ -908,7 +928,7 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
             </button>
           ))}
           {page === 'details' && <button className="nav-item active" onClick={() => setPage('details')}><span className="nav-dot" />Tournament details</button>}
-          <div className="sidebar-note"><span className="note-mark">i</span><p>Protected actions require a valid sign-in token. The backend remains responsible for authorization.</p></div>
+          <div className="sidebar-note"><span className="note-mark">i</span><p>{currentUser ? `Signed in as ${currentUser.role}. Menu items match what your role can do.` : 'Browse tournaments, standings and results freely. Sign in to play, organise or score.'}</p></div>
         </aside>}
 
         <section className="content">
@@ -1038,9 +1058,9 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
               <article className="stat-card"><span className="stat-icon green" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></span><p>Active tournaments</p><strong>{activeCount}</strong><small>Currently in progress</small></article>
               <article className="stat-card"><span className="stat-icon violet" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><p>Competition formats</p><strong>{new Set(tournaments.map((item) => item.format).filter(Boolean)).size}</strong><small>Different formats available</small></article>
             </div>
-            <div className="section-title"><div><h2>Recent tournaments</h2><p className="muted">Latest items returned by the tournament API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>ÃƒÂ¢Ã¢â‚¬ Ã‚Â Back to list</button></div>
+            <div className="section-title"><div><h2>Recent tournaments</h2><p className="muted">Latest items returned by the tournament API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>← Back to list</button></div>
             {listError && <ErrorNotice>{listError}</ErrorNotice>}
-            {listLoading ? <Loading label="Loading tournaments..." /> : tournaments.length ? <TournamentTable items={tournaments.slice(0, 5)} onOpen={openTournament} onEdit={beginEdit} canManage={currentUser?.role === 'organiser'} /> : <EmptyState title="No tournaments to show" text="Create a tournament or check back when the API has data." action={() => { resetForm(); setPage('create') }} />}
+            {listLoading ? <Loading label="Loading tournaments..." /> : tournaments.length ? <TournamentTable items={tournaments.slice(0, 5)} onOpen={openTournament} onEdit={beginEdit} canManage={isOwner} /> : <EmptyState title="No tournaments to show" text="Create a tournament or check back when the API has data." action={() => { resetForm(); setPage('create') }} />}
           </>}
 
           {page === 'tournaments' && <>
@@ -1101,7 +1121,7 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
                   <button className={`button ${tournamentView === 'list' ? 'button-primary' : 'button-secondary'}`} onClick={() => setTournamentView('list')}>List</button>
                 </div>
                 {tournamentView === 'list' ? (
-                  <TournamentTable items={paginatedTournaments} onOpen={openTournament} onEdit={beginEdit} canManage={currentUser?.role === 'organiser'} />
+                  <TournamentTable items={paginatedTournaments} onOpen={openTournament} onEdit={beginEdit} canManage={isOwner} />
                 ) : (
                   <div className="tournament-grid">
                     {paginatedTournaments.map((item) => (
@@ -1117,9 +1137,9 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
                         <div className="tournament-grid-card-body">
                           <span className={statusClass(item.status)}>{item.status || 'Upcoming'}</span>
                           <h3>{item.name}</h3>
-                          <p>{item.category === 'esports' ? 'Esports' : 'Sports'} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ID: {item.id}</p>
+                          <p>{item.category === 'esports' ? 'Esports' : 'Sports'}</p>
                           <button className="button button-secondary" onClick={() => openTournament(item.id)}>View details</button>
-                          {currentUser?.role === 'organiser' && (
+                          {isOwner(item) && (
                             <button className="button button-secondary" onClick={() => beginEdit(item)}>Edit</button>
                           )}
                         </div>
@@ -1149,7 +1169,7 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
           </>}
 
           {page === 'details' && <>
-            <div className="page-heading"><div><p className="eyebrow">COMPETITION OVERVIEW</p><h1>Tournament details</h1><p className="muted">Tournament information and standings provided by the API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>ÃƒÂ¢Ã¢â‚¬ Ã‚Â Back to list</button></div>
+            <div className="page-heading"><div><p className="eyebrow">COMPETITION OVERVIEW</p><h1>Tournament details</h1><p className="muted">Tournament information and standings provided by the API.</p></div><button className="button button-secondary" onClick={() => setPage('tournaments')}>← Back to list</button></div>
             {detailsLoading && <Loading label="Loading tournament details..." />}
             <ErrorNotice>{detailsError}</ErrorNotice>
             {selectedTournament && <><div className="detail-top-cards"><div className="detail-card">
@@ -1158,7 +1178,8 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
 ) : (
   <div className="tournament-detail-image-placeholder">No tournament image available</div>
 )}
-<div className="detail-heading"><div><span className="eyebrow">TOURNAMENT #{selectedTournament.id}</span><h2>{selectedTournament.name}</h2><p>{selectedTournament.description || 'No description provided.'}</p></div><span className={statusClass(selectedTournament.status)}>{selectedTournament.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Format" value={selectedTournament.format} /><Meta label="Starts" value={dateLabel(selectedTournament.start_date)} /><Meta label="Ends" value={dateLabel(selectedTournament.end_date)} /><Meta label="Organizer ID" value={selectedTournament.organizer_id} /></div><div className="detail-actions">{['player', 'captain'].includes(currentUser?.role) && <button className="button button-primary" onClick={() => setPage('registrations')}>Register for this tournament</button>}{currentUser?.role === 'organiser' && <><button className="button button-primary" onClick={async () => {
+<div className="detail-heading"><div><span className="eyebrow">TOURNAMENT</span><h2>{selectedTournament.name}</h2><p>{selectedTournament.description || 'No description provided.'}</p></div><span className={statusClass(selectedTournament.status)}>{selectedTournament.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Format" value={selectedTournament.format} /><Meta label="Starts" value={dateLabel(selectedTournament.start_date)} /><Meta label="Ends" value={dateLabel(selectedTournament.end_date)} /></div><div className="detail-actions">{['player', 'captain'].includes(currentUser?.role) && <button className="button button-primary" onClick={() => setPage('registrations')}>Register for this tournament</button>}{isOwner(selectedTournament) && <><button className="button button-primary" onClick={async () => {
+  if (!window.confirm(`Create and publish fixtures for ${selectedTournament.name}? Fixtures are generated from approved teams and become public immediately. This cannot be undone.`)) return
   try {
     setFixturesError('')
     await apiRequest(`/matches/tournaments/${selectedTournament.id}/fixtures/auto-generate`, { method: 'POST' })
@@ -1166,24 +1187,32 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
   } catch (error) {
     setFixturesError(error.message || 'Could not generate and publish fixtures.')
   }
-}}>Create & Publish Fixtures</button><button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button>{selectedTournament.status === 'ongoing' && <button className="button button-secondary" onClick={async () => { if (!window.confirm('End this tournament? It will be marked as completed.')) return; try { await apiRequest(`/organiser/tournaments/${selectedTournament.id}/end`, { method: 'POST' }); await openTournament(selectedTournament.id) } catch (error) { window.alert(error.message) } }}>End tournament</button>}{selectedTournament.status !== 'archived' && <button className="button button-secondary" style={{ color: '#c0392b' }} onClick={async () => { if (!window.confirm('Delete this tournament? It will be hidden from everyone.')) return; try { await apiRequest(`/organiser/tournaments/${selectedTournament.id}/archive`, { method: 'PATCH' }); setPage('tournaments') } catch (error) { window.alert(error.message) } }}>Delete tournament</button>}</>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button></div></div>{currentUser?.role === 'organiser' && <TournamentScorerAssignment tournamentId={selectedTournament.id} />}</div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixtures..." /> : <><ErrorNotice>{fixturesError}</ErrorNotice><div className="fixture-filters filter-row">
+}}>Create & Publish Fixtures</button><button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button>{selectedTournament.status === 'ongoing' && <button className="button button-secondary" onClick={async () => { if (!window.confirm('End this tournament? It will be marked as completed.')) return; try { await apiRequest(`/organiser/tournaments/${selectedTournament.id}/end`, { method: 'POST' }); await openTournament(selectedTournament.id) } catch (error) { window.alert(error.message) } }}>End tournament</button>}{selectedTournament.status !== 'archived' && <button className="button button-secondary" style={{ color: '#c0392b' }} onClick={async () => { if (!window.confirm('Delete this tournament? It will be hidden from everyone.')) return; try { await apiRequest(`/organiser/tournaments/${selectedTournament.id}/archive`, { method: 'PATCH' }); setPage('tournaments') } catch (error) { window.alert(error.message) } }}>Delete tournament</button>}</>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button></div></div>{isOwner(selectedTournament) && <TournamentScorerAssignment tournamentId={selectedTournament.id} />}</div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixtures..." /> : <><ErrorNotice>{fixturesError}</ErrorNotice><div className="fixture-filters filter-row">
   <label>
     Status
     <select value={fixtureStatusFilter} onChange={(event) => { setFixtureStatusFilter(event.target.value); setFixturePage(1) }}>
       <option value="">All statuses</option>
       <option value="scheduled">Scheduled</option>
-      <option value="completed">Completed</option>
+      <option value="live">Live</option>
+      <option value="paused">Paused</option>
+      <option value="completed">Ended</option>
       <option value="cancelled">Cancelled</option>
-      <option value="postponed">Postponed</option>
+      <option value="bye">Bye</option>
     </select>
   </label>
   <label>
-    Team ID
-    <input type="number" min="1" placeholder="Any team" value={fixtureTeamFilter} onChange={(event) => { setFixtureTeamFilter(event.target.value); setFixturePage(1) }} />
+    Team
+    <select value={fixtureTeamFilter} onChange={(event) => { setFixtureTeamFilter(event.target.value); setFixturePage(1) }}>
+      <option value="">All teams</option>
+      {fixtureTeamOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+    </select>
   </label>
   <label>
-    Venue ID
-    <input type="number" min="1" placeholder="Any venue" value={fixtureVenueFilter} onChange={(event) => { setFixtureVenueFilter(event.target.value); setFixturePage(1) }} />
+    Venue
+    <select value={fixtureVenueFilter} onChange={(event) => { setFixtureVenueFilter(event.target.value); setFixturePage(1) }}>
+      <option value="">All venues</option>
+      {fixtureVenueOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+    </select>
   </label>
   <button className="button button-secondary" onClick={() => { setFixtureStatusFilter(''); setFixtureTeamFilter(''); setFixtureVenueFilter(''); setFixturePage(1) }}>
     Clear filters
@@ -1191,32 +1220,32 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
 </div>
 {filteredFixtures.length ? <>
   <p className="helper-text">
-    Showing {(fixturePage - 1) * fixturePageSize + 1}|{Math.min(fixturePage * fixturePageSize, filteredFixtures.length)} of {filteredFixtures.length} fixtures
+    Showing {(fixturePage - 1) * fixturePageSize + 1}–{Math.min(fixturePage * fixturePageSize, filteredFixtures.length)} of {filteredFixtures.length} fixtures
   </p>
   <div className="table-wrap">
     <table>
-      <thead><tr><th>Match</th><th>Team A ID</th><th>Team B ID</th><th>Venue ID</th><th>Scheduled at</th><th>Status</th><th>Live Stream</th></tr></thead>
+      <thead><tr><th>Match</th><th>Team A</th><th>Team B</th><th>Venue</th><th>Scheduled at</th><th>Status</th><th>Live Stream</th></tr></thead>
       <tbody>{paginatedFixtures.map((fixture) => {
         const status = String(fixture.status || 'unknown').toLowerCase()
         const scheduledTime = fixture.scheduled_at ? new Date(fixture.scheduled_at).getTime() : NaN
         const isUpcoming = status === 'scheduled' && Number.isFinite(scheduledTime) && scheduledTime >= currentTime
-        const displayStatus = isUpcoming ? 'Upcoming' : (status === 'scheduled' ? 'Scheduled' : (fixture.status || 'Unknown'))
+        const displayStatus = isUpcoming ? 'Upcoming' : (FIXTURE_STATUS_LABELS[status] || fixture.status || 'Unknown')
         return <tr key={fixture.id}>
-          <td><strong>#{fixture.match_number}</strong><small className="cell-subtitle">Fixture ID: {fixture.id}</small></td>
-          <td>{fixture.team_a_id ?? 'TBD'}</td>
-          <td>{fixture.team_b_id ?? 'TBD'}</td>
-          <td>{fixture.venue_id ?? '|'}</td>
+          <td><strong>Match {fixture.match_number}</strong>{fixture.round_name && <small className="cell-subtitle">{fixture.round_name}</small>}</td>
+          <td>{fixture.team_a_id ? (fixture.team_a_name || 'Unnamed team') : (fixture.status === 'bye' ? 'Bye' : 'TBD')}</td>
+          <td>{fixture.team_b_id ? (fixture.team_b_name || 'Unnamed team') : (fixture.status === 'bye' ? 'Bye' : 'TBD')}</td>
+          <td>{fixture.venue_name || 'Not set'}</td>
           <td>{dateLabel(fixture.scheduled_at)}</td>
           <td><span className={statusClass(isUpcoming ? 'upcoming' : status)}>{displayStatus}</span></td>
-          <td><StreamUrlControl key={`${fixture.id}-${fixture.stream_url || ''}`} fixture={fixture} tournamentId={selectedTournament.id} canManage={currentUser?.role === 'organiser' || currentUser?.role === 'organizer'} onSaved={() => openTournament(selectedTournament.id)} /></td>
+          <td><StreamUrlControl key={`${fixture.id}-${fixture.stream_url || ''}`} fixture={fixture} tournamentId={selectedTournament.id} canManage={isOwner(selectedTournament)} onSaved={() => openTournament(selectedTournament.id)} /></td>
         </tr>
       })}</tbody>
     </table>
   </div>
   <div className="pagination-row">
-    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.max(1, value - 1))} disabled={fixturePage <= 1}>ÃƒÂ¢Ã¢â‚¬ Ã‚Â Previous</button>
+    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.max(1, value - 1))} disabled={fixturePage <= 1}>← Previous</button>
     <span className="helper-text">Page {fixturePage} of {fixturePageCount}</span>
-    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.min(fixturePageCount, value + 1))} disabled={fixturePage >= fixturePageCount}>Next ÃƒÂ¢Ã¢â‚¬ Ã¢â‚¬â„¢</button>
+    <button className="button button-secondary" onClick={() => setFixturePage((value) => Math.min(fixturePageCount, value + 1))} disabled={fixturePage >= fixturePageCount}>Next →</button>
   </div>
 </> : !fixturesError ? <EmptyState title="No matching fixtures" text="Try changing or clearing the fixture filters." /> : null}</>}<div className="section-title"><div><h2>Standings</h2><p className="muted">Calculated rankings returned by the standings endpoint.</p></div></div>{standings.length ? <div className="table-wrap"><table><thead><tr><th>Rank</th><th>Team</th><th>Played</th><th>W</th><th>D</th><th>L</th><th>Score diff.</th><th>Points</th></tr></thead><tbody>{standings.map((row) => <tr key={row.team_id}><td><span className="rank">#{row.rank}</span></td><td><strong>{row.team_name}</strong></td><td>{row.played}</td><td>{row.wins}</td><td>{row.draws}</td><td>{row.losses}</td><td>{row.score_difference}</td><td><strong>{row.points}</strong></td></tr>)}</tbody></table></div> : <EmptyState title="No standings available" text="The API returned no standings for this tournament yet." />}</>}
             {!detailsLoading && !selectedTournament && !detailsError && <IdLookup onSubmit={openTournament} />}
@@ -1261,10 +1290,10 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
                 }} />
                 <small>JPEG, PNG, or WebP. Maximum size 5 MB.</small>
               </div>
-              <div className="form-grid"><div className="field"><label htmlFor="tournament-format">Tournament format <span>*</span></label><select id="tournament-format" value={form.format} required onChange={(event) => setForm({ ...form, format: event.target.value })}><option value="round_robin">Round robin</option><option value="single_elimination">Single elimination</option><option value="double_elimination">Double elimination</option></select></div>{form.participation_type === "team" && <div className="field"><label htmlFor="number-teams">Number of teams</label><input id="number-teams" type="number" min="2" max="256" value={form.number_of_teams} required onChange={(event) => setForm({ ...form, number_of_teams: event.target.value })} /><small>At least 2 teams</small></div>}</div>
+              <div className="form-grid"><div className="field"><label htmlFor="tournament-format">Tournament format <span>*</span></label><select id="tournament-format" value={form.format} required onChange={(event) => setForm({ ...form, format: event.target.value })}><option value="round_robin">Round robin</option><option value="single_elimination">Single elimination</option></select></div>{form.participation_type === "team" && <div className="field"><label htmlFor="number-teams">Number of teams</label><input id="number-teams" type="number" min="2" max="256" value={form.number_of_teams} required onChange={(event) => setForm({ ...form, number_of_teams: event.target.value })} /><small>At least 2 teams</small></div>}</div>
               <div className="form-section-heading second"><span className="step-number">02</span><div><h2>Schedule</h2><p>Choose the start and end of the competition.</p></div></div>
-              <div className="form-grid"><div className="field"><label htmlFor="registration-open">Registration opens <span>*</span></label><input id="registration-open" type="datetime-local" value={form.registration_open_at} required onChange={(event) => setForm({ ...form, registration_open_at: event.target.value })} /></div><div className="field"><label htmlFor="registration-close">Registration closes <span>*</span></label><input id="registration-close" type="datetime-local" value={form.registration_close_at} min={form.registration_open_at || undefined} max={form.start_date || undefined} required onChange={(event) => setForm({ ...form, registration_close_at: event.target.value })} /></div></div>
-              <div className="form-grid"><div className="field"><label htmlFor="start-date">Start date and time <span>*</span></label><input id="start-date" type="datetime-local" value={form.start_date} required onChange={(event) => setForm({ ...form, start_date: event.target.value })} /></div><div className="field"><label htmlFor="end-date">End date and time <span>*</span></label><input id="end-date" type="datetime-local" value={form.end_date} min={form.start_date || undefined} required onChange={(event) => setForm({ ...form, end_date: event.target.value })} /></div></div>
+              <div className="form-grid"><div className="field"><label htmlFor="registration-open">Registration opens <span>*</span></label><input id="registration-open" type="datetime-local" value={form.registration_open_at} required onChange={(event) => setForm({ ...form, registration_open_at: event.target.value })} /></div><div className="field"><label htmlFor="registration-close">Registration closes <span>*</span></label><input id="registration-close" type="datetime-local" value={form.registration_close_at} min={form.registration_open_at || undefined} required onChange={(event) => setForm({ ...form, registration_close_at: event.target.value })} /><small>After registration opens, and before the tournament starts.</small></div></div>
+              <div className="form-grid"><div className="field"><label htmlFor="start-date">Start date and time <span>*</span></label><input id="start-date" type="datetime-local" value={form.start_date} min={form.registration_close_at || undefined} required onChange={(event) => setForm({ ...form, start_date: event.target.value })} /><small>On or after registration closes.</small></div><div className="field"><label htmlFor="end-date">End date and time <span>*</span></label><input id="end-date" type="datetime-local" value={form.end_date} min={form.start_date || undefined} required onChange={(event) => setForm({ ...form, end_date: event.target.value })} /></div></div>
               <ErrorNotice>{formError}</ErrorNotice><SuccessNotice>{formSuccess}</SuccessNotice>
               <div className="form-footer"><p><span>*</span> Required fields. Sign in as an organiser to submit.</p><button className="button button-primary" type="submit" disabled={formLoading}>{formLoading ? 'Saving...' : editingId ? 'Save changes ?' : 'Create tournament +'}</button></div>
             </form>
@@ -1272,110 +1301,17 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
 
           {page === 'scoring' && <ScorerPage />}
           {page === 'notifications' && <NotificationsPage onOpenPage={setPage} />}
-          {page === 'verify' && <VerificationPage />}
+          {page === 'verify' && currentUser?.role === 'organiser' && <VerificationPage currentUser={currentUser} />}
           {page === 'dispute' && <DisputePage />}
           {page === 'result' && <ResultPage />}
           {page === 'standings' && <StandingsPage />}
           {page === 'leaderboard' && <LeaderboardPage />}
           {page === 'resolve' && <DisputeResolutionPage />}
           {page === 'registrations' && ['player', 'captain'].includes(currentUser?.role) && <RegistrationPage initialTournamentId={selectedTournament?.id} />}
-          {page === 'registration-approvals' && currentUser?.role === 'organiser' && <RegistrationApprovalPage />}
-      {page === 'team' && <>
-            <div className="page-heading"><div><p className="eyebrow">PLAYER TEAMS</p><h1>Team options</h1><p className="muted">Choose how you want to participate.</p></div></div>
-            <div className="form-footer">
-              <button type="button" className="button button-primary" onClick={() => setTeamMode('create')}>Create a team (Captain)</button>
-            </div>
-            {teamMode === 'join' && team && <>
-              <p className="muted">Manage your team and add eligible players to your roster.</p>
-            <div className="page-heading"><div><p className="eyebrow">TEAM MANAGEMENT</p><h1>Your team</h1><p className="muted">Manage your team members.</p></div></div>
-            {team && <div className="detail-card"><div className="detail-heading"><div><span className="eyebrow">YOUR TEAM</span><h2>{team.name}</h2></div><span className={statusClass(team.status)}>{team.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Created" value={dateLabel(team.created_at)} /><Meta label="Updated" value={dateLabel(team.updated_at)} /><Meta label="Roster members" value={Array.isArray(team.players) ? team.players.length : 'Not provided'} /></div></div>}
-            {team && <>
-              <div className="section-title">
-                <div>
-                  <h2>Team roster</h2>
-                  <p className="muted">Active, eligible players can be added. The API checks captain permissions.</p>
-                </div>
-              </div>
-              <form className="lookup-card" onSubmit={(event) => { event.preventDefault(); changeRoster('add', rosterPlayerId) }}>
-                <div className="field">
-                  <label htmlFor="roster-player-id">Player ID</label>
-                  <input id="roster-player-id" aria-describedby="roster-player-help" inputMode="numeric" pattern="[1-9][0-9]*" value={rosterPlayerId} onChange={(event) => setRosterPlayerId(event.target.value)} placeholder="e.g. 7" required />
-                </div>
-                <p id="roster-player-help" className="helper-text">Enter the player ID of an eligible player to add them to your team.</p>
-                <button className="button button-primary" type="submit" disabled={rosterLoading}>{rosterLoading ? 'Updating...' : 'Add player'}</button>
-              </form>
-              <ErrorNotice>{rosterError}</ErrorNotice>
-              <SuccessNotice>{rosterSuccess}</SuccessNotice>
-              {rosterLoading && <Loading label="Updating team roster..." />}
-              {Array.isArray(team.players) && team.players.length > 0 ? (
-                <div className="table-wrap">
-                  <table>
-                    <thead><tr><th>Player</th><th>Player ID</th><th>Status</th><th>Actions</th></tr></thead>
-                    <tbody>
-                      {team.players.map((rosterPlayer) => (
-                        <tr key={rosterPlayer.id}>
-                          <td><strong>{[rosterPlayer.first_name, rosterPlayer.last_name].filter(Boolean).join(' ') || `Player`}</strong></td>
-                          <td>{rosterPlayer.id}</td>
-                          
-                          <td><span className={statusClass(rosterPlayer.status)}>{rosterPlayer.status || 'Unknown'}</span></td>
-                          <td><div className="table-actions">
-                            <button type="button" onClick={() => { setPlayerId(String(rosterPlayer.id)); setPlayer(null); setPlayerError(''); }} disabled={rosterLoading}>View profile</button>
-                            <button type="button" onClick={() => changeRoster('remove', rosterPlayer.id)} disabled={rosterLoading}>Remove</button>
-                          </div></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : <EmptyState title="Roster is empty" text="No players are currently assigned to this team. Add a player using their player ID above." />}
-            </>}
+          {page === 'registration-approvals' && currentUser?.role === 'organiser' && <RegistrationApprovalPage currentUser={currentUser} />}
+          {page === 'team' && currentUser?.role === 'player' && <TeamPage />}
 
-            <div className="section-title">
-              <div>
-                <h2>Player profile lookup</h2>
-                <p className="muted">Find a player by player ID and view their team assignment.</p>
-              </div>
-            </div>
-            <form className="lookup-card" onSubmit={loadPlayer}>
-              <div className="field">
-                <label htmlFor="player-id">Player ID</label>
-                <input id="player-id" inputMode="numeric" pattern="[1-9][0-9]*" value={playerId} onChange={(event) => setPlayerId(event.target.value)} placeholder="e.g. 7" required />
-              </div>
-              <button className="button button-primary" type="submit" disabled={playerLoading}>{playerLoading ? 'Searching...' : 'Find player'}</button>
-            </form>
-            <ErrorNotice>{playerError}</ErrorNotice>
-            {playerLoading && <Loading label="Loading player profile..." />}
-            {player && <div className="detail-card">
-              <div className="detail-heading">
-                <div><span className="eyebrow">PLAYER PROFILE</span><h2>{[player.first_name, player.last_name].filter(Boolean).join(' ') || 'Player profile'}</h2></div>
-                <span className={statusClass(player.status)}>{player.status || 'Unknown'}</span>
-              </div>
-              <div className="detail-meta">
-                <Meta label="Player ID" value={player.id} />
-                <Meta label="Team assignment" value={player.team_id ? `Assigned to a team` : 'Not assigned'} />
-                <Meta label="Created" value={dateLabel(player.created_at)} />
-                <Meta label="Updated" value={dateLabel(player.updated_at)} />
-              </div>
-            </div>}
-            </>}
-            {teamMode === 'create' && <>
-            <div className="section-title">
-              <div>
-                <h2>Create a team</h2>
-                <p className="muted">Enter a team name. Your player account will automatically become the team captain.</p>
-              </div>
-            </div>
-            <TeamCreationForm
-              onCreated={(createdTeam) => {
-                setTeam(createdTeam)
-                setTeamId(String(createdTeam.id))
-                setTeamMode('join')
-              }}
-            />
-            </>}
-          </>}
-
-          <footer className="footer"><span>© MatchGrid 2026</span><span>Sports management, made clearer.</span><span className="footer-api">{API_BASE_URL || 'API URL missing'}</span></footer>
+          <footer className="footer"><span>© MatchGrid 2026</span><span>Sports management, made clearer.</span></footer>
         </section>
       </div>
     </main>
@@ -1417,7 +1353,7 @@ function TournamentTable({ items, onOpen, onEdit, canManage }) {
                   </div>
                 </div>
               </td>
-              <td>{item.format || '|'}</td>
+              <td>{item.format ? item.format.replace('_', ' ') : '-'}</td>
               <td>
                 <span>{dateLabel(item.start_date)}</span>
                 <small className="cell-subtitle">to {dateLabel(item.end_date)}</small>
@@ -1430,7 +1366,7 @@ function TournamentTable({ items, onOpen, onEdit, canManage }) {
               <td>
                 <div className="table-actions">
                   <button onClick={() => onOpen(item.id)}>Details</button>
-                  {canManage && (
+                  {canManage(item) && (
                     <button onClick={() => onEdit(item)}>Edit</button>
                   )}
                 </div>
@@ -1456,70 +1392,6 @@ function IdLookup({ onSubmit }) {
   return <form className="lookup-card" onSubmit={(event) => { event.preventDefault(); onSubmit(id) }}><div className="field"><label htmlFor="tournament-id">Tournament ID</label><input id="tournament-id" inputMode="numeric" pattern="[1-9][0-9]*" value={id} onChange={(event) => setId(event.target.value)} placeholder="Enter tournament ID" required /></div><button className="button button-primary" type="submit">Load tournament</button></form>
 }
 
-
-function TeamCreationForm({ onCreated }) {
-  const [name, setName] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-
-  const submitTeam = async (event) => {
-    event.preventDefault()
-    setError('')
-    setSuccess('')
-
-    const cleanName = name.trim()
-    if (!cleanName) {
-      setError('Team name is required.')
-      return
-    }
-
-    setLoading(true)
-    try {
-      const createdTeam = await apiRequest('/player-team/team', {
-        method: 'POST',
-        body: JSON.stringify({ name: cleanName }),
-      })
-
-      setSuccess(`Team "${createdTeam.name}" created successfully. Team ID: ${createdTeam.id}`)
-      setName('')
-      if (onCreated) onCreated(createdTeam)
-    } catch (requestError) {
-      setError(
-        `${requestError.message || 'Could not create team.'} Sign in with a player account to create your team.`,
-      )
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <form className="form-card" onSubmit={submitTeam}>
-      <div className="field">
-        <label htmlFor="new-team-name">Team name *</label>
-        <input
-          id="new-team-name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          maxLength={100}
-          placeholder="e.g. Dhaka Strikers"
-          required
-        />
-        <small>Maximum 100 characters. Duplicate team names are rejected by the API.</small>
-      </div>
-
-      {error && <ErrorNotice>{error}</ErrorNotice>}
-      {success && <SuccessNotice>{success}</SuccessNotice>}
-
-      <div className="form-footer">
-        <p>Sign in as an organiser to create a team.</p>
-        <button className="button button-primary" type="submit" disabled={loading}>
-          {loading ? 'Creating team...' : 'Create team'}
-        </button>
-      </div>
-    </form>
-  )
-}
 
 function AuthPanel({ mode, loading, error, success, onSubmit, onSwitch }) {
   const [email, setEmail] = useState('')
@@ -1598,18 +1470,18 @@ function AuthPanel({ mode, loading, error, success, onSubmit, onSwitch }) {
         </div>
 {isRegister && (
           <div className="field">
-            <label htmlFor="auth-role">Account role</label>
+            <label htmlFor="auth-role">I want to</label>
             <select
               id="auth-role"
               value={role}
               onChange={(event) => setRole(event.target.value)}
             >
-              <option value="player">Player</option>
-              <option value="spectator">Spectator</option>
-              <option value="scorer">Scorer</option>
-              <option value="official">Official</option>
-              <option value="organiser">Organiser</option>
+              <option value="player">Play in tournaments (Player)</option>
+              <option value="spectator">Follow matches (Spectator)</option>
+              <option value="organiser">Run tournaments (Organiser)</option>
+              <option value="scorer">Keep score for matches (Scorer)</option>
             </select>
+            <small>{ROLE_HINTS[role]}</small>
           </div>
         )}
         <button

@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # Audit Logging
     AUDIT_ADMIN_USER_IDS: str = ""
 
+    # Number of trusted reverse proxies in front of the API. When > 0 the
+    # client IP for rate limiting is read from X-Forwarded-For.
+    TRUSTED_PROXY_COUNT: int = 0
 
     model_config = SettingsConfigDict(
         env_file=".env",

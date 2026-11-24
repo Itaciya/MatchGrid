@@ -36,9 +36,9 @@ def redis_health():
         logger.info("Redis health check successful")
         return {"redis": result}
 
-    logger.error("Redis health check failed")
+    logger.error("Redis health check failed: %s", result)
     raise HTTPException(
         status_code=503,
-        detail={"redis": result},
+        detail={"redis": "Redis connection failed"},
     )
       

@@ -21,6 +21,29 @@ EXCLUDED_PATHS = {
 }
 
 
+def client_ip(request: Request) -> str:
+    """Return the caller's IP, honouring X-Forwarded-For behind trusted proxies.
+
+    Each trusted proxy appends the address it received the request from, so
+    the real client is the entry TRUSTED_PROXY_COUNT positions from the end.
+    """
+    direct = request.client.host if request.client else "unknown"
+    proxies = settings.TRUSTED_PROXY_COUNT
+
+    if proxies < 1:
+        return direct
+
+    forwarded = [
+        part.strip()
+        for part in request.headers.get("x-forwarded-for", "").split(",")
+        if part.strip()
+    ]
+    if len(forwarded) < proxies:
+        return direct
+
+    return forwarded[-proxies]
+
+
 async def rate_limit_middleware(request: Request, call_next):
     if not settings.RATE_LIMIT_ENABLED:
         return await call_next(request)
@@ -45,8 +68,7 @@ async def rate_limit_middleware(request: Request, call_next):
 
     # Requests without a valid access token are tracked by client IP.
     if client_key is None:
-        client_host = request.client.host if request.client else "unknown"
-        client_key = f"ip:{client_host}"
+        client_key = f"ip:{client_ip(request)}"
 
     result = await run_in_threadpool(
         check_rate_limit,

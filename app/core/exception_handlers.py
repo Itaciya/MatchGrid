@@ -1,4 +1,6 @@
 import logging
+import logging
+
 from fastapi import Request, status
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.exceptions import RequestValidationError
@@ -6,6 +8,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.exceptions import AppException
+
+logger = logging.getLogger(__name__)
 
 
 async def app_exception_handler(
@@ -85,6 +89,12 @@ async def general_exception_handler(
     request: Request,
     exc: Exception,
 ):
+    logger.error(
+        "Unhandled error during %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={

@@ -1,7 +1,16 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { apiRequest } from './services/api'
+import { TournamentSelect } from './components/Pickers'
 
 const STATUS_OPTIONS = ['pending', 'approved', 'rejected', 'cancelled']
+
+function isRegistrationOpen(tournament) {
+  const now = Date.now()
+  const opens = new Date(tournament.registration_open_at).getTime()
+  const closes = new Date(tournament.registration_close_at).getTime()
+  return tournament.status === 'upcoming' && !tournament.fixtures_published
+    && (Number.isNaN(opens) || opens <= now) && (Number.isNaN(closes) || now <= closes)
+}
 
 function showDate(value) {
   if (!value) return '—'
@@ -94,21 +103,16 @@ export default function RegistrationPage({ initialTournamentId = null }) {
     }
   }
 
-  async function checkTournament(event) {
-    event.preventDefault()
+  const loadTournament = useCallback(async (id) => {
     setError('')
     setSuccess('')
     setTournament(null)
     setTeamId('')
-
-    if (!/^[1-9]\d*$/.test(tournamentId)) {
-      setError('Enter a valid tournament ID.')
-      return
-    }
+    if (!id) return
 
     setChecking(true)
     try {
-      const result = await apiRequest(`/tournaments/${Number(tournamentId)}`)
+      const result = await apiRequest(`/tournaments/${Number(id)}`)
       const participationType = String(result?.participation_type ?? '').trim().toLowerCase()
 
       if (!['individual', 'team'].includes(participationType)) {
@@ -121,7 +125,13 @@ export default function RegistrationPage({ initialTournamentId = null }) {
     } finally {
       setChecking(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!initialTournamentId) return undefined
+    const timer = window.setTimeout(() => loadTournament(initialTournamentId), 0)
+    return () => window.clearTimeout(timer)
+  }, [initialTournamentId, loadTournament])
 
   async function submitRegistration(event) {
     event.preventDefault()
@@ -149,7 +159,7 @@ export default function RegistrationPage({ initialTournamentId = null }) {
       await apiRequest(isTeam ? '/registrations/' : '/registrations/player', {
         method: 'POST',
         body: JSON.stringify({
-          tournament_id: Number(tournamentId),
+          tournament_id: tournament.id,
           team_id: isTeam ? Number(teamId) : null,
           player_id: null,
           registration_type: isTeam ? 'team' : 'player',
@@ -185,7 +195,6 @@ export default function RegistrationPage({ initialTournamentId = null }) {
         ) : profile ? (
           <div className="detail-meta">
             <div><strong>{profile.first_name} {profile.last_name}</strong></div>
-            <div className="muted">Player ID: {profile.id}</div>
             <div className="muted">Status: {profile.status}</div>
           </div>
         ) : (
@@ -218,26 +227,18 @@ export default function RegistrationPage({ initialTournamentId = null }) {
         )}
       </section>
 
-      <form className="auth-card" onSubmit={checkTournament}>
-        <h2>Find a tournament</h2>
-        <div className="field">
-          <label htmlFor="registration-tournament">Tournament ID</label>
-          <input
-            id="registration-tournament"
-            type="number"
-            min="1"
-            value={tournamentId}
-            onChange={(event) => {
-              setTournamentId(event.target.value)
-              setTournament(null)
-            }}
-            required
-          />
-        </div>
-        <button className="button button-primary auth-submit" type="submit" disabled={checking}>
-          {checking ? 'Checking...' : 'Check tournament'}
-        </button>
-      </form>
+      <section className="auth-card">
+        <h2>Choose a tournament</h2>
+        <TournamentSelect
+          id="registration-tournament"
+          label="Tournaments open for registration"
+          value={tournamentId}
+          onChange={(value) => { setTournamentId(value); loadTournament(value) }}
+          filter={isRegistrationOpen}
+          emptyText="No tournaments are taking registrations right now."
+        />
+        {checking && <p className="muted">Loading tournament...</p>}
+      </section>
 
       {tournament && (
         <form className="auth-card" onSubmit={submitRegistration}>
@@ -266,7 +267,7 @@ export default function RegistrationPage({ initialTournamentId = null }) {
               </select>
               {teams.length === 0 && (
                 <p className="muted">
-                  You have no team as captain yet. Open Team options and create a team first.
+                  You have no team as captain yet. Open My teams and create a team first.
                 </p>
               )}
               <p className="muted">Only the team captain can register the team.</p>
@@ -319,7 +320,6 @@ export default function RegistrationPage({ initialTournamentId = null }) {
           <table>
             <thead>
               <tr>
-                <th>Registration</th>
                 <th>Tournament</th>
                 <th>Team / Player</th>
                 <th>Type</th>
@@ -330,10 +330,9 @@ export default function RegistrationPage({ initialTournamentId = null }) {
             <tbody>
               {registrations.map((item) => (
                 <tr key={item.id}>
-                  <td>#{item.id}</td>
-                  <td>#{item.tournament_id}</td>
-                  <td>{item.team_id ? 'Team registration' : item.player_id ? 'Individual registration' : '—'}</td>
-                  <td>{item.registration_type || '—'}</td>
+                  <td><strong>{item.tournament_name || 'Tournament'}</strong></td>
+                  <td>{item.team_id ? (item.team_name || 'Your team') : (item.player_name || 'You')}</td>
+                  <td>{item.registration_type === 'team' ? 'Team' : 'Individual'}</td>
                   <td>
                     <span className={STATUS_OPTIONS.includes(String(item.status).toLowerCase()) ? `status status-${String(item.status).toLowerCase()}` : ''}>
                       {item.status || 'Unknown'}

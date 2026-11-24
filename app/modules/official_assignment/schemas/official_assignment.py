@@ -23,10 +23,14 @@ class OfficialAssignmentResponse(BaseModel):
 class AssignedMatchResponse(BaseModel):
     id: int
     tournament_id: int
+    tournament_name: str | None = None
     match_number: int
     team_a_id: int | None
     team_b_id: int | None
+    team_a_name: str | None = None
+    team_b_name: str | None = None
     venue_id: int | None
+    venue_name: str | None = None
     scheduled_at: datetime
     status: str
     assignment_type: str

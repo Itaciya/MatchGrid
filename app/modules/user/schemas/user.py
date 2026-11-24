@@ -12,13 +12,27 @@ from pydantic import (
 
 UserRole = Literal["organiser", "player", "scorer", "spectator", "official"]
 
+# Roles a new account can sign up with. Organisers pick scorers for their own
+# tournaments; the separate referee ("official") role is no longer offered,
+# though existing official accounts keep working.
+RegisterRole = Literal["organiser", "player", "scorer", "spectator"]
+
+
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
+
 
 class UserRegister(BaseModel):
     """Schema for registering a new user."""
 
     email: EmailStr
     password: str = Field(min_length=8, max_length=72)
-    role: UserRole
+    role: RegisterRole
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, email: str) -> str:
+        return _normalize_email(email)
 
     @field_validator("password")
     @classmethod
@@ -48,7 +62,18 @@ class UserLogin(BaseModel):
     """Schema for authenticating an existing user."""
 
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=72)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, email: str) -> str:
+        return _normalize_email(email)
+
+
+class RefreshRequest(BaseModel):
+    """Schema for exchanging a refresh token for a new token pair."""
+
+    refresh_token: str = Field(min_length=1, max_length=2048)
 
 
 class UserResponse(BaseModel):

@@ -1028,3 +1028,36 @@ tr:has(.tournament-list-info):hover .tournament-list-info {
     max-width: none;
   }
 }
+
+/* Name pickers and search results (components/Pickers.jsx) */
+.field-error { color: var(--red); font-size: 12px; }
+.picker-row { flex-wrap: wrap; }
+.picker-row .field { min-width: 220px; }
+.lookup-card .player-search { flex: 1; }
+.player-search .field { margin-bottom: 10px; }
+.search-results { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.search-results li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); }
+.search-results li:first-child { border-top: 0; }
+.search-results li:hover { background: var(--surface-hover); }
+.search-results .cell-subtitle { font-size: 11px; }
+
+/* Match cards on the scorer and verification pages */
+.match-review-card { margin-bottom: 14px; }
+.match-review-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.small { font-size: 13px; }
+.stack-gap { margin: 12px 0; display: grid; gap: 8px; }
+.score-entry { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 12px 0; }
+.score-entry label { display: grid; gap: 6px; font-size: 12px; font-weight: 750; }
+.score-entry input { width: 90px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--text); font-size: 18px; font-weight: 750; }
+
+/* Official result */
+.result-card { display: grid; gap: 10px; justify-items: start; }
+.result-scoreline { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; font-size: 18px; font-weight: 700; }
+.result-scoreline strong { font-size: 34px; letter-spacing: .02em; }
+
+.dispute-form textarea { width: 100%; }
+
+@media (max-width: 640px) {
+  .lookup-card { flex-direction: column; align-items: stretch; }
+  .search-results li { flex-direction: column; align-items: flex-start; }
+}

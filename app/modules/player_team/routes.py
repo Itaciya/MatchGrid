@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends, status
+﻿from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, require_role
@@ -6,6 +6,7 @@ from app.core.exceptions import ForbiddenException
 from app.data_access.database import get_db
 
 from app.modules.player_team.schemas.player import (
+    PlayerSearchResult,
     PlayerCreate,
     PlayerResponse,
     PlayerStatusUpdate,
@@ -18,6 +19,7 @@ from app.modules.player_team.schemas.team import (
 )
 
 from app.modules.player_team.services.player_service import (
+    search_players_by_name,
     add_player_to_team,
     create_player,
     get_player,
@@ -32,6 +34,7 @@ from app.modules.player_team.services.team_service import (
     update_team_status,
 )
 
+from app.modules.player_team.models.team import TeamStatus
 from app.modules.user.models import User
 from app.modules.player_team.models.player import Player
 from app.modules.player_team.models.team import Team
@@ -123,6 +126,30 @@ def update_player_profile_status(
 
 
 @router.get(
+    "/players/search",
+    response_model=list[PlayerSearchResult],
+)
+def search_players(
+    q: str = Query(..., min_length=2, max_length=100),
+    available_only: bool = Query(default=False),
+    limit: int = Query(default=20, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Find active players by name.
+
+    available_only=true returns only players without a team, for captains
+    building a roster.
+    """
+    return search_players_by_name(
+        db,
+        q,
+        available_only=available_only,
+        limit=limit,
+    )
+
+
+@router.get(
     "/teams/me",
     response_model=list[TeamResponse],
 )
@@ -176,12 +203,24 @@ def update_team_status_endpoint(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    team = get_team(db, team_id)
+
+    # A suspension is a sanction: the captain cannot lift it, only an
+    # organiser can reinstate the team.
+    if team.status == TeamStatus.SUSPENDED and current_user.role == "organiser":
+        return update_team_status(db, team_id, data.status)
+
     authorize_team_captain(
-    db,
-    team_id,
-    current_user.id,
-    detail="Only the team captain can update team status",
+        db,
+        team_id,
+        current_user.id,
+        detail="Only the team captain can update team status",
     )
+
+    if team.status == TeamStatus.SUSPENDED and data.status != TeamStatus.SUSPENDED:
+        raise ForbiddenException(
+            detail="A suspended team can only be reinstated by an organiser"
+        )
 
     return update_team_status(
         db,

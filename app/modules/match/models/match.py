@@ -164,3 +164,43 @@ class Match(Base):
         back_populates="match",
         uselist=False,
     )
+
+    # Display names, so API clients can show teams and venues by name
+    # instead of raw IDs.
+    @property
+    def team_a_name(self) -> str | None:
+        return self.team_a.name if self.team_a else None
+
+    @property
+    def team_b_name(self) -> str | None:
+        return self.team_b.name if self.team_b else None
+
+    @property
+    def venue_name(self) -> str | None:
+        return self.venue.name if self.venue else None
+
+    @property
+    def round_name(self) -> str | None:
+        return self.round.name if self.round else None
+
+    @property
+    def tournament_name(self) -> str | None:
+        return self.tournament.name if self.tournament else None
+
+    # Scores are only exposed once the organiser has verified them, so
+    # public fixture lists never show provisional numbers.
+    def _verified_score(self):
+        score = self.score
+        if score is None or score.verification_status != "verified":
+            return None
+        return score
+
+    @property
+    def team_a_score(self) -> int | None:
+        score = self._verified_score()
+        return score.team_a_score if score else None
+
+    @property
+    def team_b_score(self) -> int | None:
+        score = self._verified_score()
+        return score.team_b_score if score else None

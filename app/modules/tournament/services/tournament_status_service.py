@@ -10,6 +10,9 @@ STATUS_UPCOMING = "upcoming"
 STATUS_LIVE = "ongoing"
 STATUS_COMPLETED = "completed"
 
+# Matches that never get a result: cancelled ones and knockout byes.
+UNPLAYED_MATCH_STATUSES = ("cancelled", "bye")
+
 
 def _invalidate_cache() -> None:
     from app.modules.tournament.services.tournament_service import (
@@ -34,7 +37,7 @@ def mark_tournament_live(db: Session, tournament_id: int) -> bool:
 
 
 def complete_tournament_if_done(db: Session, tournament_id: int) -> bool:
-    """live -> completed once every non-cancelled match has a final result."""
+    """live -> completed once every played match has a final result."""
     tournament = (
         db.query(Tournament)
         .filter(Tournament.id == tournament_id)
@@ -47,7 +50,10 @@ def complete_tournament_if_done(db: Session, tournament_id: int) -> bool:
 
     total = (
         db.query(func.count(Match.id))
-        .filter(Match.tournament_id == tournament_id, Match.status != "cancelled")
+        .filter(
+            Match.tournament_id == tournament_id,
+            Match.status.notin_(UNPLAYED_MATCH_STATUSES),
+        )
         .scalar()
     )
     unfinished = (
@@ -56,7 +62,7 @@ def complete_tournament_if_done(db: Session, tournament_id: int) -> bool:
         .outerjoin(MatchResult, MatchResult.match_id == Match.id)
         .filter(
             Match.tournament_id == tournament_id,
-            Match.status != "cancelled",
+            Match.status.notin_(UNPLAYED_MATCH_STATUSES),
             MatchResult.id.is_(None),
         )
         .scalar()
