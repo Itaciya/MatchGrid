@@ -151,3 +151,102 @@ tbody tr:hover { background: var(--surface-hover); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ===================================================================
+   Light mode: a slow, living gradient behind the app. Soft pitch-green,
+   teal and a touch of warm gold drift across the page over 30 seconds.
+   (The app always sets data-theme to "light" or "dark".)
+   =================================================================== */
+:root[data-theme="light"] body::before {
+  content: "";
+  position: fixed; inset: -20%; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(38% 42% at 18% 22%, rgba(16, 185, 129, .20), transparent 70%),
+    radial-gradient(34% 38% at 82% 18%, rgba(20, 184, 166, .16), transparent 70%),
+    radial-gradient(40% 45% at 70% 82%, rgba(212, 160, 23, .12), transparent 70%),
+    radial-gradient(36% 40% at 22% 85%, rgba(5, 150, 105, .14), transparent 70%);
+  filter: blur(10px);
+  animation: aurora-drift 30s ease-in-out infinite alternate;
+}
+@keyframes aurora-drift {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  33% { transform: translate3d(3%, -2%, 0) scale(1.05); }
+  66% { transform: translate3d(-2%, 3%, 0) scale(1.03); }
+  100% { transform: translate3d(2%, 1%, 0) scale(1.07); }
+}
+/* Glassy surfaces so the gradient shows through gently. */
+:root[data-theme="light"] .sidebar,
+:root[data-theme="light"] .topbar {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+/* The hero's gradient also moves, slowly. */
+.hero-panel, .champion-banner {
+  background-size: 180% 180%;
+  animation: pitch-shift 18s ease-in-out infinite alternate;
+}
+@keyframes pitch-shift {
+  0% { background-position: 0% 40%; }
+  100% { background-position: 100% 60%; }
+}
+
+/* Unread badge in the menu */
+.nav-badge {
+  margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px;
+  display: inline-grid; place-items: center; border-radius: 99px;
+  background: var(--red, #dc2626); color: #fff; font-size: 11px; font-weight: 800;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--red, #dc2626) 20%, transparent);
+  animation: badge-pop .35s ease-out;
+}
+@keyframes badge-pop { 0% { transform: scale(.4); } 70% { transform: scale(1.15); } 100% { transform: scale(1); } }
+
+/* Toasts for new notifications */
+.toast-stack { position: fixed; top: 86px; right: 22px; z-index: 50; display: grid; gap: 10px; width: min(360px, calc(100vw - 32px)); }
+.toast {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start;
+  padding: 14px 14px 14px 16px; border-radius: 14px; border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-lift); animation: toast-in .3s ease-out;
+}
+@keyframes toast-in { from { opacity: 0; transform: translateY(-8px) scale(.98); } to { opacity: 1; transform: none; } }
+.toast-dot { width: 10px; height: 10px; margin-top: 5px; border-radius: 50%; background: var(--accent); }
+.toast-action .toast-dot { background: #f59e0b; }
+.toast-live .toast-dot { background: #dc2626; animation: live-pulse 1.4s infinite; }
+.toast-success .toast-dot { background: var(--gold); }
+.toast-body strong { display: block; font-size: 13px; }
+.toast-body p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.toast-link { margin-top: 8px; padding: 0; border: 0; background: none; color: var(--accent-strong); font-weight: 700; font-size: 12px; cursor: pointer; }
+:root[data-theme="dark"] .toast-link { color: var(--accent); }
+.toast-close { border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
+
+/* Notification inbox */
+.segmented { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.segmented button { border: 0; background: transparent; padding: 7px 14px; border-radius: 9px; color: var(--muted); font-weight: 700; font-size: 12px; cursor: pointer; }
+.segmented button.active { background: var(--accent-soft); color: var(--accent-strong); }
+:root[data-theme="dark"] .segmented button.active { color: var(--accent); }
+.notification-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.notification-item {
+  position: relative; display: grid; grid-template-columns: auto 1fr; gap: 14px;
+  padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface);
+  box-shadow: var(--shadow); transition: border-color .2s, box-shadow .2s; animation: toast-in .25s ease-out;
+}
+.notification-item.is-unread { border-left: 4px solid var(--accent); }
+.notification-item.is-unread.tone-action { border-left-color: #f59e0b; }
+.notification-item.is-unread.tone-live { border-left-color: #dc2626; }
+.notification-item.is-read { opacity: .78; }
+.notification-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; background: var(--surface-hover); font-size: 18px; }
+.notification-top { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.notification-body p { margin: 6px 0 10px; line-height: 1.55; font-size: 13px; }
+.unread-dot { position: absolute; top: 16px; right: 16px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+/* Live score in fixture tables */
+.fixture-score { display: inline-block; min-width: 54px; padding: 4px 10px; border-radius: 9px; background: var(--surface-hover); font-weight: 800; text-align: center; }
+.fixture-score.is-live { background: var(--red-bg); color: var(--red); animation: score-flash .9s ease-out; }
+@keyframes score-flash { 0% { transform: scale(1.25); box-shadow: 0 0 0 6px color-mix(in srgb, #dc2626 25%, transparent); } 100% { transform: scale(1); box-shadow: none; } }
+
+.follow-control { display: inline-flex; align-items: center; gap: 8px; }
+
+@media (max-width: 640px) {
+  .toast-stack { top: auto; bottom: 16px; right: 16px; }
+}

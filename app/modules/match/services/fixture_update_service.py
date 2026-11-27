@@ -163,6 +163,7 @@ def _notify_fixture_change(
                     user_id=user_id,
                     notification_type=FIXTURE_CHANGED_NOTIFICATION,
                     content=content,
+                    link=f"#/details/{tournament.id}",
                     is_read=False,
                 )
             )

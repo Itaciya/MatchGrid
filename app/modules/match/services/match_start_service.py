@@ -43,6 +43,18 @@ def start_match(db: Session, match_id: int) -> Match:
 
     tournament_went_live = mark_tournament_live(db, match.tournament_id)
 
+    # Teams and followers hear that the match is live.
+    from app.modules.notification.services import notifier
+
+    notifier.notify(
+        db,
+        notifier.team_member_ids(db, (match.team_a_id, match.team_b_id))
+        | notifier.follower_ids(db, match.tournament_id),
+        "match_live",
+        f"{notifier.match_label(match)} has kicked off. Follow the live score.",
+        notifier.tournament_link(match.tournament_id),
+    )
+
     try:
         db.commit()
         db.refresh(match)

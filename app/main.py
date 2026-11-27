@@ -47,6 +47,8 @@ from app.modules.user.models import User  # noqa: F401
 from app.modules.venue.routes import router as venue_router
 
 from app.realtime.redis_pubsub import pubsub_manager
+# Registers the hook that delivers every committed notification live.
+import app.modules.notification.services.notifier  # noqa: F401,E402
 from app.realtime.routes import router as websocket_router
 from app.core.rate_limit_middleware import rate_limit_middleware
 

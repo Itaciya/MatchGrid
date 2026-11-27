@@ -16,6 +16,7 @@ class NotificationCreate(BaseModel):
     user_id: UserId
     notification_type: str = Field(min_length=1, max_length=50)
     content: str = Field(min_length=1)
+    link: str | None = Field(default=None, max_length=255)
 
 
     @field_validator("notification_type", "content")
@@ -73,6 +74,7 @@ class NotificationResponse(BaseModel):
     user_id: int
     notification_type: str
     content: str
+    link: str | None = None
     is_read: bool
     created_at: datetime
     updated_at: datetime

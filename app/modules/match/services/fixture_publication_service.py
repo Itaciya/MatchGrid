@@ -65,6 +65,11 @@ def _create_fixture_publication_notifications(
             if player.user_id is not None
         )
 
+    # Spectators following the tournament want the schedule too.
+    from app.modules.notification.services.notifier import follower_ids
+
+    recipient_ids.update(follower_ids(db, tournament.id))
+
     fixture_details = []
 
     for fixture in fixtures:
@@ -122,6 +127,7 @@ def _create_fixture_publication_notifications(
                 user_id=recipient_id,
                 notification_type=FIXTURE_PUBLISHED_NOTIFICATION,
                 content=message,
+                link=f"#/details/{tournament.id}",
                 is_read=False,
             )
         )

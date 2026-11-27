@@ -11,12 +11,29 @@ class ConnectionManager:
     def __init__(self) -> None:
         self.active_connections: dict[int, set[WebSocket]] = {}
         self.match_connections: dict[int, set[WebSocket]] = {}
+        # Signed-out viewers: they can follow public matches only.
+        self.anonymous_connections: set[WebSocket] = set()
         self.event_loop: asyncio.AbstractEventLoop | None = None
 
     async def connect(self, user_id: int, websocket: WebSocket) -> None:
         """Register a WebSocket for an authenticated user."""
         self.event_loop = asyncio.get_running_loop()
         self.active_connections.setdefault(user_id, set()).add(websocket)
+
+    def connect_anonymous(self, websocket: WebSocket) -> None:
+        """Register a signed-out viewer's WebSocket."""
+        self.anonymous_connections.add(websocket)
+
+    def disconnect_anonymous(self, websocket: WebSocket) -> None:
+        """Remove a signed-out viewer and its match subscriptions."""
+        self.anonymous_connections.discard(websocket)
+        self._drop_match_subscriptions(websocket)
+
+    def _drop_match_subscriptions(self, websocket: WebSocket) -> None:
+        for match_id, subscribers in list(self.match_connections.items()):
+            subscribers.discard(websocket)
+            if not subscribers:
+                self.match_connections.pop(match_id, None)
 
     def disconnect(self, user_id: int, websocket: WebSocket) -> None:
         """Remove a disconnected WebSocket and its match subscriptions."""
@@ -41,7 +58,7 @@ class ConnectionManager:
         if match_id < 1:
             raise ValueError("match_id must be a positive integer")
 
-        if not any(
+        if websocket not in self.anonymous_connections and not any(
             websocket in connections
             for connections in self.active_connections.values()
         ):
@@ -116,6 +133,9 @@ class ConnectionManager:
             try:
                 await websocket.send_json(message)
             except Exception:
+                if websocket in self.anonymous_connections:
+                    self.disconnect_anonymous(websocket)
+                    continue
                 for user_id, connections in list(
                     self.active_connections.items()
                 ):

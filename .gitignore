@@ -11,3 +11,6 @@ __pycache__/
 migration_preview*.sql
 frontend/src/App.jsx.backup
 production-work-staged.patch
+
+# Local demo logins (never commit)
+*.local.md

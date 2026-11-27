@@ -4,7 +4,6 @@ const DEFAULTS = {
   baseDelay: 1000,
   maxDelay: 30000,
   heartbeatMs: 25000,
-  tokenCheckMs: 5000,
 };
 
 export class WebSocketClient {
@@ -18,7 +17,6 @@ export class WebSocketClient {
     this.statusListeners = new Set();
     this.reconnectTimer = null;
     this.heartbeatTimer = null;
-    this.tokenCheckTimer = null;
     this.rejectedToken = null;
   }
 
@@ -31,16 +29,11 @@ export class WebSocketClient {
       return;
     }
 
-    // The server only accepts signed-in clients. Without a token (or with
-    // one it already rejected) don't open a socket that would be closed
-    // straight away; check again shortly instead, e.g. after sign-in.
-    const token = this.opts.getToken?.();
-    if (!token || token === this.rejectedToken) {
-      this.manualClose = false;
-      this._setStatus('closed');
-      this._scheduleTokenCheck();
-      return;
-    }
+    // Signed-in users authenticate with their token and also receive their
+    // personal notifications. Everyone else (or a token the server already
+    // rejected) joins as a guest, which can still follow public live scores.
+    const storedToken = this.opts.getToken?.();
+    const token = storedToken && storedToken !== this.rejectedToken ? storedToken : null;
 
     this.manualClose = false;
     this._setStatus('connecting');
@@ -50,7 +43,7 @@ export class WebSocketClient {
     ws.onopen = () => {
       if (this.ws !== ws) return;
       this.attempts = 0;
-      this._send({ type: 'auth', token });
+      this._send(token ? { type: 'auth', token } : { type: 'auth', anonymous: true });
       this._setStatus('open');
       this._startHeartbeat();
     };
@@ -72,20 +65,26 @@ export class WebSocketClient {
       this.ws = null;
       this._setStatus('closed');
       if (this.manualClose) return;
-      // 1008 = the server refused our token; wait for a new one.
-      if (event.code === 1008) {
+      // 1008 = the server refused our token: reconnect as a guest now.
+      if (event.code === 1008 && token) {
         this.rejectedToken = token;
-        this._scheduleTokenCheck();
+        this.connect();
         return;
       }
       this._scheduleReconnect();
     };
   }
 
+  // Reconnect with the current credentials, e.g. right after sign-in or out.
+  reconnect() {
+    this.rejectedToken = null;
+    this.disconnect();
+    this.connect();
+  }
+
   disconnect() {
     this.manualClose = true;
     clearTimeout(this.reconnectTimer);
-    clearTimeout(this.tokenCheckTimer);
     this._stopHeartbeat();
     this.ws?.close(1000, 'client disconnect');
     this.ws = null;
@@ -123,13 +122,6 @@ export class WebSocketClient {
     const jitter = Math.random() * 300;
     this.attempts += 1;
     this.reconnectTimer = setTimeout(() => this.connect(), delay + jitter);
-  }
-
-  _scheduleTokenCheck() {
-    clearTimeout(this.tokenCheckTimer);
-    this.tokenCheckTimer = setTimeout(() => {
-      if (!this.manualClose && !this.ws) this.connect();
-    }, this.opts.tokenCheckMs);
   }
 
   _startHeartbeat() {

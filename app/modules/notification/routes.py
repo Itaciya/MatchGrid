@@ -100,3 +100,30 @@ def read_my_unread_count(
             user_id=current_user.id,
         )
     }
+
+
+class MarkAllReadResponse(BaseModel):
+    updated: int
+
+
+@router.patch(
+    "/read-all",
+    response_model=MarkAllReadResponse,
+)
+def mark_all_my_notifications_read(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Mark every unread notification of the signed-in user as read."""
+    from app.modules.notification.models.notification import Notification
+
+    updated = (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == current_user.id,
+            Notification.is_read.is_(False),
+        )
+        .update({Notification.is_read: True}, synchronize_session=False)
+    )
+    db.commit()
+    return {"updated": updated}

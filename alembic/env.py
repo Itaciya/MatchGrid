@@ -28,6 +28,7 @@ from app.modules.tournament_team.models.tournament_team import TournamentTeam
 from app.modules.tournament_team.models.tournament_team_player import TournamentTeamPlayer
 from app.modules.venue.models.venue import Venue
 from app.modules.audit.models.audit_log import AuditLog
+from app.modules.tournament.models.tournament_follower import TournamentFollower
 
 # Load environment variables from .env
 load_dotenv()

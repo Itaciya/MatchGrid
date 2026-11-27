@@ -1,3 +1,5 @@
+import { announceAuthChange } from '../notifications/notificationContext'
+
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 ).replace(/\/+$/, '')
@@ -27,11 +29,14 @@ async function refreshAccessToken() {
       .then(async (response) => {
         if (!response.ok) {
           clearStoredTokens()
+          announceAuthChange()
           return false
         }
         const tokens = await response.json()
         localStorage.setItem('access_token', tokens.access_token)
         localStorage.setItem('refresh_token', tokens.refresh_token)
+        // Let the live connection re-authenticate with the new token.
+        announceAuthChange()
         return true
       })
       .catch(() => false)
@@ -77,6 +82,7 @@ const SERVER_MESSAGE_REWRITES = [
     (m) => `This match is ${m[1]}, so it cannot be changed to ${m[2]}.`,
   ],
   [/both teams must be assigned/i, () => 'Both teams must be assigned before this can be done.'],
+  [/invalid email or password/i, () => 'Wrong email or password. Please check them and try again.'],
   [/invalid or expired token/i, () => 'Your session has expired. Please sign in again.'],
   [/account is inactive/i, () => 'Your account is inactive. Please contact the organiser or support.'],
   [/you are not assigned to this match/i, () => 'You are not assigned to this match, so you cannot manage it.'],

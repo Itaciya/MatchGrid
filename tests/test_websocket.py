@@ -283,3 +283,36 @@ def test_websocket_returns_error_for_invalid_payload(
             "type": "error",
             "payload": {"detail": "Invalid message payload"},
         }
+
+
+def test_anonymous_viewer_can_follow_a_published_match_only(
+    db, monkeypatch, fake_redis, websocket_db_override
+):
+    _patch_redis(monkeypatch, fake_redis)
+    organiser = _make_user(db, role="organiser")
+    tournament = _make_tournament(db, organiser.id)
+    match = _make_match(db, tournament.id, organiser.id)
+
+    with client.websocket_connect("/ws") as websocket:
+        websocket.send_json({"type": "auth", "anonymous": True})
+        assert websocket.receive_json()["payload"]["role"] == "guest"
+
+        websocket.send_json({"type": "subscribe_match", "payload": {"match_id": match.id}})
+        assert websocket.receive_json() == {
+            "type": "error",
+            "payload": {"detail": "Match not found"},
+        }
+
+        tournament.fixtures_published = True
+        db.commit()
+
+        websocket.send_json({"type": "subscribe_match", "payload": {"match_id": match.id}})
+        assert websocket.receive_json() == {
+            "type": "match:subscribed",
+            "payload": {"match_id": match.id},
+        }
+        subscribers = manager.match_connections[match.id]
+        assert len(subscribers) == 1
+        assert subscribers <= manager.anonymous_connections
+
+    assert match.id not in manager.match_connections

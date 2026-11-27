@@ -20,6 +20,7 @@ def test_mark_notification_as_read_updates_status():
     notification.id = 1
     notification.user_id = 10
     notification.is_read = False
+    notification.link = None
 
     query = db.query.return_value
     query.filter.return_value.first.return_value = notification
@@ -44,6 +45,7 @@ def test_mark_notification_as_read_returns_notification():
     notification.notification_type = "upcoming_match_reminder"
     notification.content = "Your match starts soon."
     notification.is_read = False
+    notification.link = None
     notification.created_at = datetime(2026, 10, 18, tzinfo=timezone.utc)
     notification.updated_at = datetime(2026, 10, 18, tzinfo=timezone.utc)
 

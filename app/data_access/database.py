@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
@@ -7,7 +8,11 @@ from sqlalchemy.orm import sessionmaker
 from app.data_access.base import Base
 from sqlalchemy.engine import make_url
 
-load_dotenv()
+# Always the project's own .env (next to alembic.ini). A bare load_dotenv()
+# searches upward from this file and would pick up a stray app/.env first,
+# so the API and the migrations could end up on different databases.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
