@@ -17,9 +17,6 @@ from app.modules.tournament.models.tournament import Tournament
 from app.modules.user.models import User
 from app.modules.notification.schemas.notification import NotificationCreate
 from app.modules.notification.services.notification_service import create_notification
-from app.modules.notification.services.notification_broadcast_service import (
-    schedule_notification_broadcast,
-)
 
 
 ASSIGNMENT_STATUS_ACTIVE = "active"
@@ -262,19 +259,18 @@ def assign_tournament_scorer(
         db.refresh(assignment)
 
     try:
-        notification = create_notification(
+        create_notification(
             db,
             NotificationCreate(
                 user_id=scorer.id,
                 notification_type="tournament_scorer_assignment",
-                content=f"You have been assigned as a scorer for {tournament.name}.",
+                content=(
+                    f"You are now a scorer for {tournament.name}. Its matches "
+                    "appear on your scoring page."
+                ),
+                link="#/scoring",
             ),
         )
-
-        try:
-            schedule_notification_broadcast(notification)
-        except Exception:
-            pass
 
     except Exception:
         db.rollback()

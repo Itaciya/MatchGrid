@@ -1,147 +1,171 @@
 ﻿import { useEffect, useState } from 'react'
-import { getNotifications, getUnreadCount, markNotificationRead } from './services/notificationApi'
+import { getNotifications } from './services/notificationApi'
+import { useNotifications } from './notifications/notificationContext'
+import { describe } from './notifications/notificationTypes'
 
-const PAGE_SIZE = 10
-const box = { border: '1px solid rgba(128,128,128,.4)', borderRadius: 8, padding: 16, marginBottom: 12 }
+const PAGE_SIZE = 15
 
-// The API sends a type and a message, so titles and links are derived from the type.
-const TYPE_INFO = {
-  fixture_published: { title: 'Fixtures published', page: 'tournaments', linkLabel: 'View tournaments' },
-  fixture_changed: { title: 'Fixture changed', page: 'tournaments', linkLabel: 'View tournaments' },
-}
-
-function formatNotificationDate(value) {
-  if (!value) return 'Date unavailable'
+function timeAgo(value) {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? 'Date unavailable' : date.toLocaleString()
+  if (Number.isNaN(date.getTime())) return ''
+  const seconds = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000))
+  if (seconds < 60) return 'just now'
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours} h ago`
+  return date.toLocaleDateString()
 }
 
-function describe(type) {
-  if (TYPE_INFO[type]) return TYPE_INFO[type]
-  const text = String(type || 'notification').replace(/_/g, ' ')
-  return { title: text.charAt(0).toUpperCase() + text.slice(1), page: null }
-}
-
-export default function NotificationsPage({ onOpenPage }) {
+export default function NotificationsPage() {
+  const { unread, latest, markRead, markAllRead } = useNotifications()
+  const [filter, setFilter] = useState('all')
   const [page, setPage] = useState(0)
-  const [reloadKey, setReloadKey] = useState(0)
   const [items, setItems] = useState([])
   const [hasNext, setHasNext] = useState(false)
-  const [unread, setUnread] = useState(null)
-  const [unreadError, setUnreadError] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [busyId, setBusyId] = useState(null)
-  const [actionError, setActionError] = useState('')
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    // One extra row tells us whether a next page exists.
-    getNotifications({ limit: PAGE_SIZE + 1, offset: page * PAGE_SIZE })
-      .then((rows) => {
-        if (cancelled) return
-        const list = Array.isArray(rows) ? rows : []
-        setItems(list.slice(0, PAGE_SIZE))
-        setHasNext(list.length > PAGE_SIZE)
-      })
-      .catch((err) => { if (!cancelled) setError(err.message) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    getUnreadCount()
-      .then((result) => {
-        if (cancelled) return
-        const count = Number(result?.unread_count)
-        if (Number.isFinite(count) && count >= 0) {
-          setUnread(count)
-          setUnreadError('')
-        } else {
-          setUnreadError('Unread count is temporarily unavailable.')
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setUnreadError('Unread count is temporarily unavailable.')
-      })
-    return () => { cancelled = true }
-  }, [page, reloadKey])
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      getNotifications({ limit: PAGE_SIZE + 1, offset: page * PAGE_SIZE, unreadOnly: filter === 'unread' })
+        .then((rows) => {
+          if (cancelled) return
+          const list = Array.isArray(rows) ? rows : []
+          setItems(list.slice(0, PAGE_SIZE))
+          setHasNext(list.length > PAGE_SIZE)
+          setError('')
+        })
+        .catch((err) => { if (!cancelled) setError(err.message) })
+        .finally(() => { if (!cancelled) setLoading(false) })
+    }, 0)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [page, filter])
 
-  function goTo(next) {
-    setLoading(true); setError(''); setActionError(''); setUnreadError('')
-    setPage(next)
+  // New notifications arrive live: put them on top of the first page.
+  useEffect(() => {
+    if (!latest || page !== 0) return undefined
+    const timer = window.setTimeout(() => {
+      setItems((list) => (list.some((item) => item.id === latest.id) ? list : [latest, ...list].slice(0, PAGE_SIZE)))
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [latest, page])
+
+  async function open(notification) {
+    if (!notification.is_read) {
+      try {
+        await markRead(notification)
+        setItems((list) => list.map((item) => (item.id === notification.id ? { ...item, is_read: true } : item)))
+      } catch {
+        // Opening the link matters more than the read flag.
+      }
+    }
+    if (notification.link) window.location.assign(notification.link)
   }
 
-  function refresh() {
-    setLoading(true); setError(''); setActionError(''); setUnreadError('')
-    setReloadKey((key) => key + 1)
-  }
-
-  async function markRead(notification) {
-    setBusyId(notification.id)
-    setActionError('')
+  async function onMarkRead(notification) {
+    setBusy(true)
     try {
-      const updated = await markNotificationRead(notification.id)
-      setItems((list) => list.map((n) => (n.id === notification.id ? { ...n, ...updated } : n)))
-      if (!notification.is_read) setUnread((count) => (count == null ? count : Math.max(0, count - 1)))
+      await markRead(notification)
+      setItems((list) => (filter === 'unread'
+        ? list.filter((item) => item.id !== notification.id)
+        : list.map((item) => (item.id === notification.id ? { ...item, is_read: true } : item))))
     } catch (err) {
-      setActionError(err.message)
+      setError(err.message)
     } finally {
-      setBusyId(null)
+      setBusy(false)
     }
   }
 
-  const hasToken = Boolean(
-    localStorage.getItem('access_token') ||
-    localStorage.getItem('accessToken') ||
-    localStorage.getItem('token')
-  )
+  async function onMarkAll() {
+    setBusy(true)
+    try {
+      await markAllRead()
+      setItems((list) => (filter === 'unread' ? [] : list.map((item) => ({ ...item, is_read: true }))))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <section>
-      <h2>Notifications{unread != null && unread > 0 ? ` (${unread} unread)` : ''}</h2>
-      <p style={{ fontSize: 13, opacity: 0.7 }}>
-        Only your own notifications are shown. Use Refresh to check for new ones.
-      </p>
-      <button className="button button-secondary" type="button" onClick={refresh} disabled={loading}>{loading ? 'Loading...' : 'Refresh'}</button>
-
-      {error && (
-        <div className="notice notice-error" role="alert">
-          {error}{!hasToken && ' (Sign in to see your notifications.)'}
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">INBOX</p>
+          <h1>Notifications</h1>
+          <p className="muted">
+            {unread > 0 ? `You have ${unread} unread ${unread === 1 ? 'notification' : 'notifications'}.` : 'You are all caught up.'}
+            {' '}New updates appear here instantly.
+          </p>
         </div>
-      )}
-      {actionError && <div className="notice notice-error" role="alert">{actionError}</div>}
-      {unreadError && <div role="status" style={{ fontSize: 13, opacity: 0.75 }}>{unreadError}</div>}
-
-      {!loading && !error && items.length === 0 && <p style={{ marginTop: 12 }}>You have no notifications.</p>}
-
-      <div style={{ marginTop: 12 }}>
-        {items.map((n) => {
-          const info = describe(n.notification_type)
-          return (
-            <div key={n.id} style={{ ...box, borderLeft: n.is_read ? box.border : '4px solid #3b82f6' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                <strong>{info.title}</strong>
-                <span className="status-pill">{n.is_read ? 'Read' : 'Unread'}</span>
-              </div>
-              <p style={{ margin: '8px 0', whiteSpace: 'pre-wrap' }}>{n.content}</p>
-              <div style={{ fontSize: 13, opacity: 0.7 }}>{formatNotificationDate(n.created_at)}</div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                {info.page && onOpenPage && (
-                  <button type="button" onClick={() => onOpenPage(info.page)}>{info.linkLabel}</button>
-                )}
-                {!n.is_read && (
-                  <button type="button" disabled={busyId !== null} onClick={() => markRead(n)}>
-                    {busyId === n.id ? 'Saving...' : 'Mark as read'}
-                  </button>
-                )}
-              </div>
-            </div>
-          )
-        })}
+        <button className="button button-secondary" type="button" onClick={onMarkAll} disabled={busy || unread === 0}>
+          Mark all as read
+        </button>
       </div>
 
+      <div className="segmented" role="tablist" aria-label="Filter notifications">
+        {[['all', 'All'], ['unread', `Unread${unread ? ` (${unread})` : ''}`]].map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={filter === value}
+            className={filter === value ? 'active' : ''}
+            onClick={() => { setFilter(value); setPage(0) }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {error && <div className="notice notice-error" role="alert">{error}</div>}
+      {loading && <div className="loading-state"><span className="spinner" />Loading notifications...</div>}
+
+      {!loading && !error && items.length === 0 && (
+        <div className="empty-state">
+          <span className="empty-icon">🔔</span>
+          <h3>{filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}</h3>
+          <p>Applications, match updates and results for you will show up here as they happen.</p>
+        </div>
+      )}
+
+      <ul className="notification-list">
+        {items.map((notification) => {
+          const info = describe(notification.notification_type)
+          return (
+            <li key={notification.id} className={`notification-item tone-${info.tone} ${notification.is_read ? 'is-read' : 'is-unread'}`}>
+              <span className="notification-icon" aria-hidden="true">{info.icon}</span>
+              <div className="notification-body">
+                <div className="notification-top">
+                  <strong>{info.title}</strong>
+                  <span className="muted small">{timeAgo(notification.created_at)}</span>
+                </div>
+                <p>{notification.content}</p>
+                <div className="table-actions">
+                  {notification.link && (
+                    <button type="button" className="button button-primary" onClick={() => open(notification)}>Open</button>
+                  )}
+                  {!notification.is_read && (
+                    <button type="button" className="button button-secondary" onClick={() => onMarkRead(notification)} disabled={busy}>Mark as read</button>
+                  )}
+                </div>
+              </div>
+              {!notification.is_read && <span className="unread-dot" aria-label="Unread" />}
+            </li>
+          )
+        })}
+      </ul>
+
       {(page > 0 || hasNext) && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button type="button" disabled={page === 0 || loading} onClick={() => goTo(page - 1)}>Previous</button>
-          <span>Page {page + 1}</span>
-          <button type="button" disabled={!hasNext || loading} onClick={() => goTo(page + 1)}>Next</button>
+        <div className="pagination-row">
+          <button className="button button-secondary" type="button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0 || loading}>← Newer</button>
+          <span className="helper-text">Page {page + 1}</span>
+          <button className="button button-secondary" type="button" onClick={() => setPage((p) => p + 1)} disabled={!hasNext || loading}>Older →</button>
         </div>
       )}
     </section>

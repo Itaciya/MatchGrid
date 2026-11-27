@@ -22,6 +22,29 @@ def _invalidate_cache() -> None:
     invalidate_public_tournament_cache()
 
 
+def _notify_tournament_finished(db: Session, tournament: Tournament) -> None:
+    """Teams that took part and followers hear the tournament is over."""
+    from app.modules.notification.services import notifier
+    from app.modules.registration.models.registration import Registration
+
+    team_ids = [
+        team_id
+        for (team_id,) in db.query(Registration.team_id).filter(
+            Registration.tournament_id == tournament.id,
+            Registration.status == "approved",
+            Registration.team_id.isnot(None),
+        )
+    ]
+    notifier.notify(
+        db,
+        notifier.team_member_ids(db, team_ids)
+        | notifier.follower_ids(db, tournament.id),
+        "tournament_completed",
+        f"{tournament.name} has finished. See the final standings and champions.",
+        notifier.tournament_link(tournament.id),
+    )
+
+
 def mark_tournament_live(db: Session, tournament_id: int) -> bool:
     """upcoming -> live. Does not commit; the caller commits."""
     tournament = (
@@ -72,6 +95,7 @@ def complete_tournament_if_done(db: Session, tournament_id: int) -> bool:
         return False
 
     tournament.status = STATUS_COMPLETED
+    _notify_tournament_finished(db, tournament)
     db.commit()
     _invalidate_cache()
     return True
@@ -87,6 +111,7 @@ def end_tournament(db: Session, tournament: Tournament) -> Tournament:
             )
         )
     tournament.status = STATUS_COMPLETED
+    _notify_tournament_finished(db, tournament)
     db.commit()
     db.refresh(tournament)
     _invalidate_cache()

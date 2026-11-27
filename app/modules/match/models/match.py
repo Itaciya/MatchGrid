@@ -187,11 +187,16 @@ class Match(Base):
     def tournament_name(self) -> str | None:
         return self.tournament.name if self.tournament else None
 
-    # Scores are only exposed once the organiser has verified them, so
-    # public fixture lists never show provisional numbers.
+    # Public score: the running score while the match is in play, then the
+    # verified score. An ended match shows nothing until the organiser has
+    # verified it, so provisional final scores never look official.
     def _verified_score(self):
         score = self.score
-        if score is None or score.verification_status != "verified":
+        if score is None:
+            return None
+        if self.status in ("live", "paused"):
+            return score
+        if score.verification_status != "verified":
             return None
         return score
 

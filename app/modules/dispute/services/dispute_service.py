@@ -24,6 +24,28 @@ from app.modules.score.models.score import Score, ScoreVerificationStatus
 from app.modules.tournament.models.tournament import Tournament
 
 
+_DISPUTE_STATUS_TEXT = {
+    "under_review": "is now under review by the organiser",
+    "resolved": "has been resolved",
+    "rejected": "has been rejected",
+}
+
+
+def _notify_dispute_owner(db: Session, dispute: Dispute, match: Match) -> None:
+    """Tell the player who raised a dispute that its status changed."""
+    from app.modules.notification.services import notifier
+
+    text = _DISPUTE_STATUS_TEXT.get(dispute.status, f"is now {dispute.status}")
+    detail = f" Organiser's note: {dispute.resolution}" if dispute.resolution else ""
+    notifier.notify(
+        db,
+        [dispute.user_id],
+        "dispute_update",
+        f"Your dispute about {notifier.match_label(match)} {text}.{detail}",
+        notifier.MY_DISPUTES_LINK,
+    )
+
+
 def create_dispute(
     db: Session,
     current_user_id: int,
@@ -81,6 +103,17 @@ def create_dispute(
         user_id=current_user_id,
         reason=data.reason,
         status="pending",
+    )
+
+    from app.modules.notification.services import notifier
+
+    notifier.notify(
+        db,
+        [match.tournament.organizer_id],
+        "dispute_submitted",
+        f"A dispute was raised about {notifier.match_label(match)}. "
+        "Review it before verifying the score.",
+        notifier.DISPUTES_TO_RESOLVE_LINK,
     )
 
     try:
@@ -239,6 +272,7 @@ def update_dispute_status(
             changed_by=current_user_id,
         )
         db.add(history)
+        _notify_dispute_owner(db, dispute, match)
 
         db.commit()
         db.refresh(dispute)
@@ -426,6 +460,7 @@ def resolve_dispute(
             changed_by=current_user_id,
         )
         db.add(history)
+        _notify_dispute_owner(db, dispute, match)
 
         # Persist the result, match status, dispute, and history atomically.
         db.commit()

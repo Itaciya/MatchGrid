@@ -19,6 +19,7 @@ async def test_broadcast_notification_sends_to_intended_recipient():
     notification.notification_type = "match_update"
     notification.content = "Your match has been updated."
     notification.is_read = False
+    notification.link = "#/details/3"
     notification.created_at = datetime(2026, 10, 20, tzinfo=timezone.utc)
 
     with patch.object(
@@ -38,6 +39,7 @@ async def test_broadcast_notification_sends_to_intended_recipient():
                     "title": "Match Update",
                     "message": "Your match has been updated.",
                     "notification_type": "match_update",
+                    "link": "#/details/3",
                     "is_read": False,
                     "created_at": "2026-10-20T00:00:00+00:00",
                 },

@@ -17,3 +17,7 @@ export function getUnreadCount() {
 export function markNotificationRead(notificationId) {
   return apiRequest(`${BASE}/${notificationId}/read`, { method: 'PATCH' })
 }
+
+export function markAllNotificationsRead() {
+  return apiRequest(`${BASE}/read-all`, { method: 'PATCH' })
+}

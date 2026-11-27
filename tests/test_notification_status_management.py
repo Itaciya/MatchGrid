@@ -22,6 +22,7 @@ def test_update_notification_read_status_updates_value(is_read):
     notification.id = 5
     notification.user_id = 10
     notification.is_read = not is_read
+    notification.link = None
 
     query = db.query.return_value
     query.filter.return_value.first.return_value = notification
@@ -64,6 +65,7 @@ def test_status_endpoint_returns_updated_notification():
     notification.notification_type = "upcoming_match_reminder"
     notification.content = "Your match starts soon."
     notification.is_read = True
+    notification.link = None
     notification.created_at = "2026-10-18T00:00:00+00:00"
     notification.updated_at = "2026-10-18T00:00:00+00:00"
 
@@ -111,6 +113,7 @@ def test_update_notification_read_status_rolls_back_and_reraises_db_error():
     notification.id = 5
     notification.user_id = 10
     notification.is_read = False
+    notification.link = None
 
     query = db.query.return_value
     query.filter.return_value.first.return_value = notification

@@ -12,6 +12,11 @@ from app.core.exceptions import (
     NotFoundException,
 )
 from app.modules.notification.models.notification import Notification
+from app.modules.notification.services.notifier import (
+    MY_REGISTRATIONS_LINK,
+    approvals_link,
+    notify,
+)
 from app.modules.player_team.models.player import Player
 from app.modules.player_team.models.team import Team, TeamStatus
 from app.modules.registration.models.registration import Registration
@@ -91,10 +96,20 @@ def notify_registration_status(
 
     status = registration.status
 
-    message = (
-        f"Your registration #{registration.id} for tournament "
-        f"'{tournament.name}' has been {status}."
-    )
+    if registration.registration_type == RegistrationType.TEAM.value:
+        subject = f"{team.name}'s registration"
+    else:
+        subject = "Your registration"
+
+    if status == RegistrationStatus.APPROVED.value:
+        message = (
+            f"{subject} for {tournament.name} has been approved. "
+            "You will be notified when fixtures are published."
+        )
+    else:
+        message = (
+            f"{subject} for {tournament.name} has been rejected by the organiser."
+        )
 
     # Avoid creating the same notification more than once.
     existing_notification = (
@@ -116,10 +131,35 @@ def notify_registration_status(
         user_id=recipient_id,
         notification_type="registration_status",
         content=message,
+        link=MY_REGISTRATIONS_LINK,
         is_read=False,
     )
 
     db.add(notification)
+
+
+def _notify_organiser_of_application(
+    db: Session,
+    registration: Registration,
+    applicant: str,
+) -> None:
+    """Tell the tournament's organiser that an application needs review."""
+    tournament = (
+        db.query(Tournament)
+        .filter(Tournament.id == registration.tournament_id)
+        .first()
+    )
+    if tournament is None:
+        return
+
+    notify(
+        db,
+        [tournament.organizer_id],
+        "registration_submitted",
+        f"{applicant} applied to join {tournament.name}. "
+        "Review the application to approve or reject it.",
+        approvals_link(tournament.id),
+    )
 
 
 def create_team_registration(
@@ -203,6 +243,7 @@ def create_team_registration(
     )
 
     db.add(registration)
+    _notify_organiser_of_application(db, registration, team.name)
 
     try:
         db.commit()
@@ -256,6 +297,9 @@ def create_player_registration(
     )
 
     db.add(registration)
+    _notify_organiser_of_application(
+        db, registration, f"{player.first_name} {player.last_name}"
+    )
 
     try:
         db.commit()

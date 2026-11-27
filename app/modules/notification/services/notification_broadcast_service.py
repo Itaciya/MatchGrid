@@ -17,6 +17,7 @@ def notification_event(notification: Notification) -> dict:
             ).title(),
             "message": notification.content,
             "notification_type": notification.notification_type,
+            "link": getattr(notification, "link", None),
             "is_read": notification.is_read,
             "created_at": (
                 notification.created_at.isoformat()

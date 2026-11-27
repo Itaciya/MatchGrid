@@ -15,7 +15,13 @@ KNOCKOUT_FORMATS = ("single_elimination", "double_elimination")
 MATCH_STATUS_BYE = "bye"
 
 
-def _notify_team(db: Session, team_id: int, kind: str, message: str):
+def _notify_team(
+    db: Session,
+    team_id: int,
+    kind: str,
+    message: str,
+    tournament_id: int | None = None,
+):
     team = db.query(Team).filter(Team.id == team_id).first()
     if not team:
         return
@@ -31,6 +37,7 @@ def _notify_team(db: Session, team_id: int, kind: str, message: str):
                 user_id=user_id,
                 notification_type=kind,
                 content=message,
+                link=f"#/details/{tournament_id}" if tournament_id else None,
             ))
 
 
@@ -165,7 +172,18 @@ def create_single_elimination_bracket(
             team_id,
             "fixture_published",
             f"Single Elimination fixtures for {tournament.name} have been published.",
+            tournament.id,
         )
+
+    from app.modules.notification.services.notifier import follower_ids, notify
+
+    notify(
+        db,
+        follower_ids(db, tournament.id),
+        "fixture_published",
+        f"The knockout bracket for {tournament.name} has been published.",
+        f"#/details/{tournament.id}",
+    )
 
     db.commit()
 
@@ -271,6 +289,7 @@ def advance_single_elimination_winner(
             winner_id,
             "team_advanced",
             f"Your team has advanced to the next round of {match.tournament.name}.",
+            match.tournament_id,
         )
     else:
         _notify_team(
@@ -278,6 +297,7 @@ def advance_single_elimination_winner(
             winner_id,
             "tournament_final",
             f"Congratulations! Your team has won {match.tournament.name}.",
+            match.tournament_id,
         )
 
     if loser_id:
@@ -286,4 +306,5 @@ def advance_single_elimination_winner(
             loser_id,
             "team_eliminated",
             f"Your team has been eliminated from {match.tournament.name}.",
+            match.tournament_id,
         )

@@ -29,6 +29,12 @@ class Notification(Base):
         nullable=False
     )
 
+    # Where to take the user in the app, e.g. "#/verify/12".
+    link: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True
+    )
+
     is_read: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

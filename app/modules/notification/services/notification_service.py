@@ -27,6 +27,7 @@ def create_notification(
         user_id=user.id,
         notification_type=data.notification_type,
         content=data.content,
+        link=data.link,
         is_read=False,
     )
 

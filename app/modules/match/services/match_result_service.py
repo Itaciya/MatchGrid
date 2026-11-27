@@ -131,6 +131,8 @@ def finalize_match_result(
     db.add(result)
     match.status = MATCH_STATUS_COMPLETED
 
+    _notify_result_published(db, match, result)
+
     # Advance the winner in the same transaction, so the result and the
     # bracket update are saved together or not at all.
     try:
@@ -149,6 +151,30 @@ def finalize_match_result(
     complete_tournament_if_done(db, match.tournament_id)
 
     return result
+
+
+def _notify_result_published(db: Session, match: Match, result: MatchResult) -> None:
+    """Followers, and both teams in league formats, see the official result.
+
+    In knockout formats the teams already get an advanced/eliminated
+    notification from the bracket, so only followers are told here.
+    """
+    from app.modules.notification.services import notifier
+
+    team_a = match.team_a.name if match.team_a else "Team A"
+    team_b = match.team_b.name if match.team_b else "Team B"
+    recipients = notifier.follower_ids(db, match.tournament_id)
+    if not is_knockout_format(match.tournament.format):
+        recipients |= notifier.team_member_ids(db, (match.team_a_id, match.team_b_id))
+
+    notifier.notify(
+        db,
+        recipients,
+        "result_published",
+        f"Result published: {team_a} {result.team_a_score} - "
+        f"{result.team_b_score} {team_b}.",
+        notifier.tournament_link(match.tournament_id),
+    )
 
 
 def correct_match_result(

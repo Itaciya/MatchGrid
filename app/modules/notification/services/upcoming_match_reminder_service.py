@@ -5,9 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.modules.match.models.match import Match
 from app.modules.notification.models.notification import Notification
-from app.modules.notification.services.notification_broadcast_service import (
-    schedule_notification_broadcast,
-)
 from app.modules.player_team.models.player import Player
 from app.modules.player_team.models.team import Team
 from app.modules.registration.models.registration import Registration
@@ -137,6 +134,7 @@ def generate_upcoming_match_reminders(
                     user_id=user_id,
                     notification_type=REMINDER_NOTIFICATION_TYPE,
                     content=content,
+                    link=f"#/details/{match.tournament_id}",
                     is_read=False,
                 )
 
@@ -144,16 +142,8 @@ def generate_upcoming_match_reminders(
                 created_notifications.append(notification)
                 created_count += 1
 
-        # Persist notifications before scheduling any WebSocket messages.
+        # Committing also delivers the reminders live (see notifier.py).
         db.commit()
-
-        # Schedule broadcasts only after the transaction succeeds.
-        for notification in created_notifications:
-            try:
-                schedule_notification_broadcast(notification)
-            except Exception:
-                # A broadcast failure must not undo saved notifications.
-                continue
 
     except Exception:
         db.rollback()

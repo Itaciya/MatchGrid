@@ -13,6 +13,11 @@ import './theme.css'
 import RegistrationPage from './RegistrationPage.jsx'
 import RegistrationApprovalPage from './RegistrationApprovalPage.jsx'
 import TeamPage from './TeamPage.jsx'
+import { NotificationsProvider } from './notifications/NotificationsProvider.jsx'
+import { useNotifications } from './notifications/notificationContext'
+import { LiveFixtureScore } from './LiveFixtures.jsx'
+import { useLiveFixtures } from './realtime/useLiveFixtures'
+import { FollowButton } from './FollowButton.jsx'
 
 const NAV_ITEMS = [
   ['overview', 'Overview'],
@@ -97,6 +102,12 @@ const FIXTURE_STATUS_LABELS = {
 
 function statusClass(value) {
   return `status-pill status-${String(value || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+}
+
+function UnreadBadge() {
+  const { unread } = useNotifications()
+  if (!unread) return null
+  return <span className="nav-badge" aria-label={`${unread} unread`}>{unread > 99 ? '99+' : unread}</span>
 }
 
 function ErrorNotice({ children }) {
@@ -228,6 +239,10 @@ function TournamentScorerAssignment({ tournamentId }) {
 }
 
 // matchgrid-route-sync-v5
+// Pages whose URL can name a tournament, e.g. "#/verify/12" from a
+// notification opens score verification with that tournament selected.
+const ROUTES_WITH_TOURNAMENT = new Set(["details", "verify", "registration-approvals"]);
+
 function readMatchGridRoute() {
   const raw = window.location.hash.replace(/^#\/?/, "");
   const parts = raw.split("/");
@@ -242,7 +257,7 @@ function readMatchGridRoute() {
 
   if (!allowed.has(page)) return { page: "home", tournamentId: null };
 
-  if (page === "details") {
+  if (ROUTES_WITH_TOURNAMENT.has(page)) {
     const id = Number(parts[1]);
     return {
       page,
@@ -254,8 +269,8 @@ function readMatchGridRoute() {
 }
 
 function buildMatchGridHash(page, tournamentId) {
-  if (page === "details" && tournamentId) {
-    return "#/details/" + encodeURIComponent(tournamentId);
+  if (ROUTES_WITH_TOURNAMENT.has(page) && tournamentId) {
+    return "#/" + page + "/" + encodeURIComponent(tournamentId);
   }
   return "#/" + (page || "home");
 }
@@ -510,7 +525,7 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
   useEffect(() => {
     const nextHash = buildMatchGridHash(
       page,
-      page === "details" ? routeTournamentId : null
+      ROUTES_WITH_TOURNAMENT.has(page) ? routeTournamentId : null
     );
 
     if (window.location.hash !== nextHash) {
@@ -804,6 +819,16 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
   }, [tournaments, searchTerm, categoryFilter])
 
   const totalPages = Math.max(1, Math.ceil(filteredTournaments.length / 10))
+  // Live scores and statuses for the open tournament (also for guests).
+  const liveFixtures = useLiveFixtures(page === 'details' ? fixtures : [])
+
+  // The first match going live makes an upcoming tournament ongoing; show
+  // that straight away instead of waiting for a reload.
+  const anyMatchLive = Object.values(liveFixtures.statuses).some((value) => value === 'live' || value === 'paused')
+  const tournamentStatus = selectedTournament?.status === 'upcoming' && anyMatchLive
+    ? 'ongoing'
+    : selectedTournament?.status
+
   const filteredFixtures = useMemo(() => {
     const teamQuery = fixtureTeamFilter.trim()
     const venueQuery = fixtureVenueFilter.trim()
@@ -867,6 +892,7 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
   }
 
   return (
+    <NotificationsProvider user={currentUser}>
     <main className="app-shell">
       <header className="topbar">
         <button className="brand-button" onClick={() => setPage('home')} aria-label="MatchGrid home">
@@ -923,8 +949,9 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
         {page !== 'home' && <aside className="sidebar">
           <p className="nav-label">WORKSPACE</p>
           {visibleNavItems.map(([id, label]) => (
-            <button key={id} className={`nav-item ${page === id ? 'active' : ''}`} onClick={() => { setPage(id); if (id === 'create') resetForm() }}>
+            <button key={id} className={`nav-item ${page === id ? 'active' : ''}`} onClick={() => { setRouteTournamentId(null); setPage(id); if (id === 'create') resetForm() }}>
               <span className="nav-dot" />{label}
+              {id === 'notifications' && <UnreadBadge />}
             </button>
           ))}
           {page === 'details' && <button className="nav-item active" onClick={() => setPage('details')}><span className="nav-dot" />Tournament details</button>}
@@ -1037,6 +1064,9 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
 
           {(page === 'login' || page === 'register') && (
             <AuthPanel
+              // A fresh form per mode: details typed while registering
+              // (including the password) must not carry over to sign-in.
+              key={page}
               mode={page}
               loading={authLoading}
               error={authError}
@@ -1178,7 +1208,7 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
 ) : (
   <div className="tournament-detail-image-placeholder">No tournament image available</div>
 )}
-<div className="detail-heading"><div><span className="eyebrow">TOURNAMENT</span><h2>{selectedTournament.name}</h2><p>{selectedTournament.description || 'No description provided.'}</p></div><span className={statusClass(selectedTournament.status)}>{selectedTournament.status || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Format" value={selectedTournament.format} /><Meta label="Starts" value={dateLabel(selectedTournament.start_date)} /><Meta label="Ends" value={dateLabel(selectedTournament.end_date)} /></div><div className="detail-actions">{['player', 'captain'].includes(currentUser?.role) && <button className="button button-primary" onClick={() => setPage('registrations')}>Register for this tournament</button>}{isOwner(selectedTournament) && <><button className="button button-primary" onClick={async () => {
+<div className="detail-heading"><div><span className="eyebrow">TOURNAMENT</span><h2>{selectedTournament.name}</h2><p>{selectedTournament.description || 'No description provided.'}</p></div><span className={statusClass(tournamentStatus)}>{tournamentStatus || 'Unknown'}</span></div><div className="detail-meta"><Meta label="Format" value={selectedTournament.format} /><Meta label="Starts" value={dateLabel(selectedTournament.start_date)} /><Meta label="Ends" value={dateLabel(selectedTournament.end_date)} /></div><div className="detail-actions">{['player', 'captain'].includes(currentUser?.role) && <button className="button button-primary" onClick={() => setPage('registrations')}>Register for this tournament</button>}{isOwner(selectedTournament) && <><button className="button button-primary" onClick={async () => {
   if (!window.confirm(`Create and publish fixtures for ${selectedTournament.name}? Fixtures are generated from approved teams and become public immediately. This cannot be undone.`)) return
   try {
     setFixturesError('')
@@ -1187,7 +1217,7 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
   } catch (error) {
     setFixturesError(error.message || 'Could not generate and publish fixtures.')
   }
-}}>Create & Publish Fixtures</button><button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button>{selectedTournament.status === 'ongoing' && <button className="button button-secondary" onClick={async () => { if (!window.confirm('End this tournament? It will be marked as completed.')) return; try { await apiRequest(`/organiser/tournaments/${selectedTournament.id}/end`, { method: 'POST' }); await openTournament(selectedTournament.id) } catch (error) { window.alert(error.message) } }}>End tournament</button>}{selectedTournament.status !== 'archived' && <button className="button button-secondary" style={{ color: '#c0392b' }} onClick={async () => { if (!window.confirm('Delete this tournament? It will be hidden from everyone.')) return; try { await apiRequest(`/organiser/tournaments/${selectedTournament.id}/archive`, { method: 'PATCH' }); setPage('tournaments') } catch (error) { window.alert(error.message) } }}>Delete tournament</button>}</>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button></div></div>{isOwner(selectedTournament) && <TournamentScorerAssignment tournamentId={selectedTournament.id} />}</div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixtures..." /> : <><ErrorNotice>{fixturesError}</ErrorNotice><div className="fixture-filters filter-row">
+}}>Create & Publish Fixtures</button><button className="button button-primary" onClick={() => beginEdit(selectedTournament)}>Edit tournament</button>{selectedTournament.status === 'ongoing' && <button className="button button-secondary" onClick={async () => { if (!window.confirm('End this tournament? It will be marked as completed.')) return; try { await apiRequest(`/organiser/tournaments/${selectedTournament.id}/end`, { method: 'POST' }); await openTournament(selectedTournament.id) } catch (error) { window.alert(error.message) } }}>End tournament</button>}{selectedTournament.status !== 'archived' && <button className="button button-secondary" style={{ color: '#c0392b' }} onClick={async () => { if (!window.confirm('Delete this tournament? It will be hidden from everyone.')) return; try { await apiRequest(`/organiser/tournaments/${selectedTournament.id}/archive`, { method: 'PATCH' }); setPage('tournaments') } catch (error) { window.alert(error.message) } }}>Delete tournament</button>}</>}<button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)}>Refresh details</button>{currentUser && <FollowButton tournamentId={selectedTournament.id} />}</div></div>{isOwner(selectedTournament) && <TournamentScorerAssignment tournamentId={selectedTournament.id} />}</div><div className="section-title"><div><h2>Fixtures</h2><p className="muted">Scheduled matches returned by the fixtures API.</p></div><button className="button button-secondary" onClick={() => openTournament(selectedTournament.id)} disabled={detailsLoading || fixturesLoading}>Refresh fixtures</button></div>{fixturesLoading ? <Loading label="Loading fixtures..." /> : <><ErrorNotice>{fixturesError}</ErrorNotice><div className="fixture-filters filter-row">
   <label>
     Status
     <select value={fixtureStatusFilter} onChange={(event) => { setFixtureStatusFilter(event.target.value); setFixturePage(1) }}>
@@ -1224,15 +1254,16 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
   </p>
   <div className="table-wrap">
     <table>
-      <thead><tr><th>Match</th><th>Team A</th><th>Team B</th><th>Venue</th><th>Scheduled at</th><th>Status</th><th>Live Stream</th></tr></thead>
+      <thead><tr><th>Match</th><th>Team A</th><th>Score</th><th>Team B</th><th>Venue</th><th>Scheduled at</th><th>Status</th><th>Live Stream</th></tr></thead>
       <tbody>{paginatedFixtures.map((fixture) => {
-        const status = String(fixture.status || 'unknown').toLowerCase()
+        const status = String(liveFixtures.statuses[fixture.id] || fixture.status || 'unknown').toLowerCase()
         const scheduledTime = fixture.scheduled_at ? new Date(fixture.scheduled_at).getTime() : NaN
         const isUpcoming = status === 'scheduled' && Number.isFinite(scheduledTime) && scheduledTime >= currentTime
         const displayStatus = isUpcoming ? 'Upcoming' : (FIXTURE_STATUS_LABELS[status] || fixture.status || 'Unknown')
         return <tr key={fixture.id}>
           <td><strong>Match {fixture.match_number}</strong>{fixture.round_name && <small className="cell-subtitle">{fixture.round_name}</small>}</td>
           <td>{fixture.team_a_id ? (fixture.team_a_name || 'Unnamed team') : (fixture.status === 'bye' ? 'Bye' : 'TBD')}</td>
+          <td><LiveFixtureScore fixture={fixture} live={liveFixtures} /></td>
           <td>{fixture.team_b_id ? (fixture.team_b_name || 'Unnamed team') : (fixture.status === 'bye' ? 'Bye' : 'TBD')}</td>
           <td>{fixture.venue_name || 'Not set'}</td>
           <td>{dateLabel(fixture.scheduled_at)}</td>
@@ -1300,21 +1331,22 @@ const [page, setPage] = useState(() => readMatchGridRoute().page)
           </>}
 
           {page === 'scoring' && <ScorerPage />}
-          {page === 'notifications' && <NotificationsPage onOpenPage={setPage} />}
-          {page === 'verify' && currentUser?.role === 'organiser' && <VerificationPage currentUser={currentUser} />}
+          {page === 'notifications' && <NotificationsPage />}
+          {page === 'verify' && currentUser?.role === 'organiser' && <VerificationPage key={routeTournamentId || 'none'} currentUser={currentUser} initialTournamentId={routeTournamentId} />}
           {page === 'dispute' && <DisputePage />}
           {page === 'result' && <ResultPage />}
           {page === 'standings' && <StandingsPage />}
           {page === 'leaderboard' && <LeaderboardPage />}
           {page === 'resolve' && <DisputeResolutionPage />}
           {page === 'registrations' && ['player', 'captain'].includes(currentUser?.role) && <RegistrationPage initialTournamentId={selectedTournament?.id} />}
-          {page === 'registration-approvals' && currentUser?.role === 'organiser' && <RegistrationApprovalPage currentUser={currentUser} />}
+          {page === 'registration-approvals' && currentUser?.role === 'organiser' && <RegistrationApprovalPage key={routeTournamentId || 'none'} currentUser={currentUser} initialTournamentId={routeTournamentId} />}
           {page === 'team' && currentUser?.role === 'player' && <TeamPage />}
 
           <footer className="footer"><span>© MatchGrid 2026</span><span>Sports management, made clearer.</span></footer>
         </section>
       </div>
     </main>
+    </NotificationsProvider>
   )
 }
 

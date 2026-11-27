@@ -119,6 +119,18 @@ def review_score(
     score.reviewed_by_id = reviewer_id
     score.reviewed_at = datetime.now(timezone.utc)
 
+    if decision == REJECTED:
+        from app.modules.notification.services import notifier
+
+        notifier.notify(
+            db,
+            notifier.tournament_scorer_ids(db, match.tournament_id),
+            "score_rejected",
+            f"The organiser rejected the score for {notifier.match_label(match)}. "
+            "Please correct it on your scoring page.",
+            notifier.SCORING_LINK,
+        )
+
     db.commit()
     db.refresh(score)
 

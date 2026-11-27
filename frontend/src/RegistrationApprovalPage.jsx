@@ -1,6 +1,7 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { apiRequest } from './services/api'
 import { TournamentSelect } from './components/Pickers'
+import { useNotifications } from './notifications/notificationContext'
 
 function participantLabel(item) {
   if (item.team_id) return item.team_name || 'Unnamed team'
@@ -8,8 +9,9 @@ function participantLabel(item) {
   return '-'
 }
 
-export default function RegistrationApprovalPage({ currentUser }) {
-  const [tournamentId, setTournamentId] = useState('')
+export default function RegistrationApprovalPage({ currentUser, initialTournamentId = null }) {
+  const [tournamentId, setTournamentId] = useState(initialTournamentId ? String(initialTournamentId) : '')
+  const { latest } = useNotifications()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [actionId, setActionId] = useState(null)
@@ -35,6 +37,14 @@ export default function RegistrationApprovalPage({ currentUser }) {
     const timer = window.setTimeout(() => loadPending(tournamentId), 0)
     return () => window.clearTimeout(timer)
   }, [tournamentId, loadPending])
+
+  // A new application for this tournament arrives live: show it straight away.
+  useEffect(() => {
+    if (!tournamentId || latest?.notification_type !== 'registration_submitted') return undefined
+    if (!latest.link?.endsWith(`/${tournamentId}`)) return undefined
+    const timer = window.setTimeout(() => loadPending(tournamentId), 0)
+    return () => window.clearTimeout(timer)
+  }, [latest, tournamentId, loadPending])
 
   async function reviewRegistration(item, decision) {
     const name = participantLabel(item)

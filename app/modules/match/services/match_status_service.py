@@ -104,6 +104,18 @@ def complete_match(db: Session, match_id: int) -> Match:
 
     match.status = MATCH_STATUS_COMPLETED
 
+    # The organiser must now review, verify and publish the result.
+    from app.modules.notification.services import notifier
+
+    notifier.notify(
+        db,
+        [notifier.organiser_id(db, match.tournament_id)],
+        "match_completed",
+        f"{notifier.match_label(match)} has ended. Please review the score, "
+        "then verify and publish the result.",
+        notifier.verify_link(match.tournament_id),
+    )
+
     try:
         db.commit()
         db.refresh(match)

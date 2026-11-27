@@ -3,10 +3,14 @@ import { finalizeResult, getFinalizedResult, getScoreForReview, reviewScore } fr
 import { TournamentSelect } from './components/Pickers'
 import { MATCH_STATUS_LABELS as STATUS_LABELS, matchLabel } from './components/pickerUtils'
 import { useTournamentFixtures } from './components/useTournamentFixtures'
+import { useMatchStatus } from './realtime/useMatchStatus'
+import { useMatchSubscriptions } from './realtime/useMatchSubscriptions'
 
-function MatchRow({ fixture }) {
+function MatchRow({ fixture, liveStatus }) {
   const [score, setScore] = useState(null)
-  const [matchStatus, setMatchStatus] = useState(fixture.status)
+  const [savedStatus, setMatchStatus] = useState(fixture.status)
+  // A status pushed live (e.g. the scorer just ended the match) wins.
+  const matchStatus = liveStatus || savedStatus
   const [published, setPublished] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -46,7 +50,7 @@ function MatchRow({ fixture }) {
 
     loadMatchData()
     return () => { cancelled = true }
-  }, [fixture.id])
+  }, [fixture.id, liveStatus])
 
   async function decide(status) {
     setBusy(true)
@@ -131,10 +135,12 @@ function MatchRow({ fixture }) {
   )
 }
 
-export default function VerificationPage({ currentUser }) {
-  const [tournamentId, setTournamentId] = useState('')
+export default function VerificationPage({ currentUser, initialTournamentId = null }) {
+  const [tournamentId, setTournamentId] = useState(initialTournamentId ? String(initialTournamentId) : '')
   const { fixtures, loading, error } = useTournamentFixtures(tournamentId)
   const playable = fixtures.filter((fixture) => fixture.status !== 'bye' && fixture.status !== 'cancelled')
+  const liveStatuses = useMatchStatus()
+  useMatchSubscriptions(playable.map((fixture) => fixture.id))
 
   return (
     <>
@@ -160,7 +166,7 @@ export default function VerificationPage({ currentUser }) {
       {tournamentId && !loading && !error && playable.length === 0 && (
         <div className="detail-card"><p>This tournament has no matches yet. Create and publish fixtures first.</p></div>
       )}
-      {playable.map((f) => <MatchRow key={f.id} fixture={f} />)}
+      {playable.map((f) => <MatchRow key={f.id} fixture={f} liveStatus={liveStatuses[f.id]} />)}
     </>
   )
 }
